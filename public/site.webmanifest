@@ -1,0 +1,17 @@
+{
+  "name": "Polywatch",
+  "short_name": "Polywatch",
+  "description": "Whale alerts and trader intelligence for Polymarket.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07100d",
+  "theme_color": "#12b981",
+  "icons": [
+    {
+      "src": "/assets/polywatch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
