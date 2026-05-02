@@ -13,6 +13,8 @@ This repo is the React/Vite web version of Polywatch. It is not the Flutter app 
 Recent important work:
 
 - Feed uses the current New York trading session for "Today's whale volume" and feed visibility.
+- Feed top whales and the leaderboard page now derive from the same current New York trading session as the feed, using loaded whale trades as a frontend fallback until the API exposes a native today leaderboard.
+- The website computes a New York session key and schedules a refresh after the next New York midnight so today-scoped views roll over automatically.
 - Feed sort is limited to `Most recent` and `Largest size`.
 - Market images are hydrated for live websocket trades so new rows do not remain as empty fallback squares.
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
@@ -79,7 +81,8 @@ Production server:
 3. Live whale updates connect directly to `/v1/whales/stream` using `VITE_WS_BASE_URL` or the production API default.
 4. The feed initial load fetches REST pages for today's New York session.
 5. Websocket trades are inserted at the top, filtered client-side, then hydrated/merged when image metadata is missing.
-6. Follow state is stored locally and synced to the API after anonymous auth.
+6. Today-scoped feed stats, last-60-minute stats, feed top whales, and the leaderboard page are computed from the same current New York session key in the web client.
+7. Follow state is stored locally and synced to the API after anonymous auth.
 
 ## API Endpoints Used
 
@@ -102,6 +105,7 @@ Important fallback behavior:
 
 - `GET /v1/whales/:tradeId` can fail for some recent trades, so trade detail and feed hydration can fall back to searching the recent whale feed.
 - Following-only feed uses server auth when available. Without auth, it filters public feed results against local followed wallets.
+- The production API currently rejects `window=1d`, `window=today`, and `window=24h` for `/v1/leaderboard`. Until the backend supports this, the web leaderboard builds today's ranks from fetched `/v1/whales` rows. This keeps the UI consistent but can undercount if the client has not loaded every trade in the New York session.
 
 ## Routes
 
@@ -158,9 +162,41 @@ All route selection lives in `src/App.jsx` inside `App()`.
 - Keep dashboard UI dense, calm, and scan-friendly.
 - Feed market rows should show real API images only; empty market squares are a bug unless the API truly has no image anywhere.
 - Feed visible data is today's New York session, not a rolling arbitrary list.
+- "Today" means the date in `America/New_York`, resetting at New York midnight. Use the shared helpers in `src/App.jsx` (`getCurrentNewYorkSession`, `filterNewYorkSession`, `buildTodayLeaderboardFromTrades`) rather than adding new date logic.
 - Keep trade intent wording as provided by the backend. Do not reinterpret BUY/SELL in the website; intent classification belongs upstream.
-- 7D is the active public leaderboard/profile window. 30D and 1Y are visible but treated as future/locked UI.
+- The public web leaderboard is presented as `1D` and is today-scoped in the frontend. Trader profile stats still use the API's `7d` stats until the backend exposes profile stats for today. 30D and 1Y are visible but treated as future/locked UI.
 - Do not add search bars back to the feed or leaderboard unless explicitly asked.
+
+## Today Session Implementation
+
+The website now has a frontend fallback for a unified "today" system:
+
+- `WhaleFeedPage` fetches and filters whale trades for the current New York date.
+- Feed stat cards use `buildStats`, which filters to the current New York session.
+- Last 60 minutes is computed from already session-filtered feed rows, so it does not bleed across midnight.
+- Feed rail "Top whales today" uses `buildTodayLeaderboardFromTrades(sessionItems)`.
+- `LeaderboardPage` fetches today's whale trades and derives ranks with `buildTodayLeaderboardFromTrades` instead of using the API's 7D leaderboard aggregate.
+- Both feed and leaderboard pages schedule a refresh just after the next New York midnight via `getCurrentNewYorkSession().nextResetMs`.
+
+This is intentionally a fallback. The authoritative implementation should move these aggregates to the API so stats and ranks are complete even when the web client has not paginated through every trade.
+
+Recommended backend contract:
+
+```text
+GET /v1/dashboard/today?tz=America/New_York
+GET /v1/whales?startTs=<ny_midnight_utc>&endTs=<next_ny_midnight_utc>&limit=100&cursor=...
+GET /v1/leaderboard?window=today&limit=50&cursor=...
+```
+
+Recommended dashboard response fields:
+
+```text
+session: date, timezone, startTs, endTs, asOf, nextResetTs
+stats: volume, activeWhales, megaTrades, biggestTradeUsd, biggestTradeSide, last60Volume, last60Count
+leaderboard: rank, proxyWallet, displayName/pseudonym, volume, tradeCount, avgTrade
+```
+
+When the backend supports `window=today`, remove the frontend-derived leaderboard fallback and switch `LeaderboardPage` and `FeedRail` to the API response.
 
 ## Local Storage Keys
 

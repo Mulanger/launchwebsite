@@ -128,9 +128,9 @@ function WhaleFeedPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [liveState, setLiveState] = useState('connecting');
   const [clock, setClock] = useState(() => Date.now());
-  const [leaderboard, setLeaderboard] = useState([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [followedCount, setFollowedCount] = useState(() => readFollowedWallets().size);
+  const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
 
   const selectedRange = useMemo(
     () => rangeOptions.find((option) => option.id === rangeId) ?? rangeOptions[0],
@@ -161,6 +161,15 @@ function WhaleFeedPage() {
     const timer = window.setInterval(() => setClock(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const delay = Math.max(1000, todaySession.nextResetMs - Date.now() + 1000);
+    const timer = window.setTimeout(() => {
+      setClock(Date.now());
+      setRefreshNonce((value) => value + 1);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [todaySession.dateKey]);
 
   useEffect(() => {
     const refreshFollowState = () => {
@@ -205,25 +214,7 @@ function WhaleFeedPage() {
 
     loadInitialWhales();
     return () => controller.abort();
-  }, [filterKey, refreshNonce]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadLeaderboard() {
-      try {
-        const data = await fetchJson('/v1/leaderboard?window=7d&limit=15', {
-          signal: controller.signal,
-        });
-        setLeaderboard(Array.isArray(data.items) ? data.items : []);
-      } catch {
-        setLeaderboard([]);
-      }
-    }
-
-    loadLeaderboard();
-    return () => controller.abort();
-  }, [refreshNonce]);
+  }, [filterKey, refreshNonce, todaySession.dateKey]);
 
   useEffect(() => {
     let closed = false;
@@ -257,6 +248,7 @@ function WhaleFeedPage() {
           if (message.type !== 'whale' || !message.data) return;
 
           const whale = message.data;
+          if (!isInNewYorkSession(whale.timestamp, todaySession.dateKey)) return;
           if (!passesFilter(whale, apiFilter)) return;
 
           setItems((previous) => {
@@ -310,13 +302,14 @@ function WhaleFeedPage() {
         socket.close(1000, 'route changed');
       }
     };
-  }, [filterKey]);
+  }, [filterKey, todaySession.dateKey]);
 
   const sessionItems = useMemo(() => filterNewYorkSession(items, clock), [items, clock]);
   const visibleItems = useMemo(() => sortWhales(sessionItems, sort), [sessionItems, sort]);
 
   const stats = useMemo(() => buildStats(items, clock), [items, clock]);
-  const lastHour = useMemo(() => buildLastHour(items, clock), [items, clock]);
+  const lastHour = useMemo(() => buildLastHour(sessionItems, clock), [sessionItems, clock]);
+  const leaderboard = useMemo(() => buildTodayLeaderboardFromTrades(sessionItems), [sessionItems]);
   const volumeSparkline = useMemo(() => buildFeedStatSparkline(lastHour.points), [lastHour.points]);
   const whaleBars = useMemo(() => buildFeedStatBars(lastHour.points), [lastHour.points]);
   const mobileTrades = useMemo(
@@ -600,12 +593,15 @@ function LeaderboardPage() {
   const [sort, setSort] = useState('rank');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
+  const [sourceTrades, setSourceTrades] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [asOf, setAsOf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [clock, setClock] = useState(() => Date.now());
+  const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1020px)');
@@ -616,18 +612,32 @@ function LeaderboardPage() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const delay = Math.max(1000, todaySession.nextResetMs - Date.now() + 1000);
+    const timer = window.setTimeout(() => {
+      setClock(Date.now());
+      setRefreshNonce((value) => value + 1);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [todaySession.dateKey]);
+
+  useEffect(() => {
     const controller = new AbortController();
 
     async function loadLeaderboard() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchJson(buildLeaderboardPath(windowId), {
-          signal: controller.signal,
-        });
-        setItems(Array.isArray(data.items) ? data.items : []);
+        const data = await fetchTodayWhalesForFilter({ minUsd: 10000 }, { signal: controller.signal });
+        const trades = Array.isArray(data.items) ? data.items : [];
+        setSourceTrades(trades);
+        setItems(buildTodayLeaderboardFromTrades(trades, Date.now()));
         setCursor(data.nextCursor ?? null);
-        setAsOf(data.asOf ?? null);
+        setAsOf(Math.floor(Date.now() / 1000));
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Failed to load leaderboard.');
@@ -641,7 +651,7 @@ function LeaderboardPage() {
 
     loadLeaderboard();
     return () => controller.abort();
-  }, [windowId, refreshNonce]);
+  }, [refreshNonce, todaySession.dateKey]);
 
   const selectedWindow = useMemo(
     () => leaderboardWindows.find((option) => option.id === windowId) ?? leaderboardWindows[0],
@@ -682,17 +692,20 @@ function LeaderboardPage() {
     setLoadingMore(true);
     setError('');
     try {
-      const data = await fetchJson(buildLeaderboardPath(windowId, cursor));
+      const data = await fetchWhalesForFilter({ minUsd: 10000 }, cursor);
       const incoming = Array.isArray(data.items) ? data.items : [];
-      setItems((previous) => mergeLeaderboardItems(previous, incoming));
-      setCursor(data.nextCursor ?? null);
-      setAsOf(data.asOf ?? asOf);
+      const reachedPreviousSession = incoming.some((trade) => !isInNewYorkSession(trade.timestamp, todaySession.dateKey));
+      const mergedTrades = mergeWhales(sourceTrades, incoming);
+      setSourceTrades(mergedTrades);
+      setItems(buildTodayLeaderboardFromTrades(mergedTrades, Date.now()));
+      setCursor(reachedPreviousSession ? null : data.nextCursor ?? null);
+      setAsOf(Math.floor(Date.now() / 1000));
     } catch (err) {
       setError(err.message || 'Failed to load more leaderboard rows.');
     } finally {
       setLoadingMore(false);
     }
-  }, [asOf, cursor, loadingMore, windowId]);
+  }, [cursor, loadingMore, sourceTrades, todaySession.dateKey]);
 
   if (isMobileViewport) {
     return (
@@ -727,10 +740,10 @@ function LeaderboardPage() {
           <div>
             <div className="feed-breadcrumb">
               <Trophy size={14} aria-hidden="true" />
-              Ranked wallets - {selectedWindow.caption}
+              Ranked wallets - today's New York session
             </div>
             <h1>
-              Leaderboard <em>{selectedWindow.label}</em>
+              Leaderboard <em>1D</em>
             </h1>
           </div>
 
@@ -752,7 +765,7 @@ function LeaderboardPage() {
             {leaderboardWindows.map((option) => (
               <WindowFilterButton
                 key={option.id}
-                option={option}
+                option={option.id === '7d' ? { ...option, label: '1D', caption: "Today's New York session" } : option}
                 active={windowId === option.id}
                 onSelect={setWindowId}
               />
@@ -889,7 +902,7 @@ function MobileLeaderboardScreen({
                       gap: 5,
                     }}
                   >
-                    <span>{option.label}</span>
+                    <span>{option.id === '7d' ? '1D' : option.label}</span>
                     {locked ? <LockKeyhole size={10} /> : null}
                   </button>
                 );
@@ -4530,6 +4543,43 @@ function mergeLeaderboardItems(existing, incoming) {
   });
 }
 
+function buildTodayLeaderboardFromTrades(trades, nowMs = Date.now()) {
+  const grouped = new Map();
+
+  filterNewYorkSession(Array.isArray(trades) ? trades : [], nowMs).forEach((trade) => {
+    const wallet = trade.trader?.proxyWallet?.toLowerCase();
+    if (!wallet) return;
+
+    const existing = grouped.get(wallet) || {
+      proxyWallet: wallet,
+      pseudonym: trade.trader?.pseudonym || null,
+      displayName: trade.trader?.displayName || null,
+      profileImage: trade.trader?.profileImage || null,
+      volume: 0,
+      tradeCount: 0,
+      whaleCount: 0,
+      topCategory: null,
+    };
+
+    existing.volume += Number(trade.usdSize || 0);
+    existing.tradeCount += 1;
+    existing.whaleCount += 1;
+    if (!existing.displayName && trade.trader?.displayName) existing.displayName = trade.trader.displayName;
+    if (!existing.pseudonym && trade.trader?.pseudonym) existing.pseudonym = trade.trader.pseudonym;
+    if (!existing.profileImage && trade.trader?.profileImage) existing.profileImage = trade.trader.profileImage;
+
+    grouped.set(wallet, existing);
+  });
+
+  return [...grouped.values()]
+    .sort((a, b) => {
+      const volumeDiff = Number(b.volume || 0) - Number(a.volume || 0);
+      if (volumeDiff !== 0) return volumeDiff;
+      return String(a.proxyWallet).localeCompare(String(b.proxyWallet));
+    })
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+}
+
 function filterNewYorkSession(items, nowMs = Date.now()) {
   const todayKey = newYorkDateKeyFromMs(nowMs);
   return items.filter((item) => newYorkDateKeyFromSeconds(item.timestamp) === todayKey);
@@ -4537,6 +4587,10 @@ function filterNewYorkSession(items, nowMs = Date.now()) {
 
 function isInCurrentNewYorkSession(timestampSeconds) {
   return newYorkDateKeyFromSeconds(timestampSeconds) === newYorkDateKeyFromMs(Date.now());
+}
+
+function isInNewYorkSession(timestampSeconds, dateKey) {
+  return newYorkDateKeyFromSeconds(timestampSeconds) === dateKey;
 }
 
 function sortWhales(items, sort) {
@@ -4997,6 +5051,35 @@ function newYorkDateKeyFromMs(timestampMs) {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(timestampMs));
+}
+
+function getCurrentNewYorkSession(nowMs = Date.now()) {
+  const dateKey = newYorkDateKeyFromMs(nowMs);
+  return {
+    dateKey,
+    timezone: 'America/New_York',
+    nextResetMs: findNextNewYorkDateChangeMs(nowMs, dateKey),
+  };
+}
+
+function findNextNewYorkDateChangeMs(nowMs, currentDateKey) {
+  let low = nowMs;
+  let high = nowMs + 36 * 60 * 60 * 1000;
+
+  while (newYorkDateKeyFromMs(high) === currentDateKey) {
+    high += 12 * 60 * 60 * 1000;
+  }
+
+  for (let step = 0; step < 48; step += 1) {
+    const mid = Math.floor((low + high) / 2);
+    if (newYorkDateKeyFromMs(mid) === currentDateKey) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return high;
 }
 
 function shortWallet(wallet) {
