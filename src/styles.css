@@ -751,6 +751,12 @@ img {
 }
 
 .market-icon.image {
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.92);
+  object-fit: contain;
+}
+
+.market-icon-empty {
   background: var(--surface-2);
 }
 

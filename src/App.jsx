@@ -62,7 +62,6 @@ const sideOptions = [
 const feedSortOptions = [
   { id: 'recent', label: 'Most recent' },
   { id: 'largest', label: 'Largest size' },
-  { id: 'price', label: 'Highest price' },
 ];
 
 const leaderboardWindows = [
@@ -119,7 +118,6 @@ function WhaleFeedPage() {
     return query.get('following') === '1' || query.get('following') === 'true';
   });
   const [sort, setSort] = useState('recent');
-  const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -180,7 +178,7 @@ function WhaleFeedPage() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchWhalesForFilter(apiFilter, null, { signal: controller.signal });
+        const data = await fetchTodayWhalesForFilter(apiFilter, { signal: controller.signal });
         setItems(Array.isArray(data.items) ? data.items : []);
         setCursor(data.nextCursor ?? null);
         setLastUpdatedAt(Date.now());
@@ -281,14 +279,8 @@ function WhaleFeedPage() {
     };
   }, [filterKey]);
 
-  const visibleItems = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const filtered = query
-      ? items.filter((item) => searchableText(item).includes(query))
-      : [...items];
-
-    return sortWhales(filtered, sort);
-  }, [items, search, sort]);
+  const sessionItems = useMemo(() => filterNewYorkSession(items, clock), [items, clock]);
+  const visibleItems = useMemo(() => sortWhales(sessionItems, sort), [sessionItems, sort]);
 
   const stats = useMemo(() => buildStats(items, clock), [items, clock]);
   const lastHour = useMemo(() => buildLastHour(items, clock), [items, clock]);
@@ -323,19 +315,11 @@ function WhaleFeedPage() {
               Live Feed - Polymarket
             </div>
             <h1>
-              Whales <em>in motion</em>
+              Polymarket <em>Whale Trades</em>
             </h1>
           </div>
 
           <div className="feed-topbar-actions">
-            <label className="feed-search">
-              <Search size={15} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search markets, traders, wallets..."
-              />
-            </label>
             <button
               className="icon-button"
               type="button"
@@ -362,7 +346,7 @@ function WhaleFeedPage() {
           animate="visible"
           variants={reveal}
         >
-          <StatBlock label="Visible Whale Volume" value={formatUsdCompact(stats.volume)} />
+          <StatBlock label="Today's Whale Volume" value={formatUsdCompact(stats.volume)} />
           <StatBlock label="Active Traders" value={formatNumber(stats.activeTraders)} />
           <StatBlock label="Mega Trades" value={formatNumber(stats.megaTrades)} />
           <StatBlock label="Avg Price" value={stats.averagePrice} tone={stats.averageTone} />
@@ -440,9 +424,9 @@ function WhaleFeedPage() {
               body={
                 followingOnly
                   ? followedCount
-                    ? 'The traders you follow do not have feed-visible whale trades in this view.'
+                    ? "The traders you follow do not have whale trades in today's New York session."
                     : 'Follow traders from the leaderboard or trader profiles to build a personal feed.'
-                  : 'Change the size, side, or search filter to widen the feed.'
+                  : "Change the size or side filter to widen today's New York session."
               }
               actionLabel={followingOnly && !followedCount ? 'Browse leaderboard' : 'Reset filters'}
               onAction={() => {
@@ -454,7 +438,6 @@ function WhaleFeedPage() {
                 setSide('all');
                 setFollowingOnly(false);
                 updateFollowingQueryParam(false);
-                setSearch('');
               }}
             />
           ) : (
@@ -1687,7 +1670,7 @@ function TradeRow({ trade, index }) {
         <span className={`trade-tag ${isSell ? 'sell-tag' : 'buy-tag'}`}>
           {trade.side === 'SELL' ? 'Sell' : 'Buy'}
         </span>
-        <span className="trade-tag time-tag">{relativeTime(trade.timestamp)}</span>
+        <span className="trade-tag time-tag">{relativeTimeAgo(trade.timestamp)}</span>
       </div>
 
       <div className="market-cell">
@@ -1746,16 +1729,22 @@ function MetricCell({ label, value, strong = false }) {
 }
 
 function MarketIcon({ trade, category }) {
-  const iconUrl = trade.market?.icon;
+  const [failedUrls, setFailedUrls] = useState([]);
+  const iconUrl = getMarketImageUrls(trade).find((url) => !failedUrls.includes(url));
   if (iconUrl) {
-    return <img className="market-icon image" src={iconUrl} alt="" loading="lazy" />;
+    return (
+      <img
+        className="market-icon image"
+        src={iconUrl}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrls((previous) => [...previous, iconUrl])}
+      />
+    );
   }
 
-  return (
-    <div className={`market-icon ${category.id}`} aria-hidden="true">
-      {category.short}
-    </div>
-  );
+  return <div className="market-icon market-icon-empty" aria-hidden="true" />;
 }
 
 function TraderAvatar({ trade }) {
@@ -2592,6 +2581,29 @@ async function fetchWhalesForFilter(filter, cursor = null, options = {}) {
   return fetchJson(buildWhalesPath(filter, cursor), options);
 }
 
+async function fetchTodayWhalesForFilter(filter, options = {}) {
+  const maxPages = 5;
+  let cursor = null;
+  let items = [];
+  let nextCursor = null;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const data = await fetchWhalesForFilter(filter, cursor, options);
+    const incoming = Array.isArray(data?.items) ? data.items : [];
+    items = mergeWhales(items, incoming);
+    nextCursor = data?.nextCursor ?? null;
+
+    const reachedPreviousSession = incoming.some((trade) => !isInCurrentNewYorkSession(trade.timestamp));
+    if (!nextCursor || reachedPreviousSession) {
+      return { items, nextCursor: null };
+    }
+
+    cursor = nextCursor;
+  }
+
+  return { items, nextCursor };
+}
+
 async function fetchJson(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -2873,7 +2885,7 @@ function readCachedTrade(tradeId) {
 
 function buildWhalesPath(filter, cursor = null) {
   const params = new URLSearchParams();
-  params.set('limit', '80');
+  params.set('limit', '100');
   const compact = compactFilter(filter);
 
   Object.entries(compact).forEach(([key, value]) => {
@@ -2925,13 +2937,19 @@ function mergeLeaderboardItems(existing, incoming) {
   });
 }
 
+function filterNewYorkSession(items, nowMs = Date.now()) {
+  const todayKey = newYorkDateKeyFromMs(nowMs);
+  return items.filter((item) => newYorkDateKeyFromSeconds(item.timestamp) === todayKey);
+}
+
+function isInCurrentNewYorkSession(timestampSeconds) {
+  return newYorkDateKeyFromSeconds(timestampSeconds) === newYorkDateKeyFromMs(Date.now());
+}
+
 function sortWhales(items, sort) {
   const sorted = [...items];
   if (sort === 'largest') {
     return sorted.sort((a, b) => b.usdSize - a.usdSize);
-  }
-  if (sort === 'price') {
-    return sorted.sort((a, b) => getPriceValue(b) - getPriceValue(a));
   }
   return sorted.sort((a, b) => b.timestamp - a.timestamp);
 }
@@ -2980,9 +2998,7 @@ function leaderboardSearchableText(trader) {
 }
 
 function buildStats(items, nowMs) {
-  const nowSeconds = Math.floor(nowMs / 1000);
-  const dayItems = items.filter((item) => nowSeconds - item.timestamp <= 86400);
-  const source = dayItems.length ? dayItems : items;
+  const source = filterNewYorkSession(items, nowMs);
   const volume = source.reduce((total, item) => total + Number(item.usdSize || 0), 0);
   const activeTraders = new Set(source.map((item) => item.trader?.proxyWallet).filter(Boolean)).size;
   const megaTrades = source.filter((item) => item.tier === 'mega' || item.usdSize >= 250000).length;
@@ -3117,6 +3133,21 @@ function inferCategory(trade) {
   return { id: 'general', label: trade.market?.category || 'Market', short: 'M' };
 }
 
+function getMarketImageUrls(trade) {
+  return [
+    trade.market?.icon,
+    trade.market?.image,
+    trade.market?.imageUrl,
+    trade.market?.eventIcon,
+    trade.market?.eventImage,
+    trade.market?.thumbnail,
+  ]
+    .filter(Boolean)
+    .map((url) => String(url).trim())
+    .filter(Boolean)
+    .filter((url, index, urls) => urls.indexOf(url) === index);
+}
+
 function getTraderName(trade) {
   return formatTraderLabel(
     trade.trader?.displayName || trade.trader?.pseudonym,
@@ -3213,6 +3244,11 @@ function relativeTime(timestamp) {
   );
 }
 
+function relativeTimeAgo(timestamp) {
+  const value = relativeTime(timestamp);
+  return value === 'now' || value.includes(' ') ? value : `${value} ago`;
+}
+
 function relativeClientTime(timestampMs) {
   const seconds = Math.max(0, Math.floor((Date.now() - timestampMs) / 1000));
   if (seconds < 15) return 'now';
@@ -3239,6 +3275,19 @@ function formatDateTimeSeconds(timestampSeconds) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(Number(timestampSeconds) * 1000));
+}
+
+function newYorkDateKeyFromSeconds(timestampSeconds) {
+  return newYorkDateKeyFromMs(Number(timestampSeconds || 0) * 1000);
+}
+
+function newYorkDateKeyFromMs(timestampMs) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(timestampMs));
 }
 
 function shortWallet(wallet) {
