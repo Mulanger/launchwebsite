@@ -619,7 +619,7 @@ img {
 .feed-table-head,
 .trade-row {
   display: grid;
-  grid-template-columns: 104px minmax(260px, 1fr) minmax(98px, 0.23fr) minmax(90px, 0.18fr) minmax(180px, 0.34fr) 72px;
+  grid-template-columns: 148px minmax(220px, 1fr) minmax(98px, 0.23fr) minmax(90px, 0.18fr) minmax(180px, 0.34fr) 72px;
   gap: 16px;
   align-items: center;
 }
@@ -689,11 +689,13 @@ img {
 .tag-stack {
   display: flex;
   align-items: flex-start;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
+  white-space: nowrap;
 }
 
 .trade-tag {
+  flex: 0 0 auto;
   min-height: 22px;
   display: inline-flex;
   align-items: center;
@@ -721,6 +723,7 @@ img {
 }
 
 .time-tag {
+  min-width: 62px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.06);
 }
