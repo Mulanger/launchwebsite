@@ -1151,7 +1151,7 @@ img {
 .leaderboard-table-head,
 .leaderboard-row {
   display: grid;
-  grid-template-columns: 72px minmax(220px, 1fr) minmax(180px, 0.42fr) minmax(86px, 0.18fr) minmax(86px, 0.18fr) minmax(150px, 0.28fr);
+  grid-template-columns: 72px minmax(220px, 1fr) minmax(180px, 0.46fr) minmax(86px, 0.18fr) minmax(140px, 0.26fr);
   gap: 16px;
   align-items: center;
 }
@@ -2549,7 +2549,7 @@ img {
     grid-template-areas:
       "rank trader signal"
       "rank volume volume"
-      "rank trades whales";
+      "rank trades trades";
     gap: 12px;
     align-items: center;
   }
@@ -2568,10 +2568,6 @@ img {
 
   .leaderboard-row .metric-cell:nth-of-type(4) {
     grid-area: trades;
-  }
-
-  .leaderboard-row .metric-cell:nth-of-type(5) {
-    grid-area: whales;
   }
 
   .leaderboard-signal-cell {
@@ -2646,8 +2642,7 @@ img {
       "rank trader"
       "rank volume"
       "rank signal"
-      "rank trades"
-      "rank whales";
+      "rank trades";
   }
 
   .leaderboard-rank-cell .rank {

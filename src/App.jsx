@@ -73,7 +73,6 @@ const leaderboardWindows = [
 const leaderboardSortOptions = [
   { id: 'rank', label: 'Rank' },
   { id: 'volume', label: 'Whale volume' },
-  { id: 'whales', label: 'Whale count' },
   { id: 'trades', label: 'Trade count' },
 ];
 
@@ -583,7 +582,7 @@ function LeaderboardPage() {
         >
           <StatBlock label="Loaded Volume" value={formatUsdCompact(stats.volume)} />
           <StatBlock label="Ranked Traders" value={formatNumber(stats.traders)} />
-          <StatBlock label="Whale Trades" value={formatNumber(stats.whales)} />
+          <StatBlock label="Tracked Trades" value={formatNumber(stats.trades)} />
           <StatBlock label="Top Wallet" value={formatUsdCompact(stats.topVolume)} />
         </motion.section>
 
@@ -613,8 +612,7 @@ function LeaderboardPage() {
             <span>Trader</span>
             <span>Whale volume</span>
             <span>Trades</span>
-            <span>Whales</span>
-            <span>Signal</span>
+            <span>Avg trade</span>
           </div>
 
           {loading ? (
@@ -1838,6 +1836,7 @@ function TopWhale({ trader }) {
 function LeaderboardRow({ trader, index, maxVolume }) {
   const name = leaderboardTraderName(trader);
   const volumeShare = maxVolume ? Math.max(4, Math.min(100, (trader.volume / maxVolume) * 100)) : 0;
+  const avgTrade = Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0));
   const traderHref = `/trader/${encodeURIComponent(trader.proxyWallet)}`;
   const openTrader = () => {
     window.location.href = traderHref;
@@ -1880,11 +1879,10 @@ function LeaderboardRow({ trader, index, maxVolume }) {
       </div>
 
       <MetricCell label="Trades" value={formatNumber(trader.tradeCount)} />
-      <MetricCell label="Whales" value={formatNumber(trader.whaleCount)} />
 
       <div className="leaderboard-signal-cell">
-        <span>{trader.topCategory || 'All markets'}</span>
-        <small>{formatUsdCompact(trader.volume / Math.max(1, trader.whaleCount))} avg whale</small>
+        <span>{formatUsdCompact(avgTrade)}</span>
+        <small>avg trade</small>
       </div>
     </motion.article>
   );
@@ -1920,8 +1918,7 @@ function LeaderboardRail({ items, asOf, selectedWindow, stats }) {
         <span className="rail-label">Loaded sample</span>
         <strong>{formatUsdCompact(stats.volume)}</strong>
         <p>
-          {formatNumber(stats.traders)} ranked traders with {formatNumber(stats.whales)} feed-visible
-          whale trades.
+          {formatNumber(stats.traders)} ranked traders with {formatNumber(stats.trades)} tracked trades.
         </p>
       </div>
 
@@ -2958,9 +2955,6 @@ function sortLeaderboardItems(items, sort) {
   const sorted = [...items];
   if (sort === 'volume') {
     return sorted.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
-  }
-  if (sort === 'whales') {
-    return sorted.sort((a, b) => Number(b.whaleCount || 0) - Number(a.whaleCount || 0));
   }
   if (sort === 'trades') {
     return sorted.sort((a, b) => Number(b.tradeCount || 0) - Number(a.tradeCount || 0));
