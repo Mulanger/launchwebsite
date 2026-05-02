@@ -202,7 +202,7 @@ function WhaleFeedPage() {
 
     async function loadLeaderboard() {
       try {
-        const data = await fetchJson('/v1/leaderboard?window=7d&limit=5', {
+        const data = await fetchJson('/v1/leaderboard?window=7d&limit=15', {
           signal: controller.signal,
         });
         setLeaderboard(Array.isArray(data.items) ? data.items : []);
@@ -307,6 +307,8 @@ function WhaleFeedPage() {
 
   const stats = useMemo(() => buildStats(items, clock), [items, clock]);
   const lastHour = useMemo(() => buildLastHour(items, clock), [items, clock]);
+  const volumeSparkline = useMemo(() => buildFeedStatSparkline(lastHour.points), [lastHour.points]);
+  const whaleBars = useMemo(() => buildFeedStatBars(lastHour.points), [lastHour.points]);
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
@@ -363,16 +365,16 @@ function WhaleFeedPage() {
           </div>
         </header>
 
-        <motion.section
-          className="stats-strip"
-          initial="hidden"
-          animate="visible"
-          variants={reveal}
-        >
-          <StatBlock label="Today's Whale Volume" value={formatUsdCompact(stats.volume)} />
-          <StatBlock label="Active Traders" value={formatNumber(stats.activeTraders)} />
-          <StatBlock label="Mega Trades" value={formatNumber(stats.megaTrades)} />
-          <StatBlock label="Avg Price" value={stats.averagePrice} tone={stats.averageTone} />
+        <motion.section initial="hidden" animate="visible" variants={reveal}>
+          <FeedStatCards
+            todaysVolume={formatUsdCompact(stats.volume)}
+            volumeSparkline={volumeSparkline}
+            activeWhales={formatNumber(stats.activeTraders)}
+            whaleBars={whaleBars}
+            megaTrades={formatNumber(stats.megaTrades)}
+            biggestTrade={formatUsdCompact(stats.biggestTradeUsd)}
+            biggestTradeSide={stats.biggestTradeUsd > 0 ? stats.biggestTradeSide : '--'}
+          />
         </motion.section>
 
         <section className="filter-row" aria-label="Feed filters">
@@ -487,10 +489,7 @@ function WhaleFeedPage() {
 
       <FeedRail
         leaderboard={leaderboard}
-        trades={items}
         lastHour={lastHour}
-        liveState={liveState}
-        lastUpdatedAt={lastUpdatedAt}
       />
     </div>
   );
@@ -1659,6 +1658,102 @@ function StatBlock({ label, value, tone = 'up' }) {
   );
 }
 
+function FeedStatCards({
+  todaysVolume = '$0',
+  volumeSparkline = [4, 8, 6, 12, 10, 16, 18],
+  activeWhales = 0,
+  whaleBars = [0.3, 0.5, 0.4, 0.7, 0.6, 0.9, 1.0],
+  megaTrades = 0,
+  biggestTrade = '$0',
+  biggestTradeSide = 'BUY',
+}) {
+  const sparkPath = buildStatSparkPath(volumeSparkline, 50, 22, 2);
+
+  return (
+    <div className="feed-stat-cards">
+      <FeedStatCard
+        label="TODAY'S VOLUME"
+        value={todaysVolume}
+        accent="green"
+        rightSlot={
+          <svg width="50" height="22" viewBox="0 0 50 22" fill="none" aria-hidden="true">
+            <path
+              d={sparkPath}
+              stroke="#22d3a5"
+              strokeWidth="1.5"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        }
+      />
+
+      <FeedStatCard
+        label="ACTIVE WHALES"
+        value={activeWhales}
+        rightSlot={
+          <div className="feed-stat-bars" aria-hidden="true">
+            {whaleBars.map((height, index) => (
+              <span
+                key={index}
+                style={{
+                  height: `${Math.max(10, Number(height || 0) * 100)}%`,
+                  opacity: 0.25 + Number(height || 0) * 0.45,
+                }}
+              />
+            ))}
+          </div>
+        }
+      />
+
+      <FeedStatCard
+        label="MEGA TRADES"
+        value={megaTrades}
+        muted={Number(megaTrades) === 0}
+        rightSlot={<div className="feed-stat-meta">$250k+</div>}
+      />
+
+      <FeedStatCard
+        label="TODAY'S BIGGEST TRADE"
+        value={biggestTrade}
+        valueClassName="accent"
+        accent="green-border"
+        rightSlot={
+          <div className="feed-stat-side">
+            <span className="dot" />
+            <span>{biggestTradeSide}</span>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+function FeedStatCard({
+  label,
+  value,
+  rightSlot,
+  accent,
+  muted = false,
+  labelClassName = '',
+  valueClassName = '',
+}) {
+  const classes = ['feed-stat-card'];
+  if (accent === 'green') classes.push('accent-green');
+  if (accent === 'green-border') classes.push('accent-green-border');
+
+  return (
+    <div className={classes.join(' ')}>
+      <div className={`feed-stat-label ${labelClassName}`}>{label}</div>
+      <div className="feed-stat-value-row">
+        <div className={`feed-stat-value ${valueClassName} ${muted ? 'muted' : ''}`}>{value}</div>
+        {rightSlot}
+      </div>
+    </div>
+  );
+}
+
 function TradeRow({ trade, index }) {
   const category = inferCategory(trade);
   const isMega = trade.tier === 'mega' || trade.usdSize >= 250000;
@@ -1785,7 +1880,7 @@ function TraderAvatar({ trade }) {
   );
 }
 
-function FeedRail({ leaderboard, trades, lastHour, liveState, lastUpdatedAt }) {
+function FeedRail({ leaderboard, lastHour }) {
   return (
     <aside className="feed-rail">
       <div className="rail-card volume-card">
@@ -1798,63 +1893,149 @@ function FeedRail({ leaderboard, trades, lastHour, liveState, lastUpdatedAt }) {
       </div>
 
       <section className="rail-section">
-        <h2>
-          Top whales <span>7d</span>
-        </h2>
-        <div className="top-whale-list">
-          {leaderboard.length === 0 ? (
-            <div className="rail-empty">Leaderboard unavailable</div>
-          ) : (
-            leaderboard.map((trader) => <TopWhale trader={trader} key={trader.proxyWallet} />)
-          )}
-        </div>
-      </section>
-
-      <section className="rail-section">
-        <h2>
-          Pulse <span>{liveStateLabel(liveState)}</span>
-        </h2>
-        <div className="ticker">
-          <div className="ticker-header">
-            <LiveDot state={liveState} />
-            Last sync {lastUpdatedAt ? relativeClientTime(lastUpdatedAt) : 'pending'}
-          </div>
-          <div className="ticker-list">
-            {trades.slice(0, 8).map((trade) => (
-              <div className="ticker-item" key={trade.id}>
-                <span>
-                  <strong>{getTraderName(trade)}</strong> {trade.side.toLowerCase()}{' '}
-                  {truncate(trade.outcome || trade.market?.title || 'market', 30)}
-                </span>
-                <small className={trade.side === 'SELL' ? 'sell' : ''}>
-                  {formatUsdCompact(trade.usdSize)}
-                </small>
-              </div>
-            ))}
-          </div>
-        </div>
+        <TopWhalesToday traders={leaderboard} timeframe="7D" />
       </section>
     </aside>
   );
 }
 
-function TopWhale({ trader }) {
-  return (
-    <div className="top-whale">
-      <div className={`rank rank-${trader.rank}`}>{trader.rank}</div>
-      <div
-        className="trader-avatar fallback compact"
-        style={{ background: avatarGradient(trader.proxyWallet) }}
-        aria-hidden="true"
-      />
-      <div className="top-whale-name">
-        <strong>{trader.displayName || trader.pseudonym || shortWallet(trader.proxyWallet)}</strong>
-        <span>
-          {formatNumber(trader.whaleCount)} whales - {formatNumber(trader.tradeCount)} trades
-        </span>
+const topWhalesPlaceStyles = {
+  gold: {
+    card: 'top-whales-podium-card gold',
+    avatar: 'top-whales-avatar gold',
+    badge: 'top-whales-badge gold',
+    name: 'top-whales-name-lg',
+    value: 'top-whales-value-lg',
+  },
+  silver: {
+    card: 'top-whales-podium-card silver',
+    avatar: 'top-whales-avatar',
+    badge: 'top-whales-badge silver',
+    name: 'top-whales-name-sm',
+    value: 'top-whales-value-sm',
+  },
+  bronze: {
+    card: 'top-whales-podium-card bronze',
+    avatar: 'top-whales-avatar',
+    badge: 'top-whales-badge bronze',
+    name: 'top-whales-name-sm',
+    value: 'top-whales-value-sm',
+  },
+};
+
+function TopWhalesToday({ traders, timeframe = '7D' }) {
+  const whales = traders
+    .map((trader, index) => ({
+      rank: Number(trader.rank) || index + 1,
+      name: leaderboardTraderName(trader),
+      trades: Number(trader.tradeCount || 0),
+      volume: formatUsdCompact(trader.volume),
+      avatarColor: avatarGradient(trader.proxyWallet || `${trader.rank}-${index}`),
+      href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
+      key: trader.proxyWallet || `${trader.rank}-${trader.displayName || trader.pseudonym || index}`,
+    }))
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 15);
+
+  if (whales.length === 0) {
+    return (
+      <div className="top-whales-card">
+        <div className="top-whales-header">
+          <h2>Top whales today</h2>
+          <span>{timeframe}</span>
+        </div>
+        <div className="rail-empty">Leaderboard unavailable</div>
       </div>
-      <div className="top-whale-volume">{formatUsdCompact(trader.volume)}</div>
+    );
+  }
+
+  const top3 = whales.slice(0, 3);
+  const first = top3.find((whale) => whale.rank === 1);
+  const second = top3.find((whale) => whale.rank === 2);
+  const third = top3.find((whale) => whale.rank === 3);
+  const rest = whales.slice(3);
+
+  return (
+    <div className="top-whales-card">
+      <div className="top-whales-header">
+        <h2>Top whales today</h2>
+        <span>{timeframe}</span>
+      </div>
+
+      <div className="top-whales-podium">
+        {second ? <TopWhalesPodiumCard whale={second} place="silver" /> : null}
+        {first ? <TopWhalesPodiumCard whale={first} place="gold" /> : null}
+        {third ? <TopWhalesPodiumCard whale={third} place="bronze" /> : null}
+      </div>
+
+      <div className="top-whales-list">
+        {rest.map((whale) => (
+          <TopWhalesRankRow key={whale.key} whale={whale} />
+        ))}
+      </div>
     </div>
+  );
+}
+
+function TopWhalesPodiumCard({ whale, place }) {
+  const style = topWhalesPlaceStyles[place];
+  const isGold = place === 'gold';
+  const content = (
+    <div className={style.card}>
+      {isGold ? (
+        <div className="top-whales-crown" aria-hidden="true">
+          <svg width="22" height="14" viewBox="0 0 22 14" fill="none">
+            <path
+              d="M2 12 L4 4 L8 8 L11 2 L14 8 L18 4 L20 12 Z"
+              fill="#ffc83c"
+              stroke="#ffc83c"
+              strokeWidth="0.5"
+              strokeLinejoin="round"
+            />
+            <rect x="2" y="11" width="18" height="2" fill="#ffc83c" />
+          </svg>
+        </div>
+      ) : (
+        <div className={style.badge}>{whale.rank}</div>
+      )}
+
+      <div className={style.avatar} style={{ background: whale.avatarColor }} aria-hidden="true" />
+      <div className={style.name}>{whale.name}</div>
+      <div className="top-whales-trades">
+        {formatNumber(whale.trades)} {whale.trades === 1 ? 'trade' : 'trades'}
+      </div>
+      <div className={style.value}>{whale.volume}</div>
+    </div>
+  );
+
+  if (!whale.href) return content;
+  return (
+    <a href={whale.href} className="top-whales-link">
+      {content}
+    </a>
+  );
+}
+
+function TopWhalesRankRow({ whale }) {
+  const content = (
+    <div className="top-whales-row">
+      <div className="top-whales-row-rank">{whale.rank}</div>
+      <div className="top-whales-row-avatar" style={{ background: whale.avatarColor }} aria-hidden="true" />
+      <div className="top-whales-row-main">
+        <div className="top-whales-row-name">{whale.name}</div>
+        <div className="top-whales-row-trades">
+          {formatNumber(whale.trades)} {whale.trades === 1 ? 'trade' : 'trades'}
+        </div>
+      </div>
+      <div className="top-whales-row-volume">{whale.volume}</div>
+    </div>
+  );
+
+  if (!whale.href) return content;
+  return (
+    <a href={whale.href} className="top-whales-link">
+      {content}
+    </a>
   );
 }
 
@@ -3176,6 +3357,13 @@ function buildStats(items, nowMs) {
   const volume = source.reduce((total, item) => total + Number(item.usdSize || 0), 0);
   const activeTraders = new Set(source.map((item) => item.trader?.proxyWallet).filter(Boolean)).size;
   const megaTrades = source.filter((item) => item.tier === 'mega' || item.usdSize >= 250000).length;
+  const biggestTrade = source.reduce(
+    (top, item) => {
+      const size = Number(item.usdSize || 0);
+      return size > top.usdSize ? { usdSize: size, side: item.side === 'SELL' ? 'SELL' : 'BUY' } : top;
+    },
+    { usdSize: 0, side: 'BUY' }
+  );
   const average = source.length
     ? source.reduce((total, item) => total + getPriceValue(item), 0) / source.length
     : 0;
@@ -3186,6 +3374,8 @@ function buildStats(items, nowMs) {
     megaTrades,
     averagePrice: average ? `${trimNumber(average)}c` : '0c',
     averageTone: average >= 50 ? 'up' : 'down',
+    biggestTradeUsd: biggestTrade.usdSize,
+    biggestTradeSide: biggestTrade.side,
   };
 }
 
@@ -3308,6 +3498,44 @@ function pointsToPath(points, closeArea) {
   const line = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x},${y}`).join(' ');
   if (!closeArea) return line;
   return `${line} L280,62 L0,62 Z`;
+}
+
+function buildFeedStatSparkline(points) {
+  if (!Array.isArray(points) || points.length < 2) return [4, 8, 6, 12, 10, 16, 18];
+  return points.map(([, y]) => Math.max(0, 54 - Number(y || 0)));
+}
+
+function buildFeedStatBars(points) {
+  if (!Array.isArray(points) || points.length < 2) return [0.3, 0.5, 0.4, 0.7, 0.6, 0.9, 1.0];
+  const values = points.map(([, y]) => Math.max(0, 54 - Number(y || 0)));
+  const groups = 7;
+  const groupSize = Math.ceil(values.length / groups);
+  const condensed = Array.from({ length: groups }, (_, index) => {
+    const start = index * groupSize;
+    const slice = values.slice(start, start + groupSize);
+    if (!slice.length) return 0;
+    const total = slice.reduce((sum, value) => sum + value, 0);
+    return total / slice.length;
+  });
+
+  const max = Math.max(...condensed, 1);
+  return condensed.map((value) => Number((value / max).toFixed(3)));
+}
+
+function buildStatSparkPath(points, width, height, padding = 2) {
+  if (!Array.isArray(points) || points.length < 2) return '';
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const stepX = (width - padding * 2) / (points.length - 1);
+
+  return points
+    .map((value, index) => {
+      const x = padding + index * stepX;
+      const y = height - padding - ((value - min) / range) * (height - padding * 2);
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
 }
 
 function inferCategory(trade) {
