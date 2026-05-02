@@ -1,11 +1,14 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
+import http from 'node:http';
 import { createServer } from 'node:http';
+import https from 'node:https';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const distDir = resolve(__dirname, 'dist');
 const port = Number(process.env.PORT || 4173);
+const apiTarget = (process.env.API_BASE_URL || 'https://whaleserver-production.up.railway.app').replace(/\/$/, '');
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -36,7 +39,44 @@ function resolveAsset(urlPath) {
   return resolve(join(distDir, 'index.html'));
 }
 
+function proxyApiRequest(req, res) {
+  const upstreamUrl = new URL((req.url || '/').replace(/^\/api/, '') || '/', apiTarget);
+  const transport = upstreamUrl.protocol === 'https:' ? https : http;
+  const headers = { ...req.headers, host: upstreamUrl.host };
+  delete headers.connection;
+
+  const upstreamReq = transport.request(
+    upstreamUrl,
+    {
+      method: req.method,
+      headers,
+    },
+    (upstreamRes) => {
+      const responseHeaders = {
+        ...upstreamRes.headers,
+        'X-Content-Type-Options': 'nosniff',
+      };
+      res.writeHead(upstreamRes.statusCode || 502, responseHeaders);
+      upstreamRes.pipe(res);
+    }
+  );
+
+  upstreamReq.on('error', () => {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+    }
+    res.end(JSON.stringify({ error: 'api_proxy_failed' }));
+  });
+
+  req.pipe(upstreamReq);
+}
+
 createServer((req, res) => {
+  if ((req.url || '').startsWith('/api/')) {
+    proxyApiRequest(req, res);
+    return;
+  }
+
   const filePath = resolveAsset(req.url || '/');
   if (!filePath || !existsSync(filePath)) {
     res.writeHead(404);

@@ -1,57 +1,55 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  ArrowRight,
+  Activity,
+  BarChart3,
   Bell,
-  Check,
+  ChevronDown,
+  ExternalLink,
   FileText,
   LockKeyhole,
   Mail,
   Radio,
+  RefreshCw,
+  Search,
   ShieldCheck,
-  TrendingUp,
-  Users,
+  SlidersHorizontal,
+  Trophy,
+  UserPlus,
+  Wallet,
+  Zap,
 } from 'lucide-react';
 
 const supportEmail = 'support@whaletracker.com';
 const lastUpdated = 'May 1, 2026';
+const prodApiUrl = 'https://whaleserver-production.up.railway.app';
+const apiBaseUrl = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || '/api');
+const wsBaseUrl = normalizeWsBase(import.meta.env.VITE_WS_BASE_URL || prodApiUrl);
 
-const screens = [
-  {
-    image: '/assets/screen-live-feed.png',
-    eyebrow: 'Live feed',
-    title: 'High-signal whale flow',
-    body: 'Scan large Polymarket trades by size, side, market, and trader without digging through noisy feeds.',
-  },
-  {
-    image: '/assets/screen-leaderboard.png',
-    eyebrow: 'Leaderboard',
-    title: 'See who is moving markets',
-    body: 'Rank active wallets by whale volume across short and long windows.',
-  },
-  {
-    image: '/assets/screen-alerts.png',
-    eyebrow: 'Alerts',
-    title: 'Follow the traders that matter',
-    body: 'Get notified when large trades happen, or narrow alerts to the traders on your following list.',
-  },
+const rangeOptions = [
+  { id: 'all', label: 'All', minUsd: 10000 },
+  { id: '50-100', label: '50k-100k', minUsd: 50000, maxUsd: 100000 },
+  { id: '100-250', label: '100k-250k', minUsd: 100000, maxUsd: 250000 },
+  { id: 'mega', label: '250k+', minUsd: 250000 },
 ];
 
-const featureRows = [
-  {
-    icon: Radio,
-    title: 'Real-time monitoring',
-    body: 'Whale trades flow through the watcher, API server, and mobile app within seconds.',
-  },
-  {
-    icon: Bell,
-    title: 'Noise-controlled alerts',
-    body: 'Thresholds, mega-only mode, quiet hours, categories, and followed-trader alerts keep notifications focused.',
-  },
-  {
-    icon: Users,
-    title: 'Trader context',
-    body: 'Leaderboards and profiles make each trade easier to evaluate before you open a market.',
-  },
+const sideOptions = [
+  { id: 'all', label: 'All sides' },
+  { id: 'BUY', label: 'Buy' },
+  { id: 'SELL', label: 'Sell' },
+];
+
+const leaderboardWindows = [
+  { id: '7d', label: '7D', caption: 'Last 7 days' },
+  { id: '30d', label: '30D', caption: 'Last 30 days' },
+  { id: '365d', label: '1Y', caption: 'Last 365 days' },
+];
+
+const leaderboardSortOptions = [
+  { id: 'rank', label: 'Rank' },
+  { id: 'volume', label: 'Whale volume' },
+  { id: 'whales', label: 'Whale count' },
+  { id: 'trades', label: 'Trade count' },
 ];
 
 const legalLinks = [
@@ -61,11 +59,11 @@ const legalLinks = [
 ];
 
 const reveal = {
-  hidden: { opacity: 0, y: 28 },
+  hidden: { opacity: 0, y: 18 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
@@ -75,216 +73,1005 @@ function App() {
   if (path === '/privacy') return <PrivacyPage />;
   if (path === '/terms') return <TermsPage />;
   if (path === '/delete-data') return <DeleteDataPage />;
+  if (path === '/leaderboard') return <LeaderboardPage />;
 
-  return <HomePage />;
+  return <WhaleFeedPage />;
 }
 
-function SiteChrome({ children, legal = false }) {
+function WhaleFeedPage() {
+  const [rangeId, setRangeId] = useState('all');
+  const [side, setSide] = useState('all');
+  const [sort, setSort] = useState('recent');
+  const [search, setSearch] = useState('');
+  const [items, setItems] = useState([]);
+  const [cursor, setCursor] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [liveState, setLiveState] = useState('connecting');
+  const [clock, setClock] = useState(() => Date.now());
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  const selectedRange = useMemo(
+    () => rangeOptions.find((option) => option.id === rangeId) ?? rangeOptions[0],
+    [rangeId]
+  );
+
+  const apiFilter = useMemo(
+    () => ({
+      minUsd: selectedRange.minUsd,
+      maxUsd: selectedRange.maxUsd,
+      side: side === 'all' ? undefined : side,
+    }),
+    [selectedRange, side]
+  );
+
+  const filterKey = useMemo(() => JSON.stringify(apiFilter), [apiFilter]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadInitialWhales() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchJson(buildWhalesPath(apiFilter), {
+          signal: controller.signal,
+        });
+        setItems(Array.isArray(data.items) ? data.items : []);
+        setCursor(data.nextCursor ?? null);
+        setLastUpdatedAt(Date.now());
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to load whale feed.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInitialWhales();
+    return () => controller.abort();
+  }, [filterKey, refreshNonce]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLeaderboard() {
+      try {
+        const data = await fetchJson('/v1/leaderboard?window=7d&limit=5', {
+          signal: controller.signal,
+        });
+        setLeaderboard(Array.isArray(data.items) ? data.items : []);
+      } catch {
+        setLeaderboard([]);
+      }
+    }
+
+    loadLeaderboard();
+    return () => controller.abort();
+  }, [refreshNonce]);
+
+  useEffect(() => {
+    let closed = false;
+    let socket;
+    let retryTimer;
+
+    function connect() {
+      setLiveState('connecting');
+      socket = new WebSocket(joinUrl(wsBaseUrl, '/v1/whales/stream'));
+
+      socket.onopen = () => {
+        setLiveState('live');
+        socket.send(
+          JSON.stringify({
+            type: 'subscribe',
+            filter: compactFilter(apiFilter),
+          })
+        );
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type !== 'whale' || !message.data) return;
+
+          const whale = message.data;
+          if (!passesFilter(whale, apiFilter)) return;
+
+          setItems((previous) => {
+            const withoutDuplicate = previous.filter((item) => item.id !== whale.id);
+            return [whale, ...withoutDuplicate].slice(0, 120);
+          });
+          setLastUpdatedAt(Date.now());
+        } catch {
+          // Ignore malformed socket payloads. The REST refresh is the source of truth.
+        }
+      };
+
+      socket.onerror = () => {
+        if (!closed) setLiveState('offline');
+      };
+
+      socket.onclose = () => {
+        if (closed) return;
+        setLiveState('reconnecting');
+        retryTimer = window.setTimeout(connect, 3500);
+      };
+    }
+
+    connect();
+
+    return () => {
+      closed = true;
+      window.clearTimeout(retryTimer);
+      if (socket && socket.readyState <= WebSocket.OPEN) {
+        socket.close(1000, 'route changed');
+      }
+    };
+  }, [filterKey]);
+
+  const visibleItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const filtered = query
+      ? items.filter((item) => searchableText(item).includes(query))
+      : [...items];
+
+    return sortWhales(filtered, sort);
+  }, [items, search, sort]);
+
+  const stats = useMemo(() => buildStats(items, clock), [items, clock]);
+  const lastHour = useMemo(() => buildLastHour(items, clock), [items, clock]);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loadingMore) return;
+
+    setLoadingMore(true);
+    setError('');
+    try {
+      const data = await fetchJson(buildWhalesPath(apiFilter, cursor));
+      const incoming = Array.isArray(data.items) ? data.items : [];
+      setItems((previous) => mergeWhales(previous, incoming));
+      setCursor(data.nextCursor ?? null);
+      setLastUpdatedAt(Date.now());
+    } catch (err) {
+      setError(err.message || 'Failed to load more whales.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [apiFilter, cursor, loadingMore]);
+
   return (
-    <div className={legal ? 'site legal-site' : 'site'}>
-      <header className="topbar" aria-label="Primary navigation">
-        <a className="brand-link" href="/" aria-label="Polywatch home">
-          <img src="/assets/polywatch-icon.png" alt="" className="brand-icon" />
+    <div className="feed-shell">
+      <FeedSidebar activePage="feed" liveState={liveState} />
+
+      <main className="feed-main">
+        <header className="feed-topbar">
+          <div>
+            <div className="feed-breadcrumb">
+              <LiveDot state={liveState} />
+              Live Feed - Polymarket
+            </div>
+            <h1>
+              Whales <em>in motion</em>
+            </h1>
+          </div>
+
+          <div className="feed-topbar-actions">
+            <label className="feed-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search markets, traders, wallets..."
+              />
+            </label>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setRefreshNonce((value) => value + 1)}
+              aria-label="Refresh whale feed"
+              title="Refresh"
+            >
+              <RefreshCw size={17} aria-hidden="true" />
+            </button>
+            <a
+              className="icon-button"
+              href="/privacy"
+              aria-label="Privacy policy"
+              title="Privacy"
+            >
+              <ShieldCheck size={17} aria-hidden="true" />
+            </a>
+          </div>
+        </header>
+
+        <motion.section
+          className="stats-strip"
+          initial="hidden"
+          animate="visible"
+          variants={reveal}
+        >
+          <StatBlock label="Visible Whale Volume" value={formatUsdCompact(stats.volume)} />
+          <StatBlock label="Active Traders" value={formatNumber(stats.activeTraders)} />
+          <StatBlock label="Mega Trades" value={formatNumber(stats.megaTrades)} />
+          <StatBlock label="Avg Price" value={stats.averagePrice} tone={stats.averageTone} />
+        </motion.section>
+
+        <section className="filter-row" aria-label="Feed filters">
+          <div className="pill-group">
+            {rangeOptions.map((option) => (
+              <button
+                className={`filter-pill ${rangeId === option.id ? 'active' : ''}`}
+                key={option.id}
+                type="button"
+                onClick={() => setRangeId(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="filter-divider" />
+
+          <div className="pill-group compact">
+            {sideOptions.map((option) => (
+              <button
+                className={`filter-pill ${side === option.id ? 'active' : ''}`}
+                key={option.id}
+                type="button"
+                onClick={() => setSide(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <label className="sort-select">
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            <select value={sort} onChange={(event) => setSort(event.target.value)}>
+              <option value="recent">Most recent</option>
+              <option value="largest">Largest size</option>
+              <option value="price">Highest price</option>
+            </select>
+            <ChevronDown size={14} aria-hidden="true" />
+          </label>
+        </section>
+
+        <section className="feed-table" aria-live="polite">
+          <div className="feed-table-head">
+            <span>Type / Time</span>
+            <span>Market</span>
+            <span>Size</span>
+            <span>Price</span>
+            <span>Trader</span>
+            <span />
+          </div>
+
+          {loading ? (
+            <FeedSkeleton />
+          ) : error && visibleItems.length === 0 ? (
+            <EmptyState
+              title="Feed unavailable"
+              body={error}
+              actionLabel="Try again"
+              onAction={() => setRefreshNonce((value) => value + 1)}
+            />
+          ) : visibleItems.length === 0 ? (
+            <EmptyState
+              title="No whales match this view"
+              body="Change the size, side, or search filter to widen the feed."
+              actionLabel="Reset filters"
+              onAction={() => {
+                setRangeId('all');
+                setSide('all');
+                setSearch('');
+              }}
+            />
+          ) : (
+            <div className="feed-list">
+              {visibleItems.map((trade, index) => (
+                <TradeRow trade={trade} key={trade.id} index={index} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="feed-footer-action">
+          {error && visibleItems.length > 0 ? <span>{error}</span> : null}
+          <button
+            className="load-more-button"
+            type="button"
+            disabled={!cursor || loadingMore}
+            onClick={loadMore}
+          >
+            {loadingMore ? 'Loading...' : cursor ? 'Load more whales' : 'End of visible feed'}
+          </button>
+        </div>
+      </main>
+
+      <FeedRail
+        leaderboard={leaderboard}
+        trades={items}
+        lastHour={lastHour}
+        liveState={liveState}
+        lastUpdatedAt={lastUpdatedAt}
+      />
+    </div>
+  );
+}
+
+function LeaderboardPage() {
+  const [windowId, setWindowId] = useState('7d');
+  const [sort, setSort] = useState('rank');
+  const [search, setSearch] = useState('');
+  const [items, setItems] = useState([]);
+  const [cursor, setCursor] = useState(null);
+  const [asOf, setAsOf] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState('');
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLeaderboard() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchJson(buildLeaderboardPath(windowId), {
+          signal: controller.signal,
+        });
+        setItems(Array.isArray(data.items) ? data.items : []);
+        setCursor(data.nextCursor ?? null);
+        setAsOf(data.asOf ?? null);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to load leaderboard.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadLeaderboard();
+    return () => controller.abort();
+  }, [windowId, refreshNonce]);
+
+  const selectedWindow = useMemo(
+    () => leaderboardWindows.find((option) => option.id === windowId) ?? leaderboardWindows[0],
+    [windowId]
+  );
+
+  const visibleItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const filtered = query
+      ? items.filter((item) => leaderboardSearchableText(item).includes(query))
+      : [...items];
+    return sortLeaderboardItems(filtered, sort);
+  }, [items, search, sort]);
+
+  const stats = useMemo(() => buildLeaderboardStats(items), [items]);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loadingMore) return;
+
+    setLoadingMore(true);
+    setError('');
+    try {
+      const data = await fetchJson(buildLeaderboardPath(windowId, cursor));
+      const incoming = Array.isArray(data.items) ? data.items : [];
+      setItems((previous) => mergeLeaderboardItems(previous, incoming));
+      setCursor(data.nextCursor ?? null);
+      setAsOf(data.asOf ?? asOf);
+    } catch (err) {
+      setError(err.message || 'Failed to load more leaderboard rows.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [asOf, cursor, loadingMore, windowId]);
+
+  return (
+    <div className="feed-shell leaderboard-shell">
+      <FeedSidebar activePage="leaderboard" liveState="live" />
+
+      <main className="feed-main leaderboard-main">
+        <header className="feed-topbar leaderboard-topbar">
+          <div>
+            <div className="feed-breadcrumb">
+              <Trophy size={14} aria-hidden="true" />
+              Ranked wallets - {selectedWindow.caption}
+            </div>
+            <h1>
+              Leaderboard <em>{selectedWindow.label}</em>
+            </h1>
+          </div>
+
+          <div className="feed-topbar-actions">
+            <label className="feed-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search traders or wallets..."
+              />
+            </label>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setRefreshNonce((value) => value + 1)}
+              aria-label="Refresh leaderboard"
+              title="Refresh"
+            >
+              <RefreshCw size={17} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <motion.section
+          className="stats-strip leaderboard-stats"
+          initial="hidden"
+          animate="visible"
+          variants={reveal}
+        >
+          <StatBlock label="Loaded Volume" value={formatUsdCompact(stats.volume)} />
+          <StatBlock label="Ranked Traders" value={formatNumber(stats.traders)} />
+          <StatBlock label="Whale Trades" value={formatNumber(stats.whales)} />
+          <StatBlock label="Top Wallet" value={formatUsdCompact(stats.topVolume)} />
+        </motion.section>
+
+        <section className="filter-row" aria-label="Leaderboard filters">
+          <div className="pill-group">
+            {leaderboardWindows.map((option) => (
+              <button
+                className={`filter-pill ${windowId === option.id ? 'active' : ''}`}
+                key={option.id}
+                type="button"
+                onClick={() => setWindowId(option.id)}
+                title={option.caption}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <label className="sort-select leaderboard-sort">
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            <select value={sort} onChange={(event) => setSort(event.target.value)}>
+              {leaderboardSortOptions.map((option) => (
+                <option value={option.id} key={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} aria-hidden="true" />
+          </label>
+        </section>
+
+        <section className="leaderboard-table" aria-live="polite">
+          <div className="leaderboard-table-head">
+            <span>Rank</span>
+            <span>Trader</span>
+            <span>Whale volume</span>
+            <span>Trades</span>
+            <span>Whales</span>
+            <span>Signal</span>
+          </div>
+
+          {loading ? (
+            <LeaderboardSkeleton />
+          ) : error && visibleItems.length === 0 ? (
+            <EmptyState
+              title="Leaderboard unavailable"
+              body={error}
+              actionLabel="Try again"
+              onAction={() => setRefreshNonce((value) => value + 1)}
+            />
+          ) : visibleItems.length === 0 ? (
+            <EmptyState
+              title="No ranked traders match this search"
+              body="Change the window or search term to widen the leaderboard."
+              actionLabel="Reset search"
+              onAction={() => setSearch('')}
+            />
+          ) : (
+            <div className="leaderboard-list">
+              {visibleItems.map((trader, index) => (
+                <LeaderboardRow
+                  key={trader.proxyWallet}
+                  trader={trader}
+                  index={index}
+                  maxVolume={stats.topVolume}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="feed-footer-action">
+          {error && visibleItems.length > 0 ? <span>{error}</span> : null}
+          <button
+            className="load-more-button"
+            type="button"
+            disabled={!cursor || loadingMore}
+            onClick={loadMore}
+          >
+            {loadingMore ? 'Loading...' : cursor ? 'Load more ranked traders' : 'End of leaderboard'}
+          </button>
+        </div>
+      </main>
+
+      <LeaderboardRail
+        items={items}
+        asOf={asOf}
+        selectedWindow={selectedWindow}
+        stats={stats}
+      />
+    </div>
+  );
+}
+
+function FeedSidebar({ activePage, liveState }) {
+  const navItems = [
+    {
+      label: 'Whale Feed',
+      href: '/',
+      icon: Activity,
+      badge: liveStateLabel(liveState),
+      active: activePage === 'feed',
+    },
+    {
+      label: 'Leaderboard',
+      href: '/leaderboard',
+      icon: BarChart3,
+      badge: '7d',
+      active: activePage === 'leaderboard',
+    },
+    { label: 'Following', href: '/', icon: Wallet, badge: 'Soon' },
+    { label: 'Alerts', href: '/', icon: Bell, badge: 'App' },
+  ];
+
+  return (
+    <aside className="feed-sidebar">
+      <a className="feed-brand" href="/" aria-label="Polywatch home">
+        <img src="/assets/polywatch-icon.png" alt="" />
+        <span>Polywatch</span>
+      </a>
+
+      <nav className="feed-nav" aria-label="Product navigation">
+        <div className="nav-label">Live</div>
+        {navItems.slice(0, 1).map((item) => (
+          <NavItem key={item.label} {...item} />
+        ))}
+
+        <div className="nav-label">Discover</div>
+        {navItems.slice(1, 3).map((item) => (
+          <NavItem key={item.label} {...item} />
+        ))}
+
+        <div className="nav-label">Account</div>
+        {navItems.slice(3).map((item) => (
+          <NavItem key={item.label} {...item} />
+        ))}
+      </nav>
+
+      <div className="sidebar-panel">
+        <div className="sidebar-panel-icon">
+          <Radio size={17} aria-hidden="true" />
+        </div>
+        <div>
+          <strong>Public web beta</strong>
+          <span>Read-only feed. Trading stays outside Polywatch.</span>
+        </div>
+      </div>
+
+      <div className="sidebar-links">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/delete-data">Delete data</a>
+      </div>
+    </aside>
+  );
+}
+
+function NavItem({ label, href, icon: Icon, badge, active = false }) {
+  return (
+    <a className={`feed-nav-item ${active ? 'active' : ''}`} href={href}>
+      <Icon size={17} aria-hidden="true" />
+      <span>{label}</span>
+      <small>{badge}</small>
+    </a>
+  );
+}
+
+function StatBlock({ label, value, tone = 'up' }) {
+  return (
+    <div className="stat-block">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small className={tone === 'down' ? 'negative' : ''}>
+        {tone === 'down' ? 'Cooling' : 'Live sample'}
+      </small>
+    </div>
+  );
+}
+
+function TradeRow({ trade, index }) {
+  const category = inferCategory(trade);
+  const isMega = trade.tier === 'mega' || trade.usdSize >= 250000;
+  const isSell = trade.side === 'SELL';
+  const traderName = getTraderName(trade);
+  const marketTitle = trade.market?.title || 'Unknown market';
+  const polymarketUrl = trade.polymarketUrl || trade.market?.polymarketUrl || '#';
+
+  return (
+    <motion.article
+      className={`trade-row ${isMega ? 'mega' : ''} ${isSell ? 'sell' : ''}`}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: Math.min(index * 0.025, 0.18) }}
+    >
+      <div className="tag-stack">
+        {isMega ? <span className="trade-tag mega-tag">Mega</span> : null}
+        <span className={`trade-tag ${isSell ? 'sell-tag' : 'buy-tag'}`}>
+          {trade.side === 'SELL' ? 'Sell' : 'Buy'}
+        </span>
+        <span className="trade-tag time-tag">{relativeTime(trade.timestamp)}</span>
+      </div>
+
+      <div className="market-cell">
+        <MarketIcon trade={trade} category={category} />
+        <div className="market-text">
+          <strong title={marketTitle}>{marketTitle}</strong>
+          <span>
+            {category.label} - {trade.outcome || 'Outcome'}
+          </span>
+        </div>
+      </div>
+
+      <MetricCell label="Size" value={formatUsdFull(trade.usdSize)} strong={isMega} />
+      <MetricCell
+        label={`${trade.outcome || 'Outcome'} @`}
+        value={formatPrice(trade)}
+      />
+
+      <div className="trader-cell">
+        <TraderAvatar trade={trade} />
+        <div>
+          <strong title={trade.trader?.proxyWallet}>{traderName}</strong>
+          <span>{formatTraderMeta(trade)}</span>
+        </div>
+      </div>
+
+      <div className="row-actions">
+        <button
+          className="row-icon-button"
+          type="button"
+          title="Following arrives with account support"
+          aria-label="Following arrives with account support"
+        >
+          <UserPlus size={15} aria-hidden="true" />
+        </button>
+        <a
+          className="row-icon-button"
+          href={polymarketUrl}
+          target="_blank"
+          rel="noreferrer"
+          title="Open on Polymarket"
+          aria-label="Open on Polymarket"
+        >
+          <ExternalLink size={15} aria-hidden="true" />
+        </a>
+      </div>
+    </motion.article>
+  );
+}
+
+function MetricCell({ label, value, strong = false }) {
+  return (
+    <div className="metric-cell">
+      <span>{label}</span>
+      <strong className={strong ? 'mega-value' : ''}>{value}</strong>
+    </div>
+  );
+}
+
+function MarketIcon({ trade, category }) {
+  const iconUrl = trade.market?.icon;
+  if (iconUrl) {
+    return <img className="market-icon image" src={iconUrl} alt="" loading="lazy" />;
+  }
+
+  return (
+    <div className={`market-icon ${category.id}`} aria-hidden="true">
+      {category.short}
+    </div>
+  );
+}
+
+function TraderAvatar({ trade }) {
+  const image = trade.trader?.profileImage;
+  if (image) {
+    return <img className="trader-avatar" src={image} alt="" loading="lazy" />;
+  }
+
+  return (
+    <div
+      className="trader-avatar fallback"
+      style={{ background: avatarGradient(trade.trader?.proxyWallet || trade.id) }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function FeedRail({ leaderboard, trades, lastHour, liveState, lastUpdatedAt }) {
+  return (
+    <aside className="feed-rail">
+      <div className="rail-card volume-card">
+        <span className="rail-label">Last 60 minutes</span>
+        <strong>
+          {formatUsdCompact(lastHour.volume)}
+          <small>{lastHour.count} trades</small>
+        </strong>
+        <MiniVolumeChart points={lastHour.points} />
+      </div>
+
+      <section className="rail-section">
+        <h2>
+          Top whales <span>7d</span>
+        </h2>
+        <div className="top-whale-list">
+          {leaderboard.length === 0 ? (
+            <div className="rail-empty">Leaderboard unavailable</div>
+          ) : (
+            leaderboard.map((trader) => <TopWhale trader={trader} key={trader.proxyWallet} />)
+          )}
+        </div>
+      </section>
+
+      <section className="rail-section">
+        <h2>
+          Pulse <span>{liveStateLabel(liveState)}</span>
+        </h2>
+        <div className="ticker">
+          <div className="ticker-header">
+            <LiveDot state={liveState} />
+            Last sync {lastUpdatedAt ? relativeClientTime(lastUpdatedAt) : 'pending'}
+          </div>
+          <div className="ticker-list">
+            {trades.slice(0, 8).map((trade) => (
+              <div className="ticker-item" key={trade.id}>
+                <span>
+                  <strong>{getTraderName(trade)}</strong> {trade.side.toLowerCase()}{' '}
+                  {truncate(trade.outcome || trade.market?.title || 'market', 30)}
+                </span>
+                <small className={trade.side === 'SELL' ? 'sell' : ''}>
+                  {formatUsdCompact(trade.usdSize)}
+                </small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function TopWhale({ trader }) {
+  return (
+    <div className="top-whale">
+      <div className={`rank rank-${trader.rank}`}>{trader.rank}</div>
+      <div
+        className="trader-avatar fallback compact"
+        style={{ background: avatarGradient(trader.proxyWallet) }}
+        aria-hidden="true"
+      />
+      <div className="top-whale-name">
+        <strong>{trader.displayName || trader.pseudonym || shortWallet(trader.proxyWallet)}</strong>
+        <span>
+          {formatNumber(trader.whaleCount)} whales - {formatNumber(trader.tradeCount)} trades
+        </span>
+      </div>
+      <div className="top-whale-volume">{formatUsdCompact(trader.volume)}</div>
+    </div>
+  );
+}
+
+function LeaderboardRow({ trader, index, maxVolume }) {
+  const name = leaderboardTraderName(trader);
+  const volumeShare = maxVolume ? Math.max(4, Math.min(100, (trader.volume / maxVolume) * 100)) : 0;
+
+  return (
+    <motion.article
+      className="leaderboard-row"
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, delay: Math.min(index * 0.02, 0.18) }}
+    >
+      <div className="leaderboard-rank-cell">
+        <span className={`rank rank-${trader.rank}`}>{trader.rank}</span>
+      </div>
+
+      <div className="leaderboard-trader-cell">
+        <div
+          className="trader-avatar fallback"
+          style={{ background: avatarGradient(trader.proxyWallet) }}
+          aria-hidden="true"
+        />
+        <div>
+          <strong title={trader.proxyWallet}>{name}</strong>
+          <span>{shortWallet(trader.proxyWallet)}</span>
+        </div>
+      </div>
+
+      <div className="leaderboard-volume-cell">
+        <strong>{formatUsdCompact(trader.volume)}</strong>
+        <div className="volume-track" aria-hidden="true">
+          <span style={{ width: `${volumeShare}%` }} />
+        </div>
+      </div>
+
+      <MetricCell label="Trades" value={formatNumber(trader.tradeCount)} />
+      <MetricCell label="Whales" value={formatNumber(trader.whaleCount)} />
+
+      <div className="leaderboard-signal-cell">
+        <span>{trader.topCategory || 'All markets'}</span>
+        <small>{formatUsdCompact(trader.volume / Math.max(1, trader.whaleCount))} avg whale</small>
+      </div>
+    </motion.article>
+  );
+}
+
+function LeaderboardRail({ items, asOf, selectedWindow, stats }) {
+  const podium = items.slice(0, 3);
+
+  return (
+    <aside className="feed-rail leaderboard-rail">
+      <section className="rail-section podium-section">
+        <h2>
+          Podium <span>{selectedWindow.label}</span>
+        </h2>
+        <div className="podium-list">
+          {podium.length === 0 ? (
+            <div className="rail-empty">No podium data yet</div>
+          ) : (
+            podium.map((trader) => (
+              <div className="podium-item" key={trader.proxyWallet}>
+                <div className={`rank rank-${trader.rank}`}>{trader.rank}</div>
+                <div>
+                  <strong>{leaderboardTraderName(trader)}</strong>
+                  <span>{formatUsdCompact(trader.volume)}</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <div className="rail-card leaderboard-summary-card">
+        <span className="rail-label">Loaded sample</span>
+        <strong>{formatUsdCompact(stats.volume)}</strong>
+        <p>
+          {formatNumber(stats.traders)} ranked traders with {formatNumber(stats.whales)} feed-visible
+          whale trades.
+        </p>
+      </div>
+
+      <section className="rail-section method-section">
+        <h2>
+          Method <span>live</span>
+        </h2>
+        <div className="method-list">
+          <div>
+            <strong>Rank basis</strong>
+            <span>USD volume of feed-visible whale trades.</span>
+          </div>
+          <div>
+            <strong>Intent filter</strong>
+            <span>Uses the backend trade classification already powering the app.</span>
+          </div>
+          <div>
+            <strong>Snapshot</strong>
+            <span>{asOf ? formatSnapshotTime(asOf) : 'Waiting for API snapshot'}</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function LeaderboardSkeleton() {
+  return (
+    <div className="leaderboard-list">
+      {Array.from({ length: 10 }).map((_, index) => (
+        <div className="leaderboard-row leaderboard-skeleton-row" key={index}>
+          <div />
+          <div />
+          <div />
+          <div />
+          <div />
+          <div />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MiniVolumeChart({ points }) {
+  const line = pointsToPath(points, false);
+  const area = pointsToPath(points, true);
+
+  return (
+    <svg className="mini-chart" viewBox="0 0 280 62" role="img" aria-label="Last hour volume chart">
+      <path d={area} fill="rgba(94, 231, 173, 0.18)" />
+      <path d={line} fill="none" stroke="#5ee7ad" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="feed-list">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div className="trade-row skeleton-row" key={index}>
+          <div />
+          <div />
+          <div />
+          <div />
+          <div />
+          <div />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ title, body, actionLabel, onAction }) {
+  return (
+    <div className="empty-state">
+      <Zap size={22} aria-hidden="true" />
+      <h2>{title}</h2>
+      <p>{body}</p>
+      <button type="button" onClick={onAction}>
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function LiveDot({ state }) {
+  return <span className={`live-dot ${state === 'live' ? 'online' : ''}`} aria-hidden="true" />;
+}
+
+function LegalChrome({ children }) {
+  return (
+    <div className="legal-site">
+      <header className="legal-topbar">
+        <a className="legal-brand" href="/" aria-label="Polywatch home">
+          <img src="/assets/polywatch-icon.png" alt="" />
           <span>Polywatch</span>
         </a>
-        <nav className="nav-links">
+        <nav className="legal-nav" aria-label="Legal pages">
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/delete-data">Delete data</a>
         </nav>
       </header>
       {children}
-      <Footer />
+      <LegalFooter />
     </div>
-  );
-}
-
-function HomePage() {
-  return (
-    <SiteChrome>
-      <main>
-        <Hero />
-        <SignalSection />
-        <ScreensSection />
-        <TrustSection />
-        <FinalCta />
-      </main>
-    </SiteChrome>
-  );
-}
-
-function Hero() {
-  return (
-    <section className="hero">
-      <div className="hero-grid">
-        <div className="hero-copy">
-          <div className="status-line">
-            <span className="pulse" />
-            Preparing for Google Play launch
-          </div>
-          <h1>Polywatch</h1>
-          <p className="hero-lede">
-            Real-time whale alerts and trader intelligence for Polymarket.
-          </p>
-          <div className="hero-actions">
-            <a
-              className="button button-primary"
-              href={`mailto:${supportEmail}?subject=Polywatch launch access`}
-            >
-              Join launch list
-              <ArrowRight aria-hidden="true" size={18} />
-            </a>
-            <a className="button button-secondary" href="#screens">
-              See the app
-            </a>
-          </div>
-          <p className="hero-note">
-            Independent market monitoring. No trades, bets, deposits, or
-            wagering inside the app.
-          </p>
-        </div>
-
-        <div className="phone-stage" aria-label="Polywatch app screenshots">
-          <img
-            className="phone-shot phone-shot-side left"
-            src="/assets/screen-leaderboard.png"
-            alt="Polywatch leaderboard screen"
-          />
-          <img
-            className="phone-shot phone-shot-main"
-            src="/assets/screen-live-feed.png"
-            alt="Polywatch live whale feed screen"
-          />
-          <img
-            className="phone-shot phone-shot-side right"
-            src="/assets/screen-alerts.png"
-            alt="Polywatch trader alerts screen"
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SignalSection() {
-  return (
-    <motion.section
-      className="signal-section"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.35 }}
-      variants={reveal}
-    >
-      <div className="section-kicker">Why it exists</div>
-      <div className="split-heading">
-        <h2>Whale trades are useful only when the signal is clean.</h2>
-        <p>
-          Polywatch turns public market activity into a focused mobile workflow:
-          live trade flow, trader context, and alerts that respect your filters.
-        </p>
-      </div>
-      <div className="feature-lines" aria-label="Polywatch features">
-        {featureRows.map((item) => (
-          <FeatureLine key={item.title} {...item} />
-        ))}
-      </div>
-    </motion.section>
-  );
-}
-
-function FeatureLine({ icon: Icon, title, body }) {
-  return (
-    <div className="feature-line">
-      <div className="feature-icon" aria-hidden="true">
-        <Icon size={22} />
-      </div>
-      <div>
-        <h3>{title}</h3>
-        <p>{body}</p>
-      </div>
-    </div>
-  );
-}
-
-function ScreensSection() {
-  return (
-    <section className="screens-section" id="screens">
-      <div className="section-kicker">App screens</div>
-      <h2>Built around the three decisions whale watchers make every day.</h2>
-      <div className="screen-showcase">
-        {screens.map((screen, index) => (
-          <motion.article
-            className="screen-panel"
-            key={screen.title}
-            initial={{ opacity: 0, y: 36 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{
-              duration: 0.72,
-              delay: index * 0.08,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-          >
-            <img src={screen.image} alt={`${screen.title} screenshot`} />
-            <div className="screen-copy">
-              <span>{screen.eyebrow}</span>
-              <h3>{screen.title}</h3>
-              <p>{screen.body}</p>
-            </div>
-          </motion.article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function TrustSection() {
-  return (
-    <section className="trust-section">
-      <motion.div
-        className="trust-copy"
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.45 }}
-        variants={reveal}
-      >
-        <div className="section-kicker">Launch ready foundations</div>
-        <h2>Clear boundaries for a market-monitoring app.</h2>
-        <p>
-          Polywatch is designed as an informational companion. The app tracks
-          public market activity and sends alerts, but it does not execute
-          trades, accept deposits, or provide financial advice.
-        </p>
-      </motion.div>
-      <div className="trust-links">
-        {legalLinks.map(({ href, label, icon: Icon }) => (
-          <a href={href} key={href} className="legal-pill">
-            <Icon size={20} aria-hidden="true" />
-            <span>{label}</span>
-            <ArrowRight size={18} aria-hidden="true" />
-          </a>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FinalCta() {
-  return (
-    <section className="final-cta">
-      <img src="/assets/polywatch-icon.png" alt="" className="cta-icon" />
-      <div>
-        <div className="section-kicker">Coming to Google Play</div>
-        <h2>Track the whales before the market notices.</h2>
-      </div>
-      <a
-        className="button button-primary"
-        href={`mailto:${supportEmail}?subject=Polywatch launch access`}
-      >
-        Request access
-        <Mail size={18} aria-hidden="true" />
-      </a>
-    </section>
   );
 }
 
@@ -297,9 +1084,8 @@ function PrivacyPage() {
     >
       <LegalSection title="Overview">
         <p>
-          Polywatch is an independent market-monitoring app for public
-          Polymarket activity. It is not affiliated with, endorsed by, or
-          operated by Polymarket.
+          Polywatch is an independent market-monitoring app for public Polymarket
+          activity. It is not affiliated with, endorsed by, or operated by Polymarket.
         </p>
       </LegalSection>
       <LegalSection title="Information we collect">
@@ -309,29 +1095,22 @@ function PrivacyPage() {
             auth token, platform, and Firebase Cloud Messaging token.
           </li>
           <li>
-            Alert settings such as minimum trade size, categories, quiet hours,
-            notification preferences, and followed-trader alert preference.
+            Alert settings such as minimum trade size, quiet hours, notification
+            preferences, and followed-trader alert preference.
           </li>
+          <li>Followed trader wallet addresses that you choose to save in the app.</li>
           <li>
-            Followed trader wallet addresses that you choose to save in the app.
+            Technical service data such as server logs, request metadata, delivery
+            status, and error information needed to run and protect the service.
           </li>
-          <li>
-            Technical service data such as server logs, request metadata,
-            delivery status, and error information needed to run and protect the
-            service.
-          </li>
-          <li>
-            Public market, trader, wallet, and trade data that is displayed in
-            the app.
-          </li>
+          <li>Public market, trader, wallet, and trade data displayed in the app.</li>
         </ul>
       </LegalSection>
       <LegalSection title="How we use information">
         <p>
-          We use this information to run the app, authenticate anonymous
-          sessions, deliver push notifications, save your preferences, maintain
-          followed-trader features, diagnose issues, prevent abuse, and improve
-          reliability.
+          We use this information to run the app, authenticate anonymous sessions,
+          deliver push notifications, save preferences, maintain followed-trader
+          features, diagnose issues, prevent abuse, and improve reliability.
         </p>
       </LegalSection>
       <LegalSection title="Service providers">
@@ -344,24 +1123,22 @@ function PrivacyPage() {
       <LegalSection title="Data sharing and sale">
         <p>
           We do not sell personal information. We do not share user alert
-          preferences, notification tokens, or followed-trader lists with
-          advertisers.
+          preferences, notification tokens, or followed-trader lists with advertisers.
         </p>
       </LegalSection>
       <LegalSection title="Retention and deletion">
         <p>
           Local app data remains on your device until you clear app storage or
           uninstall the app. Server-side alert and follow data is retained while
-          needed to provide the service. You can request deletion at any time at{' '}
+          needed to provide the service. You can request deletion at{' '}
           <a href={`mailto:${supportEmail}`}>{supportEmail}</a> or through the{' '}
           <a href="/delete-data">Delete Data</a> page.
         </p>
       </LegalSection>
       <LegalSection title="Children">
         <p>
-          Polywatch is not directed to children. The app is intended for users
-          who are old enough to view market and financial information in their
-          jurisdiction.
+          Polywatch is not directed to children. The app is intended for users who
+          are old enough to view market and financial information in their jurisdiction.
         </p>
       </LegalSection>
       <LegalSection title="Contact">
@@ -383,50 +1160,49 @@ function TermsPage() {
     >
       <LegalSection title="Use of Polywatch">
         <p>
-          Polywatch provides informational views of public market activity,
-          trader profiles, leaderboards, and optional push alerts. You may use
-          the app only in compliance with applicable laws and platform rules.
+          Polywatch provides informational views of public market activity, trader
+          profiles, leaderboards, and optional push alerts. You may use the app only
+          in compliance with applicable laws and platform rules.
         </p>
       </LegalSection>
       <LegalSection title="No financial advice">
         <p>
           Polywatch does not provide financial, investment, legal, tax, trading,
           gambling, or wagering advice. Information in the app may be delayed,
-          incomplete, or inaccurate and should not be the sole basis for any
-          decision.
+          incomplete, or inaccurate and should not be the sole basis for any decision.
         </p>
       </LegalSection>
       <LegalSection title="No trading or wagering service">
         <p>
-          Polywatch does not accept deposits, execute trades, facilitate bets,
-          or hold user funds. The app is a monitoring and notification tool.
+          Polywatch does not accept deposits, execute trades, facilitate bets, or
+          hold user funds. The app is a monitoring and notification tool.
         </p>
       </LegalSection>
       <LegalSection title="Public data and accuracy">
         <p>
-          The app relies on public and third-party market data. We work to keep
-          the service accurate, but we do not guarantee that all prices, trades,
-          trader statistics, rankings, or notifications are complete or current.
+          The app relies on public and third-party market data. We work to keep the
+          service accurate, but we do not guarantee that all prices, trades, trader
+          statistics, rankings, or notifications are complete or current.
         </p>
       </LegalSection>
       <LegalSection title="Account and notification access">
         <p>
-          Polywatch may create an anonymous session to save preferences and
-          deliver alerts. You are responsible for managing notification
-          permission, app settings, and device access.
+          Polywatch may create an anonymous session to save preferences and deliver
+          alerts. You are responsible for managing notification permission, app
+          settings, and device access.
         </p>
       </LegalSection>
       <LegalSection title="Limitation of liability">
         <p>
-          Polywatch is provided as-is. To the maximum extent allowed by law, we
-          are not liable for losses, missed alerts, incorrect data, service
-          interruptions, or decisions made using information from the app.
+          Polywatch is provided as-is. To the maximum extent allowed by law, we are
+          not liable for losses, missed alerts, incorrect data, service interruptions,
+          or decisions made using information from the app.
         </p>
       </LegalSection>
       <LegalSection title="Changes">
         <p>
-          We may update the app or these terms as the service evolves. Continued
-          use after updates means you accept the updated terms.
+          We may update the app or these terms as the service evolves. Continued use
+          after updates means you accept the updated terms.
         </p>
       </LegalSection>
       <LegalSection title="Contact">
@@ -450,43 +1226,40 @@ function DeleteDataPage() {
         <ol>
           <li>
             Email <a href={`mailto:${supportEmail}`}>{supportEmail}</a> with the
-            subject line “Delete Polywatch data”.
+            subject line "Delete Polywatch data".
           </li>
           <li>
-            Include your device platform, approximate install date, and any
-            support details that help us identify the anonymous app session.
+            Include your device platform, approximate install date, and any support
+            details that help us identify the anonymous app session.
           </li>
           <li>
-            We may ask for a confirmation step to verify that the request is
-            connected to your device or app session.
+            We may ask for a confirmation step to verify that the request is connected
+            to your device or app session.
           </li>
         </ol>
       </LegalSection>
       <LegalSection title="What we delete">
         <p>
           After verification, we will delete server-side alert subscriptions,
-          Firebase notification tokens, followed-trader records, and anonymous
-          session records that can be associated with the verified app session.
+          Firebase notification tokens, followed-trader records, and anonymous session
+          records that can be associated with the verified app session.
         </p>
       </LegalSection>
       <LegalSection title="Local device data">
         <p>
-          You can remove local app data from your phone by clearing the app’s
-          storage or uninstalling Polywatch. Local caches may include recent
-          trades, followed traders, alert preferences, and onboarding state.
+          You can remove local app data from your phone by clearing the app storage or
+          uninstalling Polywatch. Local caches may include recent trades, followed
+          traders, alert preferences, and onboarding state.
         </p>
       </LegalSection>
       <LegalSection title="Data we may retain">
         <p>
-          We may retain limited logs when required for security, abuse
-          prevention, legal obligations, or infrastructure diagnostics.
+          We may retain limited logs when required for security, abuse prevention,
+          legal obligations, or infrastructure diagnostics.
         </p>
       </LegalSection>
       <div className="legal-action-row">
-        <a
-          className="button button-primary"
-          href={`mailto:${supportEmail}?subject=Delete Polywatch data`}
-        >
+        <a className="primary-link-button" href={`mailto:${supportEmail}?subject=Delete Polywatch data`}>
           Request deletion
           <Mail size={18} aria-hidden="true" />
         </a>
@@ -497,7 +1270,7 @@ function DeleteDataPage() {
 
 function LegalLayout({ eyebrow, title, intro, children }) {
   return (
-    <SiteChrome legal>
+    <LegalChrome>
       <main className="legal-main">
         <section className="legal-hero">
           <div className="section-kicker">{eyebrow}</div>
@@ -507,7 +1280,7 @@ function LegalLayout({ eyebrow, title, intro, children }) {
         </section>
         <section className="legal-content">{children}</section>
       </main>
-    </SiteChrome>
+    </LegalChrome>
   );
 }
 
@@ -520,27 +1293,380 @@ function LegalSection({ title, children }) {
   );
 }
 
-function Footer() {
+function LegalFooter() {
   return (
-    <footer className="footer">
+    <footer className="legal-footer">
       <div>
-        <a className="footer-brand" href="/">
+        <a className="legal-brand footer-brand" href="/">
           <img src="/assets/polywatch-icon.png" alt="" />
           <span>Polywatch</span>
         </a>
         <p>
-          Independent market monitoring for public Polymarket activity. No
-          trading or wagering inside the app.
+          Independent market monitoring for public Polymarket activity. No trading
+          or wagering inside the app.
         </p>
       </div>
-      <div className="footer-links">
-        <a href="/privacy">Privacy</a>
-        <a href="/terms">Terms</a>
-        <a href="/delete-data">Delete data</a>
-        <a href={`mailto:${supportEmail}`}>Support</a>
+      <div className="legal-footer-links">
+        {legalLinks.map(({ href, label, icon: Icon }) => (
+          <a href={href} key={href}>
+            <Icon size={16} aria-hidden="true" />
+            {label}
+          </a>
+        ))}
       </div>
     </footer>
   );
+}
+
+async function fetchJson(path, options = {}) {
+  const response = await fetch(joinUrl(apiBaseUrl, path), {
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function buildWhalesPath(filter, cursor = null) {
+  const params = new URLSearchParams();
+  params.set('limit', '80');
+  const compact = compactFilter(filter);
+
+  Object.entries(compact).forEach(([key, value]) => {
+    params.set(key, String(value));
+  });
+
+  if (cursor) params.set('cursor', cursor);
+
+  return `/v1/whales?${params.toString()}`;
+}
+
+function buildLeaderboardPath(windowId, cursor = null) {
+  const params = new URLSearchParams();
+  params.set('window', windowId);
+  params.set('limit', '50');
+  if (cursor) params.set('cursor', cursor);
+  return `/v1/leaderboard?${params.toString()}`;
+}
+
+function compactFilter(filter) {
+  return Object.fromEntries(
+    Object.entries(filter).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+}
+
+function passesFilter(trade, filter) {
+  if (filter.minUsd != null && trade.usdSize < filter.minUsd) return false;
+  if (filter.maxUsd != null && trade.usdSize > filter.maxUsd) return false;
+  if (filter.side && trade.side !== filter.side) return false;
+  return true;
+}
+
+function mergeWhales(existing, incoming) {
+  const seen = new Set();
+  return [...existing, ...incoming].filter((item) => {
+    if (!item?.id || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function mergeLeaderboardItems(existing, incoming) {
+  const seen = new Set();
+  return [...existing, ...incoming].filter((item) => {
+    if (!item?.proxyWallet || seen.has(item.proxyWallet)) return false;
+    seen.add(item.proxyWallet);
+    return true;
+  });
+}
+
+function sortWhales(items, sort) {
+  const sorted = [...items];
+  if (sort === 'largest') {
+    return sorted.sort((a, b) => b.usdSize - a.usdSize);
+  }
+  if (sort === 'price') {
+    return sorted.sort((a, b) => getPriceValue(b) - getPriceValue(a));
+  }
+  return sorted.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function sortLeaderboardItems(items, sort) {
+  const sorted = [...items];
+  if (sort === 'volume') {
+    return sorted.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+  }
+  if (sort === 'whales') {
+    return sorted.sort((a, b) => Number(b.whaleCount || 0) - Number(a.whaleCount || 0));
+  }
+  if (sort === 'trades') {
+    return sorted.sort((a, b) => Number(b.tradeCount || 0) - Number(a.tradeCount || 0));
+  }
+  return sorted.sort((a, b) => Number(a.rank || 0) - Number(b.rank || 0));
+}
+
+function searchableText(trade) {
+  return [
+    trade.market?.title,
+    trade.market?.slug,
+    trade.market?.category,
+    trade.outcome,
+    trade.side,
+    trade.trader?.displayName,
+    trade.trader?.pseudonym,
+    trade.trader?.proxyWallet,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function leaderboardSearchableText(trader) {
+  return [
+    trader.displayName,
+    trader.pseudonym,
+    trader.proxyWallet,
+    trader.topCategory,
+    trader.rank,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function buildStats(items, nowMs) {
+  const nowSeconds = Math.floor(nowMs / 1000);
+  const dayItems = items.filter((item) => nowSeconds - item.timestamp <= 86400);
+  const source = dayItems.length ? dayItems : items;
+  const volume = source.reduce((total, item) => total + Number(item.usdSize || 0), 0);
+  const activeTraders = new Set(source.map((item) => item.trader?.proxyWallet).filter(Boolean)).size;
+  const megaTrades = source.filter((item) => item.tier === 'mega' || item.usdSize >= 250000).length;
+  const average = source.length
+    ? source.reduce((total, item) => total + getPriceValue(item), 0) / source.length
+    : 0;
+
+  return {
+    volume,
+    activeTraders,
+    megaTrades,
+    averagePrice: average ? `${trimNumber(average)}c` : '0c',
+    averageTone: average >= 50 ? 'up' : 'down',
+  };
+}
+
+function buildLeaderboardStats(items) {
+  const volume = items.reduce((total, item) => total + Number(item.volume || 0), 0);
+  const whales = items.reduce((total, item) => total + Number(item.whaleCount || 0), 0);
+  const trades = items.reduce((total, item) => total + Number(item.tradeCount || 0), 0);
+  const topVolume = items.reduce((top, item) => Math.max(top, Number(item.volume || 0)), 0);
+
+  return {
+    volume,
+    whales,
+    trades,
+    traders: items.length,
+    topVolume,
+  };
+}
+
+function buildLastHour(items, nowMs) {
+  const nowSeconds = Math.floor(nowMs / 1000);
+  const bucketCount = 14;
+  const secondsPerBucket = 3600 / bucketCount;
+  const buckets = Array.from({ length: bucketCount }, () => 0);
+  let count = 0;
+  let volume = 0;
+
+  items.forEach((item) => {
+    const age = nowSeconds - item.timestamp;
+    if (age < 0 || age > 3600) return;
+    const index = Math.min(bucketCount - 1, Math.floor((3600 - age) / secondsPerBucket));
+    buckets[index] += Number(item.usdSize || 0);
+    count += 1;
+    volume += Number(item.usdSize || 0);
+  });
+
+  const max = Math.max(...buckets, 1);
+  const points = buckets.map((value, index) => {
+    const x = (index / (bucketCount - 1)) * 280;
+    const y = 54 - (value / max) * 46;
+    return [Number(x.toFixed(2)), Number(y.toFixed(2))];
+  });
+
+  return { count, volume, points };
+}
+
+function pointsToPath(points, closeArea) {
+  if (!points.length) return 'M0,54 L280,54';
+  const line = points.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x},${y}`).join(' ');
+  if (!closeArea) return line;
+  return `${line} L280,62 L0,62 Z`;
+}
+
+function inferCategory(trade) {
+  const raw = `${trade.market?.category || ''} ${trade.market?.title || ''} ${trade.market?.slug || ''}`.toLowerCase();
+
+  if (raw.includes('bitcoin') || raw.includes('crypto') || raw.includes('btc') || raw.includes('ethereum')) {
+    return { id: 'crypto', label: 'Crypto', short: 'B' };
+  }
+  if (raw.includes('election') || raw.includes('trump') || raw.includes('senate') || raw.includes('politic')) {
+    return { id: 'politics', label: 'Politics', short: 'P' };
+  }
+  if (raw.includes('nba') || raw.includes('nfl') || raw.includes('mlb') || raw.includes('spread')) {
+    return { id: 'sports', label: 'Sports', short: 'S' };
+  }
+  if (raw.includes('lol') || raw.includes('cs2') || raw.includes('league') || raw.includes('gaming')) {
+    return { id: 'gaming', label: 'Gaming', short: 'G' };
+  }
+  if (raw.includes('fed') || raw.includes('rate') || raw.includes('econom')) {
+    return { id: 'econ', label: 'Economics', short: 'E' };
+  }
+
+  return { id: 'general', label: trade.market?.category || 'Market', short: 'M' };
+}
+
+function getTraderName(trade) {
+  return (
+    trade.trader?.displayName ||
+    trade.trader?.pseudonym ||
+    shortWallet(trade.trader?.proxyWallet) ||
+    'Unknown trader'
+  );
+}
+
+function leaderboardTraderName(trader) {
+  return trader.displayName || trader.pseudonym || shortWallet(trader.proxyWallet) || 'Unknown trader';
+}
+
+function formatTraderMeta(trade) {
+  const vol30d = trade.trader?.vol30d;
+  const tradeCount = trade.trader?.tradeCount;
+
+  if (vol30d) return `${formatUsdCompact(vol30d)} 30d`;
+  if (tradeCount) return `${formatNumber(tradeCount)} trades`;
+  return shortWallet(trade.trader?.proxyWallet) || 'Public wallet';
+}
+
+function formatUsdFull(value) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+}
+
+function formatUsdCompact(value) {
+  const amount = Number(value || 0);
+  if (amount >= 1_000_000) return `$${trimNumber(amount / 1_000_000)}M`;
+  if (amount >= 1_000) return `$${trimNumber(amount / 1_000)}K`;
+  return formatUsdFull(amount);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('en-US').format(Number(value || 0));
+}
+
+function formatPrice(trade) {
+  const price = getPriceValue(trade);
+  return `${trimNumber(price)}c`;
+}
+
+function getPriceValue(trade) {
+  if (trade.priceMillicents != null) return Number(trade.priceMillicents) / 100;
+  return Number(trade.priceCents || 0);
+}
+
+function trimNumber(value) {
+  if (!Number.isFinite(value)) return '0';
+  if (value >= 100 || Number.isInteger(value)) return value.toFixed(0);
+  if (value >= 10) return value.toFixed(1).replace(/\.0$/, '');
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function relativeTime(timestamp) {
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - Number(timestamp || 0));
+  if (seconds < 60) return 'now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(
+    new Date(Number(timestamp || 0) * 1000)
+  );
+}
+
+function relativeClientTime(timestampMs) {
+  const seconds = Math.max(0, Math.floor((Date.now() - timestampMs) / 1000));
+  if (seconds < 15) return 'now';
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  return `${Math.floor(seconds / 3600)}h ago`;
+}
+
+function formatSnapshotTime(timestampSeconds) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(Number(timestampSeconds || 0) * 1000));
+}
+
+function shortWallet(wallet) {
+  if (!wallet) return '';
+  return wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
+}
+
+function truncate(value, length) {
+  if (!value || value.length <= length) return value || '';
+  return `${value.slice(0, length - 3)}...`;
+}
+
+function avatarGradient(seed) {
+  const palettes = [
+    ['#67e8f9', '#2563eb'],
+    ['#fda4af', '#f43f5e'],
+    ['#c4b5fd', '#7c3aed'],
+    ['#fde047', '#f97316'],
+    ['#86efac', '#10b981'],
+    ['#93c5fd', '#06b6d4'],
+  ];
+  const index = Math.abs(hashString(seed)) % palettes.length;
+  const [a, b] = palettes[index];
+  return `linear-gradient(135deg, ${a}, ${b})`;
+}
+
+function hashString(value) {
+  return String(value || '')
+    .split('')
+    .reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
+}
+
+function liveStateLabel(state) {
+  if (state === 'live') return 'Live';
+  if (state === 'reconnecting') return 'Retry';
+  if (state === 'offline') return 'Offline';
+  return 'Sync';
+}
+
+function normalizeApiBase(base) {
+  return String(base || '/api').replace(/\/$/, '');
+}
+
+function normalizeWsBase(base) {
+  const normalized = String(base || prodApiUrl).replace(/\/$/, '');
+  if (normalized.startsWith('https://')) return normalized.replace(/^https:/, 'wss:');
+  if (normalized.startsWith('http://')) return normalized.replace(/^http:/, 'ws:');
+  return normalized;
+}
+
+function joinUrl(base, path) {
+  return `${String(base).replace(/\/$/, '')}/${String(path).replace(/^\//, '')}`;
 }
 
 export default App;
