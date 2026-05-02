@@ -6,22 +6,30 @@ import {
   ArrowRight,
   BarChart3,
   Bell,
+  BellOff,
   Check,
   ChevronDown,
+  ChevronRight,
+  Clock,
+  DollarSign,
   ExternalLink,
   FileText,
   Hash,
   Layers,
   LockKeyhole,
   Mail,
+  Moon,
   Radio,
   RefreshCw,
   Search,
+  Settings,
   ShieldCheck,
   SlidersHorizontal,
   Target,
   Trophy,
+  User,
   UserPlus,
+  Users,
   Wallet,
   Zap,
 } from 'lucide-react';
@@ -35,6 +43,7 @@ const authStorageKey = 'polywatch:webAuth';
 const deviceIdStorageKey = 'polywatch:webDeviceId';
 const followsStorageKey = 'polywatch:followedWallets';
 const followsChangedEvent = 'polywatch:follows-changed';
+const alertPrefsStorageKey = 'polywatch:webAlertPrefs';
 const walletRegex = /^0x[0-9a-fA-F]{40}$/;
 
 const rangeOptions = [
@@ -48,6 +57,12 @@ const sideOptions = [
   { id: 'all', label: 'All sides' },
   { id: 'BUY', label: 'Buy' },
   { id: 'SELL', label: 'Sell' },
+];
+
+const feedSortOptions = [
+  { id: 'recent', label: 'Most recent' },
+  { id: 'largest', label: 'Largest size' },
+  { id: 'price', label: 'Highest price' },
 ];
 
 const leaderboardWindows = [
@@ -87,6 +102,9 @@ function App() {
   if (path === '/terms') return <TermsPage />;
   if (path === '/delete-data') return <DeleteDataPage />;
   if (path === '/leaderboard') return <LeaderboardPage />;
+  if (path === '/profile/following') return <FollowingPage />;
+  if (path === '/profile') return <ProfilePage />;
+  if (path === '/alerts') return <AlertsPage />;
   if (tradeMatch) return <TradeDetailPage tradeId={decodeURIComponent(tradeMatch[1])} />;
   if (traderMatch) return <TraderProfilePage wallet={decodeURIComponent(traderMatch[1])} />;
 
@@ -96,6 +114,10 @@ function App() {
 function WhaleFeedPage() {
   const [rangeId, setRangeId] = useState('all');
   const [side, setSide] = useState('all');
+  const [followingOnly, setFollowingOnly] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    return query.get('following') === '1' || query.get('following') === 'true';
+  });
   const [sort, setSort] = useState('recent');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
@@ -108,6 +130,7 @@ function WhaleFeedPage() {
   const [clock, setClock] = useState(() => Date.now());
   const [leaderboard, setLeaderboard] = useState([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [followedCount, setFollowedCount] = useState(() => readFollowedWallets().size);
 
   const selectedRange = useMemo(
     () => rangeOptions.find((option) => option.id === rangeId) ?? rangeOptions[0],
@@ -119,8 +142,9 @@ function WhaleFeedPage() {
       minUsd: selectedRange.minUsd,
       maxUsd: selectedRange.maxUsd,
       side: side === 'all' ? undefined : side,
+      following: followingOnly ? true : undefined,
     }),
-    [selectedRange, side]
+    [selectedRange, side, followingOnly]
   );
 
   const filterKey = useMemo(() => JSON.stringify(apiFilter), [apiFilter]);
@@ -131,15 +155,32 @@ function WhaleFeedPage() {
   }, []);
 
   useEffect(() => {
+    const refreshFollowState = () => {
+      setFollowedCount(readFollowedWallets().size);
+    };
+
+    refreshFollowState();
+
+    if (hasStoredAuth()) {
+      syncFollowedWalletsFromServer()
+        .then(refreshFollowState)
+        .catch(() => {
+          // Local follows still keep the personal feed usable if sync is unavailable.
+        });
+    }
+
+    window.addEventListener(followsChangedEvent, refreshFollowState);
+    return () => window.removeEventListener(followsChangedEvent, refreshFollowState);
+  }, [followingOnly]);
+
+  useEffect(() => {
     const controller = new AbortController();
 
     async function loadInitialWhales() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchJson(buildWhalesPath(apiFilter), {
-          signal: controller.signal,
-        });
+        const data = await fetchWhalesForFilter(apiFilter, null, { signal: controller.signal });
         setItems(Array.isArray(data.items) ? data.items : []);
         setCursor(data.nextCursor ?? null);
         setLastUpdatedAt(Date.now());
@@ -180,6 +221,11 @@ function WhaleFeedPage() {
     let closed = false;
     let socket;
     let retryTimer;
+
+    if (apiFilter.following) {
+      setLiveState('filtered');
+      return undefined;
+    }
 
     function connect() {
       setLiveState('connecting');
@@ -253,7 +299,7 @@ function WhaleFeedPage() {
     setLoadingMore(true);
     setError('');
     try {
-      const data = await fetchJson(buildWhalesPath(apiFilter, cursor));
+      const data = await fetchWhalesForFilter(apiFilter, cursor);
       const incoming = Array.isArray(data.items) ? data.items : [];
       setItems((previous) => mergeWhales(previous, incoming));
       setCursor(data.nextCursor ?? null);
@@ -338,6 +384,21 @@ function WhaleFeedPage() {
 
           <div className="filter-divider" />
 
+          <button
+            className={`filter-pill personal ${followingOnly ? 'active' : ''}`}
+            type="button"
+            onClick={() => {
+              const next = !followingOnly;
+              setFollowingOnly(next);
+              updateFollowingQueryParam(next);
+            }}
+            title={followedCount ? 'Show only traders you follow' : 'Follow traders from the leaderboard or profile pages'}
+          >
+            Following{followedCount ? ` (${followedCount})` : ''}
+          </button>
+
+          <div className="filter-divider" />
+
           <div className="pill-group compact">
             {sideOptions.map((option) => (
               <button
@@ -351,15 +412,7 @@ function WhaleFeedPage() {
             ))}
           </div>
 
-          <label className="sort-select">
-            <SlidersHorizontal size={14} aria-hidden="true" />
-            <select value={sort} onChange={(event) => setSort(event.target.value)}>
-              <option value="recent">Most recent</option>
-              <option value="largest">Largest size</option>
-              <option value="price">Highest price</option>
-            </select>
-            <ChevronDown size={14} aria-hidden="true" />
-          </label>
+          <SortMenu value={sort} onChange={setSort} options={feedSortOptions} />
         </section>
 
         <section className="feed-table" aria-live="polite">
@@ -383,12 +436,24 @@ function WhaleFeedPage() {
             />
           ) : visibleItems.length === 0 ? (
             <EmptyState
-              title="No whales match this view"
-              body="Change the size, side, or search filter to widen the feed."
-              actionLabel="Reset filters"
+              title={followingOnly ? 'No followed whale trades' : 'No whales match this view'}
+              body={
+                followingOnly
+                  ? followedCount
+                    ? 'The traders you follow do not have feed-visible whale trades in this view.'
+                    : 'Follow traders from the leaderboard or trader profiles to build a personal feed.'
+                  : 'Change the size, side, or search filter to widen the feed.'
+              }
+              actionLabel={followingOnly && !followedCount ? 'Browse leaderboard' : 'Reset filters'}
               onAction={() => {
+                if (followingOnly && !followedCount) {
+                  window.location.href = '/leaderboard';
+                  return;
+                }
                 setRangeId('all');
                 setSide('all');
+                setFollowingOnly(false);
+                updateFollowingQueryParam(false);
                 setSearch('');
               }}
             />
@@ -515,14 +580,6 @@ function LeaderboardPage() {
           </div>
 
           <div className="feed-topbar-actions">
-            <label className="feed-search">
-              <Search size={15} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search traders or wallets..."
-              />
-            </label>
             <button
               className="icon-button"
               type="button"
@@ -550,29 +607,21 @@ function LeaderboardPage() {
         <section className="filter-row" aria-label="Leaderboard filters">
           <div className="pill-group">
             {leaderboardWindows.map((option) => (
-              <button
-                className={`filter-pill ${windowId === option.id ? 'active' : ''}`}
+              <WindowFilterButton
                 key={option.id}
-                type="button"
-                onClick={() => setWindowId(option.id)}
-                title={option.caption}
-              >
-                {option.label}
-              </button>
+                option={option}
+                active={windowId === option.id}
+                onSelect={setWindowId}
+              />
             ))}
           </div>
 
-          <label className="sort-select leaderboard-sort">
-            <SlidersHorizontal size={14} aria-hidden="true" />
-            <select value={sort} onChange={(event) => setSort(event.target.value)}>
-              {leaderboardSortOptions.map((option) => (
-                <option value={option.id} key={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={14} aria-hidden="true" />
-          </label>
+          <SortMenu
+            value={sort}
+            onChange={setSort}
+            options={leaderboardSortOptions}
+            className="leaderboard-sort"
+          />
         </section>
 
         <section className="leaderboard-table" aria-live="polite">
@@ -681,7 +730,7 @@ function TradeDetailPage({ tradeId }) {
     : null;
 
   return (
-    <div className="feed-shell detail-shell">
+    <div className="feed-shell detail-shell no-rail-shell">
       <FeedSidebar activePage="detail" liveState="live" />
 
       <main className="feed-main detail-main">
@@ -710,9 +759,6 @@ function TradeDetailPage({ tradeId }) {
                   </h1>
                   <p>{trade.market?.title || 'Unknown market'}</p>
                 </div>
-                <span className={`detail-side-badge ${trade.side === 'SELL' ? 'sell' : ''}`}>
-                  {trade.outcome || 'Outcome'} @ {formatPrice(trade)}
-                </span>
               </div>
             </header>
 
@@ -741,9 +787,12 @@ function TradeDetailPage({ tradeId }) {
               </div>
 
               <div className="detail-panel">
-                <div className="panel-heading">
-                  <Layers size={16} aria-hidden="true" />
-                  <span>Market</span>
+                <div className="panel-heading panel-heading-with-action">
+                  <span>
+                    <Layers size={16} aria-hidden="true" />
+                    Market
+                  </span>
+                  <span className="market-price-badge">{formatPrice(trade)}</span>
                 </div>
                 <div className="market-detail-card">
                   <MarketIcon trade={trade} category={inferCategory(trade)} />
@@ -791,15 +840,6 @@ function TradeDetailPage({ tradeId }) {
           </>
         )}
       </main>
-
-      <DetailRail
-        title="Trade Context"
-        items={[
-          ['Read-only', 'Polywatch never executes trades or handles funds.'],
-          ['Intent', 'This view uses the backend classified whale trade feed.'],
-          ['Next step', trade?.trader?.proxyWallet ? 'Open the trader profile for wallet context.' : 'Trader context is unavailable for this trade.'],
-        ]}
-      />
     </div>
   );
 }
@@ -807,7 +847,10 @@ function TradeDetailPage({ tradeId }) {
 function TraderProfilePage({ wallet }) {
   const normalizedWallet = wallet.toLowerCase();
   const [profile, setProfile] = useState(null);
-  const [windowId, setWindowId] = useState('7d');
+  const [windowId, setWindowId] = useState(() => {
+    const queryWindow = new URLSearchParams(window.location.search).get('window');
+    return queryWindow === '7d' ? queryWindow : '7d';
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -885,15 +928,12 @@ function TraderProfilePage({ wallet }) {
             <section className="filter-row profile-window-row" aria-label="Trader stat window">
               <div className="pill-group">
                 {leaderboardWindows.map((option) => (
-                  <button
-                    className={`filter-pill ${windowId === option.id ? 'active' : ''}`}
+                  <WindowFilterButton
                     key={option.id}
-                    type="button"
-                    onClick={() => setWindowId(option.id)}
-                    title={option.caption}
-                  >
-                    {option.label}
-                  </button>
+                    option={option}
+                    active={windowId === option.id}
+                    onSelect={setWindowId}
+                  />
                 ))}
               </div>
             </section>
@@ -962,6 +1002,486 @@ function TraderProfilePage({ wallet }) {
   );
 }
 
+function ProfilePage() {
+  const { items, loading, error, refresh } = useFollowedTraders();
+  const previewItems = items.slice(0, 5);
+  const totalVolume = items.reduce((total, item) => total + Number(item.vol7d || 0), 0);
+
+  return (
+    <div className="feed-shell detail-shell profile-shell">
+      <FeedSidebar activePage="profile" liveState="live" />
+
+      <main className="feed-main detail-main profile-main">
+        <header className="feed-topbar profile-topbar">
+          <div>
+            <div className="feed-breadcrumb">
+              <User size={14} aria-hidden="true" />
+              Account - web profile
+            </div>
+            <h1>
+              Profile <em>Free</em>
+            </h1>
+          </div>
+
+          <div className="feed-topbar-actions">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={refresh}
+              aria-label="Refresh profile"
+              title="Refresh"
+            >
+              <RefreshCw size={17} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <motion.section
+          className="stats-strip detail-stats"
+          initial="hidden"
+          animate="visible"
+          variants={reveal}
+        >
+          <StatBlock label="Account" value="Free user" />
+          <StatBlock label="Following" value={formatNumber(items.length)} />
+          <StatBlock label="7D Followed Volume" value={formatUsdCompact(totalVolume)} />
+          <StatBlock label="Web Alerts" value="Setup" tone="down" />
+        </motion.section>
+
+        <section className="profile-settings-grid">
+          <ProfilePanel icon={Settings} title="Account">
+            <div className="settings-list">
+              <SettingsRow icon={User} label="Plan" value="Free user" />
+              <SettingsRow icon={Moon} label="Theme" value="Dark" />
+              <SettingsRow icon={DollarSign} label="Currency" value="$ USD" />
+            </div>
+          </ProfilePanel>
+
+          <ProfilePanel icon={Users} title="Following">
+            {loading ? (
+              <FollowingSkeleton rows={3} />
+            ) : error && !items.length ? (
+              <p className="profile-panel-note">{error}</p>
+            ) : previewItems.length ? (
+              <>
+                <div className="profile-following-list">
+                  {previewItems.map((item) => (
+                    <FollowedTraderRow item={item} key={item.proxyWallet} compact />
+                  ))}
+                </div>
+                {items.length > 5 ? (
+                  <a className="profile-panel-action" href="/profile/following">
+                    View all following
+                    <span>{formatNumber(items.length)}</span>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </a>
+                ) : null}
+              </>
+            ) : (
+              <div className="profile-empty-following">
+                <p>You're not following anyone yet.</p>
+                <a href="/leaderboard">Browse leaderboard</a>
+              </div>
+            )}
+          </ProfilePanel>
+
+          <ProfilePanel icon={Bell} title="Notifications">
+            <div className="settings-list">
+              <a className="settings-row link-row" href="/alerts">
+                <span className="settings-row-icon">
+                  <Bell size={16} aria-hidden="true" />
+                </span>
+                <span>
+                  <strong>Alert settings</strong>
+                  <small>Android alerts are live. Web push is next.</small>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </a>
+            </div>
+          </ProfilePanel>
+
+          <ProfilePanel icon={ShieldCheck} title="About">
+            <div className="settings-list">
+              <SettingsRow icon={FileText} label="Version" value="1.0.0 web" />
+              <a className="settings-row link-row" href="/privacy">
+                <span className="settings-row-icon">
+                  <LockKeyhole size={16} aria-hidden="true" />
+                </span>
+                <span>
+                  <strong>Privacy Policy</strong>
+                  <small>launchwebsite-production-e827.up.railway.app/privacy</small>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </a>
+              <a className="settings-row link-row" href="/terms">
+                <span className="settings-row-icon">
+                  <FileText size={16} aria-hidden="true" />
+                </span>
+                <span>
+                  <strong>Terms of Service</strong>
+                  <small>launchwebsite-production-e827.up.railway.app/terms</small>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </a>
+              <a className="settings-row link-row" href={`mailto:${supportEmail}?subject=Polywatch feedback`}>
+                <span className="settings-row-icon">
+                  <Mail size={16} aria-hidden="true" />
+                </span>
+                <span>
+                  <strong>Send Feedback</strong>
+                  <small>{supportEmail}</small>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </a>
+            </div>
+          </ProfilePanel>
+        </section>
+      </main>
+
+      <DetailRail
+        title="Profile Status"
+        items={[
+          ['Plan', 'Free user is the default web account label.'],
+          ['Following', "Uses the same follow API, scoped to this browser's anonymous web user."],
+          ['Notifications', 'Browser push needs a Firebase web worker before it can match Android alerts.'],
+        ]}
+      />
+    </div>
+  );
+}
+
+function FollowingPage() {
+  const { items, loading, error, refresh } = useFollowedTraders();
+  const [search, setSearch] = useState('');
+  const visibleItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((item) =>
+      [item.displayName, item.pseudonym, item.proxyWallet]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [items, search]);
+  const totalVolume = items.reduce((total, item) => total + Number(item.vol7d || 0), 0);
+
+  return (
+    <div className="feed-shell detail-shell profile-shell">
+      <FeedSidebar activePage="following" liveState="live" />
+
+      <main className="feed-main detail-main profile-main">
+        <DetailBackBar href="/profile" label="Back to profile" />
+
+        <header className="feed-topbar profile-topbar">
+          <div>
+            <div className="feed-breadcrumb">
+              <Users size={14} aria-hidden="true" />
+              Traders you follow
+            </div>
+            <h1>
+              Following <em>{formatNumber(items.length)}</em>
+            </h1>
+          </div>
+
+          <div className="feed-topbar-actions">
+            <label className="feed-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search followed wallets..."
+              />
+            </label>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={refresh}
+              aria-label="Refresh following list"
+              title="Refresh"
+            >
+              <RefreshCw size={17} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+
+        <section className="stats-strip detail-stats">
+          <StatBlock label="Followed Traders" value={formatNumber(items.length)} />
+          <StatBlock label="7D Followed Volume" value={formatUsdCompact(totalVolume)} />
+          <StatBlock label="Latest Follow" value={items[0]?.followedAt ? relativeTime(items[0].followedAt) : '-'} />
+          <StatBlock label="Feed Filter" value="Ready" />
+        </section>
+
+        <section className="following-list-section" aria-live="polite">
+          <div className="section-title-row">
+            <div>
+              <h2>Managed list</h2>
+              <p>Unfollow directly here or open any trader profile.</p>
+            </div>
+            {error ? <span className="section-error">{error}</span> : null}
+          </div>
+
+          {loading ? (
+            <FollowingSkeleton rows={8} />
+          ) : visibleItems.length ? (
+            <div className="following-list">
+              {visibleItems.map((item) => (
+                <FollowedTraderRow item={item} key={item.proxyWallet} />
+              ))}
+            </div>
+          ) : items.length ? (
+            <EmptyState
+              title="No followed trader matches this search"
+              body="Clear the search field to show the full following list."
+              actionLabel="Clear search"
+              onAction={() => setSearch('')}
+            />
+          ) : (
+            <EmptyState
+              title="You're not following anyone yet"
+              body="Open the leaderboard or a trader profile and follow wallets you want to track."
+              actionLabel="Browse leaderboard"
+              onAction={() => {
+                window.location.href = '/leaderboard';
+              }}
+            />
+          )}
+        </section>
+      </main>
+
+      <DetailRail
+        title="Following"
+        items={[
+          ['Feed filter', 'Use the Following chip on the live feed to show only followed wallets.'],
+          ['Identity', "Web follows are tied to this browser until account sign-in exists."],
+          ['Limit', 'The API returns up to 500 followed traders for this account.'],
+        ]}
+      />
+    </div>
+  );
+}
+
+function AlertsPage() {
+  const [prefs, setPrefs] = useState(() => readWebAlertPrefs());
+  const [savedAt, setSavedAt] = useState(null);
+
+  const updatePrefs = (patch) => {
+    setPrefs((current) => ({ ...current, ...patch }));
+    setSavedAt(null);
+  };
+
+  const savePrefs = () => {
+    writeStoredJson(alertPrefsStorageKey, prefs);
+    setSavedAt(Date.now());
+  };
+
+  return (
+    <div className="feed-shell detail-shell profile-shell">
+      <FeedSidebar activePage="alerts" liveState="live" />
+
+      <main className="feed-main detail-main profile-main">
+        <header className="feed-topbar profile-topbar">
+          <div>
+            <div className="feed-breadcrumb">
+              <Bell size={14} aria-hidden="true" />
+              Notifications - web
+            </div>
+            <h1>
+              Alerts <em>Setup</em>
+            </h1>
+          </div>
+        </header>
+
+        <section className="stats-strip detail-stats">
+          <StatBlock label="Android FCM" value="Live" />
+          <StatBlock label="Web Push" value="Pending" tone="down" />
+          <StatBlock label="Following Mode" value={prefs.followingOnly ? 'On' : 'Off'} />
+          <StatBlock label="Minimum Size" value={formatUsdCompact(prefs.minUsd)} />
+        </section>
+
+        <section className="profile-settings-grid alerts-grid">
+          <ProfilePanel icon={BellOff} title="Web push status">
+            <p className="profile-panel-note">
+              The website can store alert preferences, but browser push delivery still needs Firebase Web
+              Messaging and a service worker before it can receive notifications like Android.
+            </p>
+            <div className="settings-list">
+              <SettingsRow icon={Bell} label="Current delivery" value="Android app" />
+              <SettingsRow icon={ShieldCheck} label="Backend support" value="FCM mobile token" />
+              <SettingsRow icon={Clock} label="Next web step" value="Service worker" />
+            </div>
+          </ProfilePanel>
+
+          <ProfilePanel icon={SlidersHorizontal} title="Preference draft">
+            <div className="alert-control-stack">
+              <label className="range-control">
+                <span>
+                  <strong>Minimum size</strong>
+                  <small>{formatUsdFull(prefs.minUsd)}</small>
+                </span>
+                <input
+                  type="range"
+                  min="10000"
+                  max="500000"
+                  step="10000"
+                  value={prefs.minUsd}
+                  onChange={(event) => updatePrefs({ minUsd: Number(event.target.value) })}
+                />
+              </label>
+              <ToggleRow
+                title="Mega whale only"
+                subtitle="$250K+ trades only"
+                checked={prefs.megaOnly}
+                onChange={(value) => updatePrefs({ megaOnly: value })}
+              />
+              <ToggleRow
+                title="Following list only"
+                subtitle="Only traders you follow"
+                checked={prefs.followingOnly}
+                onChange={(value) => updatePrefs({ followingOnly: value })}
+              />
+              <ToggleRow
+                title="Quiet hours"
+                subtitle="10pm to 7am"
+                checked={prefs.quietHoursEnabled}
+                onChange={(value) => updatePrefs({ quietHoursEnabled: value })}
+              />
+              <div className="detail-action-row">
+                <button className="load-more-button" type="button" onClick={savePrefs}>
+                  Save web draft
+                </button>
+                {savedAt ? <span className="saved-note">Saved {relativeClientTime(savedAt)}</span> : null}
+              </div>
+            </div>
+          </ProfilePanel>
+        </section>
+      </main>
+
+      <DetailRail
+        title="Alert Parity"
+        items={[
+          ['Android', 'FCM notifications remain the production alert channel.'],
+          ['Web', 'The UI is ready, but delivery needs Firebase Web Messaging configuration.'],
+          ['Following-only', 'The server already checks followed wallets for mobile alert subscriptions.'],
+        ]}
+      />
+    </div>
+  );
+}
+
+function ProfilePanel({ icon: Icon, title, children }) {
+  return (
+    <section className="detail-panel profile-panel">
+      <div className="panel-heading">
+        <Icon size={16} aria-hidden="true" />
+        <span>{title}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SettingsRow({ icon: Icon, label, value }) {
+  return (
+    <div className="settings-row">
+      <span className="settings-row-icon">
+        <Icon size={16} aria-hidden="true" />
+      </span>
+      <span>
+        <strong>{label}</strong>
+      </span>
+      <small>{value}</small>
+    </div>
+  );
+}
+
+function ToggleRow({ title, subtitle, checked, onChange }) {
+  return (
+    <label className="toggle-row">
+      <span>
+        <strong>{title}</strong>
+        <small>{subtitle}</small>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="toggle-visual" aria-hidden="true" />
+    </label>
+  );
+}
+
+function FollowedTraderRow({ item, compact = false }) {
+  const href = `/trader/${encodeURIComponent(item.proxyWallet)}`;
+  const name = followedTraderName(item);
+
+  return (
+    <article
+      className={`followed-trader-row ${compact ? 'compact' : ''}`}
+      role="link"
+      tabIndex={0}
+      onClick={() => {
+        window.location.href = href;
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') window.location.href = href;
+      }}
+    >
+      <FollowedAvatar item={item} />
+      <div className="followed-trader-copy">
+        <strong title={name}>{name}</strong>
+        <span>{shortWallet(item.proxyWallet)}</span>
+      </div>
+      <div className="followed-trader-actions">
+        <div className="followed-trader-meta">
+          <strong>{formatUsdCompact(item.vol7d)}</strong>
+          <span>7D volume</span>
+        </div>
+        {compact ? <ChevronRight size={16} aria-hidden="true" /> : <FollowWalletButton wallet={item.proxyWallet} variant="icon" />}
+      </div>
+    </article>
+  );
+}
+
+function FollowedAvatar({ item }) {
+  const imageUrl = item.profileImage;
+  const [failed, setFailed] = useState(false);
+
+  if (imageUrl && !failed) {
+    return (
+      <img
+        className="trader-avatar followed-avatar"
+        src={imageUrl}
+        alt=""
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <span
+      className="trader-avatar followed-avatar"
+      style={{ background: avatarGradient(item.proxyWallet) }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function FollowingSkeleton({ rows = 4 }) {
+  return (
+    <div className="following-list">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div className="followed-trader-row skeleton-followed-row" key={index}>
+          <div />
+          <div />
+          <div />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FeedSidebar({ activePage, liveState }) {
   const navItems = [
     {
@@ -978,8 +1498,27 @@ function FeedSidebar({ activePage, liveState }) {
       badge: '7d',
       active: activePage === 'leaderboard',
     },
-    { label: 'Following', href: '/', icon: Wallet, badge: 'Soon' },
-    { label: 'Alerts', href: '/', icon: Bell, badge: 'App' },
+    {
+      label: 'Following',
+      href: '/profile/following',
+      icon: Users,
+      badge: 'List',
+      active: activePage === 'following',
+    },
+    {
+      label: 'Alerts',
+      href: '/alerts',
+      icon: Bell,
+      badge: 'Web',
+      active: activePage === 'alerts',
+    },
+    {
+      label: 'Profile',
+      href: '/profile',
+      icon: User,
+      badge: 'Free',
+      active: activePage === 'profile',
+    },
   ];
 
   return (
@@ -1035,14 +1574,81 @@ function NavItem({ label, href, icon: Icon, badge, active = false }) {
   );
 }
 
+function SortMenu({ value, onChange, options, className = '' }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.id === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [open]);
+
+  return (
+    <div className={`sort-menu ${className}`} onClick={(event) => event.stopPropagation()}>
+      <button
+        className="sort-menu-trigger"
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <SlidersHorizontal size={14} aria-hidden="true" />
+        <span>{selected.label}</span>
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div className="sort-menu-popover" role="menu">
+          {options.map((option) => (
+            <button
+              className={`sort-menu-option ${option.id === value ? 'active' : ''}`}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option.id === value}
+              key={option.id}
+              onClick={() => {
+                onChange(option.id);
+                setOpen(false);
+              }}
+            >
+              <span>{option.label}</span>
+              {option.id === value ? <Check size={14} aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WindowFilterButton({ option, active, onSelect }) {
+  const locked = option.id !== '7d';
+
+  return (
+    <button
+      className={`filter-pill window-pill ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
+      type="button"
+      aria-disabled={locked}
+      title={locked ? 'Coming soon' : option.caption}
+      onClick={() => {
+        if (!locked) onSelect(option.id);
+      }}
+    >
+      <span>{option.label}</span>
+      {locked ? <LockKeyhole className="locked-icon" size={13} aria-hidden="true" /> : null}
+      {locked ? <span className="locked-tooltip">Coming soon</span> : null}
+    </button>
+  );
+}
+
 function StatBlock({ label, value, tone = 'up' }) {
   return (
     <div className="stat-block">
       <span>{label}</span>
       <strong>{value}</strong>
-      <small className={tone === 'down' ? 'negative' : ''}>
-        {tone === 'down' ? 'Cooling' : 'Live sample'}
-      </small>
     </div>
   );
 }
@@ -1635,7 +2241,7 @@ function FollowWalletButton({ wallet, variant = 'wide' }) {
 }
 
 function LiveDot({ state }) {
-  return <span className={`live-dot ${state === 'live' ? 'online' : ''}`} aria-hidden="true" />;
+  return <span className={`live-dot ${state === 'live' || state === 'filtered' ? 'online' : ''}`} aria-hidden="true" />;
 }
 
 function LegalChrome({ children }) {
@@ -1901,6 +2507,91 @@ function LegalFooter() {
   );
 }
 
+function useFollowedTraders() {
+  const [items, setItems] = useState(() => buildLocalFollowSummaries());
+  const [loading, setLoading] = useState(() => hasStoredAuth());
+  const [error, setError] = useState('');
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  const refresh = useCallback(() => {
+    setRefreshNonce((value) => value + 1);
+  }, []);
+
+  useEffect(() => {
+    const onFollowsChanged = () => setRefreshNonce((value) => value + 1);
+    window.addEventListener(followsChangedEvent, onFollowsChanged);
+    return () => window.removeEventListener(followsChangedEvent, onFollowsChanged);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadFollows() {
+      const localItems = buildLocalFollowSummaries();
+
+      if (!hasStoredAuth()) {
+        setItems(localItems);
+        setLoading(false);
+        setError('');
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+
+      try {
+        const data = await authFetchJson('/v1/users/me/follows', {
+          signal: controller.signal,
+        });
+        if (!active) return;
+
+        const summaries = (data?.items || []).map(normalizeFollowSummary);
+        writeFollowedWallets(new Set(summaries.map((item) => item.proxyWallet)));
+        setItems(summaries);
+      } catch (err) {
+        if (err.name === 'AbortError' || !active) return;
+        setItems(localItems);
+        setError(err.message || 'Could not load followed traders');
+      } finally {
+        if (active && !controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadFollows();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [refreshNonce]);
+
+  return { items, loading, error, refresh };
+}
+
+async function fetchWhalesForFilter(filter, cursor = null, options = {}) {
+  if (filter.following === true) {
+    if (hasStoredAuth()) {
+      return authFetchJson(buildWhalesPath(filter, cursor), options);
+    }
+
+    const followedWallets = readFollowedWallets();
+    if (!followedWallets.size) {
+      return { items: [], nextCursor: null };
+    }
+
+    const publicFilter = { ...filter, following: undefined };
+    const data = await fetchJson(buildWhalesPath(publicFilter, cursor), options);
+    const items = Array.isArray(data?.items)
+      ? data.items.filter((trade) => followedWallets.has(trade.trader?.proxyWallet?.toLowerCase()))
+      : [];
+    return { ...data, items };
+  }
+
+  return fetchJson(buildWhalesPath(filter, cursor), options);
+}
+
 async function fetchJson(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -2011,8 +2702,11 @@ async function syncFollowedWalletsFromServer() {
             .map((item) => item.proxyWallet?.toLowerCase())
             .filter(Boolean)
         );
+        const previous = readFollowedWallets();
         writeFollowedWallets(wallets);
-        notifyFollowsChanged();
+        if (!setsEqual(previous, wallets)) {
+          notifyFollowsChanged();
+        }
         return wallets;
       })
       .finally(() => {
@@ -2058,8 +2752,64 @@ function readFollowedWallets() {
   return new Set(items.map((wallet) => String(wallet).toLowerCase()).filter(Boolean));
 }
 
+function setsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
 function writeFollowedWallets(wallets) {
   writeStoredJson(followsStorageKey, [...wallets].sort());
+}
+
+function buildLocalFollowSummaries() {
+  return [...readFollowedWallets()].map((wallet) =>
+    normalizeFollowSummary({
+      proxyWallet: wallet,
+      pseudonym: shortWallet(wallet),
+      profileImage: null,
+      vol7d: 0,
+      followedAt: null,
+    })
+  );
+}
+
+function normalizeFollowSummary(item) {
+  const wallet = item.proxyWallet?.toLowerCase() || '';
+  return {
+    proxyWallet: wallet,
+    displayName: item.displayName || item.pseudonym || shortWallet(wallet) || wallet,
+    pseudonym: item.pseudonym || null,
+    profileImage: item.profileImage || null,
+    vol7d: Number(item.vol7d || 0),
+    followedAt: item.followedAt || null,
+  };
+}
+
+function followedTraderName(item) {
+  return formatTraderLabel(item.displayName || item.pseudonym, item.proxyWallet);
+}
+
+function updateFollowingQueryParam(enabled) {
+  const url = new URL(window.location.href);
+  if (enabled) {
+    url.searchParams.set('following', '1');
+  } else {
+    url.searchParams.delete('following');
+  }
+  window.history.replaceState({}, '', url);
+}
+
+function readWebAlertPrefs() {
+  const stored = readStoredJson(alertPrefsStorageKey);
+  return {
+    minUsd: Number(stored?.minUsd || 50000),
+    megaOnly: Boolean(stored?.megaOnly),
+    followingOnly: Boolean(stored?.followingOnly),
+    quietHoursEnabled: Boolean(stored?.quietHoursEnabled),
+  };
 }
 
 function notifyFollowsChanged() {
@@ -2153,6 +2903,7 @@ function passesFilter(trade, filter) {
   if (filter.minUsd != null && trade.usdSize < filter.minUsd) return false;
   if (filter.maxUsd != null && trade.usdSize > filter.maxUsd) return false;
   if (filter.side && trade.side !== filter.side) return false;
+  if (filter.following && !readFollowedWallets().has(trade.trader?.proxyWallet?.toLowerCase())) return false;
   return true;
 }
 
@@ -2526,6 +3277,7 @@ function hashString(value) {
 
 function liveStateLabel(state) {
   if (state === 'live') return 'Live';
+  if (state === 'filtered') return 'Follow';
   if (state === 'reconnecting') return 'Retry';
   if (state === 'offline') return 'Offline';
   return 'Sync';
