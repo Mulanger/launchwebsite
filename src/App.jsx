@@ -129,6 +129,7 @@ function WhaleFeedPage() {
   const [liveState, setLiveState] = useState('connecting');
   const [clock, setClock] = useState(() => Date.now());
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [dashboard, setDashboard] = useState(null);
   const [followedCount, setFollowedCount] = useState(() => readFollowedWallets().size);
   const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
 
@@ -196,10 +197,14 @@ function WhaleFeedPage() {
     async function loadInitialWhales() {
       setLoading(true);
       setError('');
+      setDashboard(null);
       try {
-        const data = await fetchTodayWhalesForFilter(apiFilter, { signal: controller.signal });
+        const data = apiFilter.following
+          ? await fetchTodayWhalesForFilter(apiFilter, { signal: controller.signal })
+          : await fetchTodayDashboardWithFallback(apiFilter, { signal: controller.signal });
         setItems(Array.isArray(data.items) ? data.items : []);
         setCursor(data.nextCursor ?? null);
+        setDashboard(data.dashboard ?? null);
         setLastUpdatedAt(Date.now());
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -307,9 +312,11 @@ function WhaleFeedPage() {
   const sessionItems = useMemo(() => filterNewYorkSession(items, clock), [items, clock]);
   const visibleItems = useMemo(() => sortWhales(sessionItems, sort), [sessionItems, sort]);
 
-  const stats = useMemo(() => buildStats(items, clock), [items, clock]);
-  const lastHour = useMemo(() => buildLastHour(sessionItems, clock), [sessionItems, clock]);
-  const leaderboard = useMemo(() => buildTodayLeaderboardFromTrades(sessionItems), [sessionItems]);
+  const localStats = useMemo(() => buildStats(items, clock), [items, clock]);
+  const stats = useMemo(() => buildDashboardFeedStats(dashboard, localStats), [dashboard, localStats]);
+  const localLastHour = useMemo(() => buildLastHour(sessionItems, clock), [sessionItems, clock]);
+  const lastHour = useMemo(() => buildDashboardLastHour(dashboard, localLastHour), [dashboard, localLastHour]);
+  const leaderboard = useMemo(() => buildDashboardLeaderboard(dashboard, sessionItems), [dashboard, sessionItems]);
   const volumeSparkline = useMemo(() => buildFeedStatSparkline(lastHour.points), [lastHour.points]);
   const whaleBars = useMemo(() => buildFeedStatBars(lastHour.points), [lastHour.points]);
   const mobileTrades = useMemo(
@@ -632,12 +639,15 @@ function LeaderboardPage() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchTodayWhalesForFilter({ minUsd: 10000 }, { signal: controller.signal });
+        const data = await fetchTodayDashboardWithFallback(
+          { minUsd: 10000 },
+          { signal: controller.signal, leaderboardLimit: 100 }
+        );
         const trades = Array.isArray(data.items) ? data.items : [];
         setSourceTrades(trades);
-        setItems(buildTodayLeaderboardFromTrades(trades, Date.now()));
+        setItems(Array.isArray(data.dashboard?.leaderboard) ? data.dashboard.leaderboard : buildTodayLeaderboardFromTrades(trades, Date.now()));
         setCursor(data.nextCursor ?? null);
-        setAsOf(Math.floor(Date.now() / 1000));
+        setAsOf(data.dashboard?.asOf ?? Math.floor(Date.now() / 1000));
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Failed to load leaderboard.');
@@ -4115,6 +4125,27 @@ async function fetchTodayWhalesForFilter(filter, options = {}) {
   return { items, nextCursor };
 }
 
+async function fetchTodayDashboardWithFallback(filter, options = {}) {
+  const { recentLimit, leaderboardLimit, ...requestOptions } = options;
+  try {
+    const dashboard = await fetchTodayDashboard(filter, { recentLimit, leaderboardLimit, ...requestOptions });
+    return {
+      items: Array.isArray(dashboard?.items) ? dashboard.items : [],
+      nextCursor: dashboard?.nextCursor ?? null,
+      dashboard,
+    };
+  } catch (dashboardError) {
+    if (requestOptions?.signal?.aborted) throw dashboardError;
+    const fallback = await fetchTodayWhalesForFilter(filter, requestOptions);
+    return { ...fallback, dashboard: null };
+  }
+}
+
+async function fetchTodayDashboard(filter, options = {}) {
+  const { recentLimit, leaderboardLimit, ...requestOptions } = options;
+  return fetchJson(buildDashboardTodayPath(filter, { recentLimit, leaderboardLimit }), requestOptions);
+}
+
 async function fetchJson(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -4425,6 +4456,19 @@ function buildLeaderboardPath(windowId, cursor = null) {
   params.set('limit', '50');
   if (cursor) params.set('cursor', cursor);
   return `/v1/leaderboard?${params.toString()}`;
+}
+
+function buildDashboardTodayPath(filter, options = {}) {
+  const params = new URLSearchParams();
+  params.set('recentLimit', String(options.recentLimit ?? 100));
+  params.set('leaderboardLimit', String(options.leaderboardLimit ?? 50));
+  const compact = compactFilter({ ...filter, following: undefined });
+
+  Object.entries(compact).forEach(([key, value]) => {
+    params.set(key, String(value));
+  });
+
+  return `/v1/dashboard/today?${params.toString()}`;
 }
 
 function compactFilter(filter) {
@@ -4784,6 +4828,49 @@ function buildLastHour(items, nowMs) {
   });
 
   return { count, volume, points };
+}
+
+function buildDashboardFeedStats(dashboard, fallback) {
+  const today = dashboard?.today;
+  if (!today) return fallback;
+
+  const biggestTrade = today.biggestTrade || null;
+  return {
+    ...fallback,
+    volume: Number(today.volumeUsd || 0),
+    activeTraders: Number(today.activeWhales || 0),
+    megaTrades: Number(today.megaTrades || 0),
+    biggestTradeUsd: Number(biggestTrade?.usdSize || 0),
+    biggestTradeSide: biggestTrade?.side === 'SELL' ? 'SELL' : 'BUY',
+  };
+}
+
+function buildDashboardLastHour(dashboard, fallback) {
+  const last60m = dashboard?.last60m;
+  if (!last60m || !Array.isArray(last60m.buckets)) return fallback;
+
+  const buckets = last60m.buckets.map((value) => Number(value || 0));
+  const bucketCount = Math.max(buckets.length, 2);
+  const max = Math.max(...buckets, 1);
+  const points = buckets.map((value, index) => {
+    const x = (index / (bucketCount - 1)) * 280;
+    const y = 54 - (value / max) * 46;
+    return [Number(x.toFixed(2)), Number(y.toFixed(2))];
+  });
+
+  return {
+    count: Number(last60m.tradeCount || 0),
+    volume: Number(last60m.volumeUsd || 0),
+    points,
+  };
+}
+
+function buildDashboardLeaderboard(dashboard, fallbackTrades) {
+  if (Array.isArray(dashboard?.leaderboard)) {
+    return dashboard.leaderboard;
+  }
+
+  return buildTodayLeaderboardFromTrades(fallbackTrades);
 }
 
 function pointsToPath(points, closeArea) {
