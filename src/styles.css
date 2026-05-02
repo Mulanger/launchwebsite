@@ -338,7 +338,8 @@ img {
 }
 
 .icon-button,
-.row-icon-button {
+.row-icon-button,
+.follow-button.compact {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
@@ -359,7 +360,8 @@ img {
 }
 
 .icon-button:hover,
-.row-icon-button:hover {
+.row-icon-button:hover,
+.follow-button.compact:hover {
   color: var(--accent);
   border-color: rgba(94, 231, 173, 0.42);
   background: rgba(94, 231, 173, 0.08);
@@ -752,6 +754,58 @@ img {
 .row-icon-button {
   width: 31px;
   height: 31px;
+}
+
+.follow-button {
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+.follow-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.follow-button.compact {
+  width: 31px;
+  height: 31px;
+}
+
+.follow-button.wide {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 15px;
+  color: #06120e;
+  background: var(--accent);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.follow-button.wide:hover {
+  background: #7bf2bd;
+  transform: translateY(-1px);
+}
+
+.follow-button.following {
+  color: var(--accent);
+  border-color: rgba(94, 231, 173, 0.42);
+  background: rgba(94, 231, 173, 0.08);
+}
+
+.follow-button.following:hover {
+  color: var(--rose);
+  border-color: rgba(255, 123, 138, 0.42);
+  background: rgba(255, 123, 138, 0.08);
 }
 
 .skeleton-row > div {
@@ -1425,6 +1479,9 @@ img {
 
 .detail-action-row {
   margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .secondary-link-button {
@@ -1457,8 +1514,29 @@ img {
 }
 
 .trader-hero-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: stretch;
+}
+
+.trader-hero-row > div:not(.profile-actions) {
+  min-width: 0;
+}
+
+.trader-hero h1 {
+  max-width: 100%;
+  font-size: clamp(42px, 4.5vw, 66px);
+  overflow-wrap: anywhere;
+}
+
+.profile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 154px;
 }
 
 .profile-avatar {
@@ -2072,10 +2150,19 @@ img {
   }
 
   .detail-title-row,
-  .trader-hero-row,
   .section-title-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .trader-hero-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .profile-actions {
+    justify-content: flex-start;
+    min-width: 0;
   }
 
   .detail-hero h1 {

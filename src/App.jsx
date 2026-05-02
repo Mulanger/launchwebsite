@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   Bell,
+  Check,
   ChevronDown,
   ExternalLink,
   FileText,
@@ -30,6 +31,11 @@ const lastUpdated = 'May 1, 2026';
 const prodApiUrl = 'https://whaleserver-production.up.railway.app';
 const apiBaseUrl = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || '/api');
 const wsBaseUrl = normalizeWsBase(import.meta.env.VITE_WS_BASE_URL || prodApiUrl);
+const authStorageKey = 'polywatch:webAuth';
+const deviceIdStorageKey = 'polywatch:webDeviceId';
+const followsStorageKey = 'polywatch:followedWallets';
+const followsChangedEvent = 'polywatch:follows-changed';
+const walletRegex = /^0x[0-9a-fA-F]{40}$/;
 
 const rangeOptions = [
   { id: 'all', label: 'All', minUsd: 10000 },
@@ -773,6 +779,7 @@ function TradeDetailPage({ tradeId }) {
                 </div>
                 {traderHref ? (
                   <div className="detail-action-row">
+                    <FollowWalletButton wallet={trade.trader?.proxyWallet} variant="wide" />
                     <a className="primary-link-button" href={traderHref}>
                       View trader profile
                       <ArrowRightIcon />
@@ -833,6 +840,7 @@ function TraderProfilePage({ wallet }) {
 
   const stats = profile ? getProfileStats(profile, windowId) : emptyProfileStats();
   const volumeMix = buildVolumeMix(stats);
+  const headingName = profile ? traderProfileName(profile) : '';
 
   return (
     <div className="feed-shell detail-shell">
@@ -860,14 +868,17 @@ function TraderProfilePage({ wallet }) {
               <div className="trader-hero-row">
                 <ProfileAvatar profile={profile} />
                 <div>
-                  <h1>{traderProfileName(profile)}</h1>
+                  <h1 title={traderProfileFullName(profile)}>{headingName}</h1>
                   <p>{profile.shortAddress || shortWallet(profile.proxyWallet)}</p>
                 </div>
-                {profile.rankBadge ? (
-                  <span className="rank-badge">
-                    #{profile.rankBadge.rank} - {String(profile.rankBadge.window).toUpperCase()}
-                  </span>
-                ) : null}
+                <div className="profile-actions">
+                  {profile.rankBadge ? (
+                    <span className="rank-badge">
+                      #{profile.rankBadge.rank} - {String(profile.rankBadge.window).toUpperCase()}
+                    </span>
+                  ) : null}
+                  <FollowWalletButton wallet={profile.proxyWallet} variant="wide" />
+                </div>
               </div>
             </header>
 
@@ -1102,15 +1113,7 @@ function TradeRow({ trade, index }) {
       </a>
 
       <div className="row-actions">
-        <button
-          className="row-icon-button"
-          type="button"
-          title="Following arrives with account support"
-          aria-label="Following arrives with account support"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <UserPlus size={15} aria-hidden="true" />
-        </button>
+        <FollowWalletButton wallet={trade.trader?.proxyWallet} variant="icon" />
         <a
           className="row-icon-button"
           href={polymarketUrl}
@@ -1559,6 +1562,78 @@ function EmptyState({ title, body, actionLabel, onAction }) {
   );
 }
 
+function FollowWalletButton({ wallet, variant = 'wide' }) {
+  const normalizedWallet = wallet?.toLowerCase();
+  const [isFollowing, setIsFollowing] = useState(() => isWalletFollowedLocally(normalizedWallet));
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!normalizedWallet) return undefined;
+
+    const refreshFromLocal = () => setIsFollowing(isWalletFollowedLocally(normalizedWallet));
+    refreshFromLocal();
+
+    if (hasStoredAuth()) {
+      syncFollowedWalletsFromServer()
+        .then(refreshFromLocal)
+        .catch(() => {
+          // Local state remains useful if the sync is unavailable.
+        });
+    }
+
+    window.addEventListener(followsChangedEvent, refreshFromLocal);
+    return () => window.removeEventListener(followsChangedEvent, refreshFromLocal);
+  }, [normalizedWallet]);
+
+  const toggleFollow = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!normalizedWallet || pending) return;
+
+    const next = !isFollowing;
+    const previous = isFollowing;
+
+    setPending(true);
+    setError('');
+    setWalletFollowedLocally(normalizedWallet, next);
+    setIsFollowing(next);
+    notifyFollowsChanged();
+
+    try {
+      await setWalletFollowedOnServer(normalizedWallet, next);
+    } catch (err) {
+      setWalletFollowedLocally(normalizedWallet, previous);
+      setIsFollowing(previous);
+      notifyFollowsChanged();
+      setError(err.message || 'Follow update failed');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  if (!normalizedWallet) {
+    return null;
+  }
+
+  const compact = variant === 'icon';
+  const label = pending ? 'Saving' : isFollowing ? 'Unfollow' : 'Follow';
+
+  return (
+    <button
+      className={`follow-button ${compact ? 'compact' : 'wide'} ${isFollowing ? 'following' : ''}`}
+      type="button"
+      aria-label={`${label} ${shortWallet(normalizedWallet)}`}
+      title={error || label}
+      onClick={toggleFollow}
+      disabled={pending}
+    >
+      {isFollowing ? <Check size={compact ? 15 : 16} aria-hidden="true" /> : <UserPlus size={compact ? 15 : 16} aria-hidden="true" />}
+      {compact ? null : <span>{label}</span>}
+    </button>
+  );
+}
+
 function LiveDot({ state }) {
   return <span className={`live-dot ${state === 'live' ? 'online' : ''}`} aria-hidden="true" />;
 }
@@ -1827,12 +1902,21 @@ function LegalFooter() {
 }
 
 async function fetchJson(path, options = {}) {
+  const headers = {
+    Accept: 'application/json',
+    ...(options.headers || {}),
+  };
+  let body = options.body;
+
+  if (body && typeof body !== 'string') {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+    body = JSON.stringify(body);
+  }
+
   const response = await fetch(joinUrl(apiBaseUrl, path), {
     ...options,
-    headers: {
-      Accept: 'application/json',
-      ...(options.headers || {}),
-    },
+    headers,
+    body,
   });
 
   if (!response.ok) {
@@ -1841,7 +1925,170 @@ async function fetchJson(path, options = {}) {
     throw error;
   }
 
-  return response.json();
+  if (response.status === 204) return null;
+
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function authFetchJson(path, options = {}, retry = true) {
+  const auth = await getWebAuth();
+
+  try {
+    return await fetchJson(path, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${auth.token}`,
+      },
+    });
+  } catch (error) {
+    if (retry && error.status === 401) {
+      clearStoredAuth();
+      const nextAuth = await getWebAuth(true);
+      return fetchJson(path, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Authorization: `Bearer ${nextAuth.token}`,
+        },
+      });
+    }
+    throw error;
+  }
+}
+
+async function getWebAuth(force = false) {
+  if (!force) {
+    const stored = readStoredJson(authStorageKey);
+    if (stored?.token && stored?.userId) return stored;
+  }
+
+  const deviceId = getOrCreateDeviceId();
+  const data = await fetchJson('/v1/auth/anonymous', {
+    method: 'POST',
+    body: {
+      deviceId,
+      platform: 'unknown',
+    },
+  });
+
+  const auth = {
+    token: data.token,
+    userId: data.userId,
+    deviceId,
+  };
+  writeStoredJson(authStorageKey, auth);
+  return auth;
+}
+
+function getOrCreateDeviceId() {
+  let deviceId = window.localStorage.getItem(deviceIdStorageKey);
+  if (!deviceId) {
+    deviceId = globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : createFallbackUuid();
+    window.localStorage.setItem(deviceIdStorageKey, deviceId);
+  }
+  return deviceId;
+}
+
+function clearStoredAuth() {
+  window.localStorage.removeItem(authStorageKey);
+}
+
+function hasStoredAuth() {
+  const stored = readStoredJson(authStorageKey);
+  return Boolean(stored?.token && stored?.userId);
+}
+
+let followsSyncPromise = null;
+
+async function syncFollowedWalletsFromServer() {
+  if (!followsSyncPromise) {
+    followsSyncPromise = authFetchJson('/v1/users/me/follows')
+      .then((data) => {
+        const wallets = new Set(
+          (data?.items || [])
+            .map((item) => item.proxyWallet?.toLowerCase())
+            .filter(Boolean)
+        );
+        writeFollowedWallets(wallets);
+        notifyFollowsChanged();
+        return wallets;
+      })
+      .finally(() => {
+        followsSyncPromise = null;
+      });
+  }
+  return followsSyncPromise;
+}
+
+async function setWalletFollowedOnServer(wallet, shouldFollow) {
+  if (shouldFollow) {
+    await authFetchJson('/v1/users/me/follows', {
+      method: 'POST',
+      body: { proxyWallet: wallet.toLowerCase() },
+    });
+    return;
+  }
+
+  await authFetchJson(`/v1/users/me/follows/${encodeURIComponent(wallet.toLowerCase())}`, {
+    method: 'DELETE',
+  });
+}
+
+function isWalletFollowedLocally(wallet) {
+  if (!wallet) return false;
+  return readFollowedWallets().has(wallet.toLowerCase());
+}
+
+function setWalletFollowedLocally(wallet, shouldFollow) {
+  const follows = readFollowedWallets();
+  const normalized = wallet.toLowerCase();
+  if (shouldFollow) {
+    follows.add(normalized);
+  } else {
+    follows.delete(normalized);
+  }
+  writeFollowedWallets(follows);
+}
+
+function readFollowedWallets() {
+  const items = readStoredJson(followsStorageKey);
+  if (!Array.isArray(items)) return new Set();
+  return new Set(items.map((wallet) => String(wallet).toLowerCase()).filter(Boolean));
+}
+
+function writeFollowedWallets(wallets) {
+  writeStoredJson(followsStorageKey, [...wallets].sort());
+}
+
+function notifyFollowsChanged() {
+  window.dispatchEvent(new CustomEvent(followsChangedEvent));
+}
+
+function readStoredJson(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage errors; in-memory React state still reflects the click.
+  }
+}
+
+function createFallbackUuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
 async function findRecentTradeById(tradeId, signal) {
@@ -2120,20 +2367,37 @@ function inferCategory(trade) {
 }
 
 function getTraderName(trade) {
-  return (
-    trade.trader?.displayName ||
-    trade.trader?.pseudonym ||
-    shortWallet(trade.trader?.proxyWallet) ||
-    'Unknown trader'
+  return formatTraderLabel(
+    trade.trader?.displayName || trade.trader?.pseudonym,
+    trade.trader?.proxyWallet
   );
 }
 
 function leaderboardTraderName(trader) {
-  return trader.displayName || trader.pseudonym || shortWallet(trader.proxyWallet) || 'Unknown trader';
+  return formatTraderLabel(trader.displayName || trader.pseudonym, trader.proxyWallet);
 }
 
 function traderProfileName(profile) {
-  return profile.displayName || profile.pseudonym || profile.shortAddress || shortWallet(profile.proxyWallet) || 'Unknown trader';
+  const raw = traderProfileFullName(profile);
+  if (!raw) return 'Unknown trader';
+  if (isWalletLike(raw)) return profile.shortAddress || shortWallet(raw);
+  if (raw.length > 34) return `${raw.slice(0, 24)}...${raw.slice(-6)}`;
+  return raw;
+}
+
+function traderProfileFullName(profile) {
+  return profile.displayName || profile.pseudonym || profile.shortAddress || shortWallet(profile.proxyWallet) || '';
+}
+
+function isWalletLike(value) {
+  return /^0x[0-9a-fA-F]{40}/.test(String(value || ''));
+}
+
+function formatTraderLabel(name, wallet) {
+  if (name && !isWalletLike(name)) {
+    return name.length > 42 ? `${name.slice(0, 30)}...${name.slice(-6)}` : name;
+  }
+  return shortWallet(name || wallet) || 'Unknown trader';
 }
 
 function formatTraderMeta(trade) {
@@ -2228,7 +2492,11 @@ function formatDateTimeSeconds(timestampSeconds) {
 
 function shortWallet(wallet) {
   if (!wallet) return '';
-  return wallet.length > 12 ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : wallet;
+  const raw = String(wallet);
+  const leadingWallet = raw.match(/^0x[0-9a-fA-F]{40}/)?.[0] || raw;
+  return leadingWallet.length > 12
+    ? `${leadingWallet.slice(0, 6)}...${leadingWallet.slice(-4)}`
+    : leadingWallet;
 }
 
 function truncate(value, length) {
