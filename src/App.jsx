@@ -2,11 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
+  ArrowLeft,
+  ArrowRight,
   BarChart3,
   Bell,
   ChevronDown,
   ExternalLink,
   FileText,
+  Hash,
+  Layers,
   LockKeyhole,
   Mail,
   Radio,
@@ -14,6 +18,7 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Target,
   Trophy,
   UserPlus,
   Wallet,
@@ -69,11 +74,15 @@ const reveal = {
 
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
+  const tradeMatch = path.match(/^\/trade\/([^/]+)$/);
+  const traderMatch = path.match(/^\/trader\/([^/]+)$/);
 
   if (path === '/privacy') return <PrivacyPage />;
   if (path === '/terms') return <TermsPage />;
   if (path === '/delete-data') return <DeleteDataPage />;
   if (path === '/leaderboard') return <LeaderboardPage />;
+  if (tradeMatch) return <TradeDetailPage tradeId={decodeURIComponent(tradeMatch[1])} />;
+  if (traderMatch) return <TraderProfilePage wallet={decodeURIComponent(traderMatch[1])} />;
 
   return <WhaleFeedPage />;
 }
@@ -623,6 +632,325 @@ function LeaderboardPage() {
   );
 }
 
+function TradeDetailPage({ tradeId }) {
+  const [trade, setTrade] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadTrade() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchJson(`/v1/whales/${encodeURIComponent(tradeId)}`, {
+          signal: controller.signal,
+        });
+        setTrade(data);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+
+        const fallback = readCachedTrade(tradeId) ?? (await findRecentTradeById(tradeId, controller.signal));
+        if (fallback) {
+          setTrade(fallback);
+          setError('');
+        } else {
+          setError(err.message || 'Failed to load trade.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadTrade();
+    return () => controller.abort();
+  }, [tradeId, refreshNonce]);
+
+  const traderHref = trade?.trader?.proxyWallet
+    ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
+    : null;
+
+  return (
+    <div className="feed-shell detail-shell">
+      <FeedSidebar activePage="detail" liveState="live" />
+
+      <main className="feed-main detail-main">
+        <DetailBackBar href="/" label="Back to feed" />
+
+        {loading ? (
+          <DetailSkeleton title="Loading trade" />
+        ) : error || !trade ? (
+          <EmptyState
+            title="Trade unavailable"
+            body={error || 'This trade could not be found.'}
+            actionLabel="Try again"
+            onAction={() => setRefreshNonce((value) => value + 1)}
+          />
+        ) : (
+          <>
+            <header className="detail-hero trade-hero">
+              <div className="feed-breadcrumb">
+                <Activity size={14} aria-hidden="true" />
+                Trade - {relativeTime(trade.timestamp)} ago
+              </div>
+              <div className="detail-title-row">
+                <div>
+                  <h1>
+                    {formatUsdFull(trade.usdSize)} <em>{trade.side}</em>
+                  </h1>
+                  <p>{trade.market?.title || 'Unknown market'}</p>
+                </div>
+                <span className={`detail-side-badge ${trade.side === 'SELL' ? 'sell' : ''}`}>
+                  {trade.outcome || 'Outcome'} @ {formatPrice(trade)}
+                </span>
+              </div>
+            </header>
+
+            <section className="stats-strip detail-stats">
+              <StatBlock label="USD Size" value={formatUsdCompact(trade.usdSize)} />
+              <StatBlock label="Price" value={formatPrice(trade)} />
+              <StatBlock label="Shares" value={formatShares(trade.shares)} />
+              <StatBlock label="Side" value={trade.side} tone={trade.side === 'SELL' ? 'down' : 'up'} />
+            </section>
+
+            <section className="detail-grid">
+              <div className="detail-panel primary-detail-panel">
+                <div className="panel-heading">
+                  <Hash size={16} aria-hidden="true" />
+                  <span>Trade Details</span>
+                </div>
+                <DetailRows
+                  rows={[
+                    ['Trade ID', trade.id],
+                    ['Transaction', trade.transactionHash || 'Unknown'],
+                    ['Timestamp', formatDateTimeSeconds(trade.timestamp)],
+                    ['Tier', trade.tier || 'whale'],
+                    ['Polymarket URL', trade.polymarketUrl || trade.market?.polymarketUrl || 'Unavailable'],
+                  ]}
+                />
+              </div>
+
+              <div className="detail-panel">
+                <div className="panel-heading">
+                  <Layers size={16} aria-hidden="true" />
+                  <span>Market</span>
+                </div>
+                <div className="market-detail-card">
+                  <MarketIcon trade={trade} category={inferCategory(trade)} />
+                  <div>
+                    <strong>{trade.market?.title || 'Unknown market'}</strong>
+                    <span>{inferCategory(trade).label} - {trade.outcome || 'Outcome'}</span>
+                  </div>
+                </div>
+                <div className="detail-action-row">
+                  <a
+                    className="secondary-link-button"
+                    href={trade.polymarketUrl || trade.market?.polymarketUrl || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open market
+                    <ExternalLink size={16} aria-hidden="true" />
+                  </a>
+                </div>
+              </div>
+
+              <div className="detail-panel trader-detail-panel">
+                <div className="panel-heading">
+                  <Wallet size={16} aria-hidden="true" />
+                  <span>Trader</span>
+                </div>
+                <div className="trader-profile-strip">
+                  <TraderAvatar trade={trade} />
+                  <div>
+                    <strong>{getTraderName(trade)}</strong>
+                    <span>{shortWallet(trade.trader?.proxyWallet) || 'Public wallet'}</span>
+                  </div>
+                </div>
+                {traderHref ? (
+                  <div className="detail-action-row">
+                    <a className="primary-link-button" href={traderHref}>
+                      View trader profile
+                      <ArrowRightIcon />
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          </>
+        )}
+      </main>
+
+      <DetailRail
+        title="Trade Context"
+        items={[
+          ['Read-only', 'Polywatch never executes trades or handles funds.'],
+          ['Intent', 'This view uses the backend classified whale trade feed.'],
+          ['Next step', trade?.trader?.proxyWallet ? 'Open the trader profile for wallet context.' : 'Trader context is unavailable for this trade.'],
+        ]}
+      />
+    </div>
+  );
+}
+
+function TraderProfilePage({ wallet }) {
+  const normalizedWallet = wallet.toLowerCase();
+  const [profile, setProfile] = useState(null);
+  const [windowId, setWindowId] = useState('7d');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadTrader() {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchJson(`/v1/traders/${encodeURIComponent(normalizedWallet)}`, {
+          signal: controller.signal,
+        });
+        setProfile(data);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to load trader profile.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadTrader();
+    return () => controller.abort();
+  }, [normalizedWallet, refreshNonce]);
+
+  const stats = profile ? getProfileStats(profile, windowId) : emptyProfileStats();
+  const volumeMix = buildVolumeMix(stats);
+
+  return (
+    <div className="feed-shell detail-shell">
+      <FeedSidebar activePage="detail" liveState="live" />
+
+      <main className="feed-main detail-main trader-profile-main">
+        <DetailBackBar href="/leaderboard" label="Back to leaderboard" />
+
+        {loading ? (
+          <DetailSkeleton title="Loading trader" />
+        ) : error || !profile ? (
+          <EmptyState
+            title="Trader unavailable"
+            body={error || 'This trader could not be found.'}
+            actionLabel="Try again"
+            onAction={() => setRefreshNonce((value) => value + 1)}
+          />
+        ) : (
+          <>
+            <header className="detail-hero trader-hero">
+              <div className="feed-breadcrumb">
+                <Wallet size={14} aria-hidden="true" />
+                Trader profile - public wallet
+              </div>
+              <div className="trader-hero-row">
+                <ProfileAvatar profile={profile} />
+                <div>
+                  <h1>{traderProfileName(profile)}</h1>
+                  <p>{profile.shortAddress || shortWallet(profile.proxyWallet)}</p>
+                </div>
+                {profile.rankBadge ? (
+                  <span className="rank-badge">
+                    #{profile.rankBadge.rank} - {String(profile.rankBadge.window).toUpperCase()}
+                  </span>
+                ) : null}
+              </div>
+            </header>
+
+            <section className="filter-row profile-window-row" aria-label="Trader stat window">
+              <div className="pill-group">
+                {leaderboardWindows.map((option) => (
+                  <button
+                    className={`filter-pill ${windowId === option.id ? 'active' : ''}`}
+                    key={option.id}
+                    type="button"
+                    onClick={() => setWindowId(option.id)}
+                    title={option.caption}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="stats-strip detail-stats">
+              <StatBlock label="Whale Volume" value={formatUsdCompact(stats.volume)} />
+              <StatBlock label="Whale Trades" value={formatNumber(stats.whaleCount)} />
+              <StatBlock label="Buy Volume" value={formatUsdCompact(stats.buyVolume)} />
+              <StatBlock label="Sell Volume" value={formatUsdCompact(stats.sellVolume)} tone="down" />
+            </section>
+
+            <section className="trader-profile-grid">
+              <div className="detail-panel trader-chart-panel">
+                <div className="panel-heading">
+                  <BarChart3 size={16} aria-hidden="true" />
+                  <span>Daily Whale Volume</span>
+                </div>
+                <DailyVolumeChart points={profile.dailyVolume || []} />
+              </div>
+
+              <div className="detail-panel volume-mix-panel">
+                <div className="panel-heading">
+                  <Target size={16} aria-hidden="true" />
+                  <span>Volume Mix</span>
+                </div>
+                <VolumeMixBar mix={volumeMix} />
+                <DetailRows
+                  rows={[
+                    ['Buy volume', formatUsdFull(stats.buyVolume)],
+                    ['Sell volume', formatUsdFull(stats.sellVolume)],
+                    ['Total trades', formatNumber(stats.tradeCount)],
+                    ['First seen', formatDateTimeSeconds(profile.firstSeen)],
+                  ]}
+                />
+              </div>
+            </section>
+
+            <section className="recent-section">
+              <div className="section-title-row">
+                <div>
+                  <h2>Recent whale trades</h2>
+                  <p>Latest feed-visible trades from this wallet.</p>
+                </div>
+              </div>
+              {profile.recentWhales?.length ? (
+                <div className="feed-list">
+                  {profile.recentWhales.map((trade, index) => (
+                    <TradeRow trade={trade} key={trade.id} index={index} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No recent whale trades"
+                  body="This wallet has no visible recent whale trades in the current API response."
+                  actionLabel="Refresh"
+                  onAction={() => setRefreshNonce((value) => value + 1)}
+                />
+              )}
+            </section>
+          </>
+        )}
+      </main>
+
+      <TraderProfileRail profile={profile} stats={stats} />
+    </div>
+  );
+}
+
 function FeedSidebar({ activePage, liveState }) {
   const navItems = [
     {
@@ -715,10 +1043,24 @@ function TradeRow({ trade, index }) {
   const traderName = getTraderName(trade);
   const marketTitle = trade.market?.title || 'Unknown market';
   const polymarketUrl = trade.polymarketUrl || trade.market?.polymarketUrl || '#';
+  const traderHref = trade.trader?.proxyWallet
+    ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
+    : null;
+  const tradeHref = `/trade/${encodeURIComponent(trade.id)}`;
+  const openTrade = () => {
+    cacheTrade(trade);
+    window.location.href = tradeHref;
+  };
 
   return (
     <motion.article
       className={`trade-row ${isMega ? 'mega' : ''} ${isSell ? 'sell' : ''}`}
+      role="link"
+      tabIndex={0}
+      onClick={openTrade}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') openTrade();
+      }}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: Math.min(index * 0.025, 0.18) }}
@@ -747,13 +1089,17 @@ function TradeRow({ trade, index }) {
         value={formatPrice(trade)}
       />
 
-      <div className="trader-cell">
+      <a
+        className={`trader-cell ${traderHref ? '' : 'disabled'}`}
+        href={traderHref || tradeHref}
+        onClick={(event) => event.stopPropagation()}
+      >
         <TraderAvatar trade={trade} />
         <div>
           <strong title={trade.trader?.proxyWallet}>{traderName}</strong>
           <span>{formatTraderMeta(trade)}</span>
         </div>
-      </div>
+      </a>
 
       <div className="row-actions">
         <button
@@ -761,6 +1107,7 @@ function TradeRow({ trade, index }) {
           type="button"
           title="Following arrives with account support"
           aria-label="Following arrives with account support"
+          onClick={(event) => event.stopPropagation()}
         >
           <UserPlus size={15} aria-hidden="true" />
         </button>
@@ -771,6 +1118,7 @@ function TradeRow({ trade, index }) {
           rel="noreferrer"
           title="Open on Polymarket"
           aria-label="Open on Polymarket"
+          onClick={(event) => event.stopPropagation()}
         >
           <ExternalLink size={15} aria-hidden="true" />
         </a>
@@ -892,10 +1240,20 @@ function TopWhale({ trader }) {
 function LeaderboardRow({ trader, index, maxVolume }) {
   const name = leaderboardTraderName(trader);
   const volumeShare = maxVolume ? Math.max(4, Math.min(100, (trader.volume / maxVolume) * 100)) : 0;
+  const traderHref = `/trader/${encodeURIComponent(trader.proxyWallet)}`;
+  const openTrader = () => {
+    window.location.href = traderHref;
+  };
 
   return (
     <motion.article
       className="leaderboard-row"
+      role="link"
+      tabIndex={0}
+      onClick={openTrader}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') openTrader();
+      }}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, delay: Math.min(index * 0.02, 0.18) }}
@@ -1007,6 +1365,156 @@ function LeaderboardSkeleton() {
       ))}
     </div>
   );
+}
+
+function DetailBackBar({ href, label }) {
+  return (
+    <div className="detail-backbar">
+      <a href={href}>
+        <ArrowLeft size={16} aria-hidden="true" />
+        {label}
+      </a>
+    </div>
+  );
+}
+
+function DetailSkeleton({ title }) {
+  return (
+    <div className="detail-skeleton">
+      <div className="feed-breadcrumb">{title}</div>
+      <div className="detail-skeleton-title" />
+      <div className="stats-strip detail-stats">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div className="stat-block skeleton-stat" key={index}>
+            <span />
+            <strong />
+            <small />
+          </div>
+        ))}
+      </div>
+      <div className="detail-grid">
+        <div className="detail-panel skeleton-panel" />
+        <div className="detail-panel skeleton-panel" />
+        <div className="detail-panel skeleton-panel" />
+      </div>
+    </div>
+  );
+}
+
+function DetailRows({ rows }) {
+  return (
+    <div className="detail-rows">
+      {rows.map(([label, value]) => (
+        <div className="detail-row" key={label}>
+          <span>{label}</span>
+          <strong title={String(value)}>{value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DetailRail({ title, items }) {
+  return (
+    <aside className="feed-rail detail-rail">
+      <section className="rail-section method-section">
+        <h2>
+          {title} <span>web</span>
+        </h2>
+        <div className="method-list">
+          {items.map(([label, value]) => (
+            <div key={label}>
+              <strong>{label}</strong>
+              <span>{value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function TraderProfileRail({ profile, stats }) {
+  const rankText = profile?.rankBadge
+    ? `#${profile.rankBadge.rank} in ${String(profile.rankBadge.window).toUpperCase()}`
+    : 'No top-100 badge yet';
+
+  return (
+    <aside className="feed-rail detail-rail">
+      <section className="rail-section method-section">
+        <h2>
+          Wallet <span>context</span>
+        </h2>
+        <div className="method-list">
+          <div>
+            <strong>Rank badge</strong>
+            <span>{rankText}</span>
+          </div>
+          <div>
+            <strong>Loaded window</strong>
+            <span>{formatUsdCompact(stats.volume)} whale volume.</span>
+          </div>
+          <div>
+            <strong>Address</strong>
+            <span>{profile?.proxyWallet || 'Waiting for profile'}</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function ProfileAvatar({ profile }) {
+  if (profile.profileImage) {
+    return <img className="profile-avatar" src={profile.profileImage} alt="" />;
+  }
+
+  return (
+    <div
+      className="profile-avatar fallback"
+      style={{ background: avatarGradient(profile.proxyWallet) }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function DailyVolumeChart({ points }) {
+  const normalized = normalizeDailyVolume(points);
+  const line = pointsToPath(normalized, false);
+  const area = pointsToPath(normalized, true);
+  const total = points.reduce((sum, point) => sum + Number(point.volume || 0), 0);
+
+  return (
+    <div className="daily-volume-chart">
+      <div className="chart-summary">
+        <strong>{formatUsdCompact(total)}</strong>
+        <span>{points.length || 0} daily rows</span>
+      </div>
+      <svg viewBox="0 0 280 62" role="img" aria-label="Daily whale volume chart">
+        <path d={area} fill="rgba(94, 231, 173, 0.18)" />
+        <path d={line} fill="none" stroke="#5ee7ad" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+function VolumeMixBar({ mix }) {
+  return (
+    <div className="volume-mix">
+      <div className="volume-mix-track" aria-hidden="true">
+        <span className="buy" style={{ width: `${mix.buyPct}%` }} />
+        <span className="sell" style={{ width: `${mix.sellPct}%` }} />
+      </div>
+      <div className="volume-mix-labels">
+        <span>Buy {trimNumber(mix.buyPct)}%</span>
+        <span>Sell {trimNumber(mix.sellPct)}%</span>
+      </div>
+    </div>
+  );
+}
+
+function ArrowRightIcon() {
+  return <ArrowRight size={16} aria-hidden="true" />;
 }
 
 function MiniVolumeChart({ points }) {
@@ -1328,10 +1836,42 @@ async function fetchJson(path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`API returned ${response.status}`);
+    const error = new Error(`API returned ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
+}
+
+async function findRecentTradeById(tradeId, signal) {
+  try {
+    const data = await fetchJson('/v1/whales?limit=100&minUsd=10000', { signal });
+    const found = Array.isArray(data.items)
+      ? data.items.find((item) => item.id === tradeId)
+      : null;
+    if (found) cacheTrade(found);
+    return found || null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheTrade(trade) {
+  try {
+    window.sessionStorage.setItem(`polywatch:trade:${trade.id}`, JSON.stringify(trade));
+  } catch {
+    // Storage can be unavailable in private contexts; the API fallback still works.
+  }
+}
+
+function readCachedTrade(tradeId) {
+  try {
+    const raw = window.sessionStorage.getItem(`polywatch:trade:${tradeId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 function buildWhalesPath(filter, cursor = null) {
@@ -1476,6 +2016,53 @@ function buildLeaderboardStats(items) {
   };
 }
 
+function emptyProfileStats() {
+  return {
+    volume: 0,
+    tradeCount: 0,
+    whaleCount: 0,
+    buyVolume: 0,
+    sellVolume: 0,
+  };
+}
+
+function getProfileStats(profile, windowId) {
+  return profile?.stats?.[windowId] || emptyProfileStats();
+}
+
+function buildVolumeMix(stats) {
+  const buy = Number(stats.buyVolume || 0);
+  const sell = Number(stats.sellVolume || 0);
+  const total = buy + sell;
+
+  if (!total) {
+    return { buyPct: 50, sellPct: 50 };
+  }
+
+  return {
+    buyPct: (buy / total) * 100,
+    sellPct: (sell / total) * 100,
+  };
+}
+
+function normalizeDailyVolume(points) {
+  const bucketCount = Math.max(points.length, 2);
+  const max = Math.max(...points.map((point) => Number(point.volume || 0)), 1);
+
+  if (!points.length) {
+    return [
+      [0, 54],
+      [280, 54],
+    ];
+  }
+
+  return points.map((point, index) => {
+    const x = (index / (bucketCount - 1)) * 280;
+    const y = 54 - (Number(point.volume || 0) / max) * 46;
+    return [Number(x.toFixed(2)), Number(y.toFixed(2))];
+  });
+}
+
 function buildLastHour(items, nowMs) {
   const nowSeconds = Math.floor(nowMs / 1000);
   const bucketCount = 14;
@@ -1545,6 +2132,10 @@ function leaderboardTraderName(trader) {
   return trader.displayName || trader.pseudonym || shortWallet(trader.proxyWallet) || 'Unknown trader';
 }
 
+function traderProfileName(profile) {
+  return profile.displayName || profile.pseudonym || profile.shortAddress || shortWallet(profile.proxyWallet) || 'Unknown trader';
+}
+
 function formatTraderMeta(trade) {
   const vol30d = trade.trader?.vol30d;
   const tradeCount = trade.trader?.tradeCount;
@@ -1571,6 +2162,13 @@ function formatUsdCompact(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat('en-US').format(Number(value || 0));
+}
+
+function formatShares(value) {
+  return new Intl.NumberFormat('en-US', {
+    notation: Number(value || 0) >= 100000 ? 'compact' : 'standard',
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 }
 
 function formatPrice(trade) {
@@ -1615,6 +2213,17 @@ function formatSnapshotTime(timestampSeconds) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(Number(timestampSeconds || 0) * 1000));
+}
+
+function formatDateTimeSeconds(timestampSeconds) {
+  if (!timestampSeconds) return 'Unknown';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(Number(timestampSeconds) * 1000));
 }
 
 function shortWallet(wallet) {
