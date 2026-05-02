@@ -61,6 +61,15 @@ img {
   max-width: 100%;
 }
 
+.mobile-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 ::selection {
   background: rgba(94, 231, 173, 0.32);
   color: var(--text);

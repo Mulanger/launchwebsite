@@ -73,7 +73,6 @@ const leaderboardWindows = [
 
 const leaderboardSortOptions = [
   { id: 'rank', label: 'Rank' },
-  { id: 'volume', label: 'Whale volume' },
   { id: 'trades', label: 'Trade count' },
 ];
 
@@ -111,6 +110,9 @@ function App() {
 }
 
 function WhaleFeedPage() {
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 1020px)').matches
+  );
   const [rangeId, setRangeId] = useState('all');
   const [side, setSide] = useState('all');
   const [followingOnly, setFollowingOnly] = useState(() => {
@@ -146,6 +148,14 @@ function WhaleFeedPage() {
   );
 
   const filterKey = useMemo(() => JSON.stringify(apiFilter), [apiFilter]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1020px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 30000);
@@ -309,6 +319,44 @@ function WhaleFeedPage() {
   const lastHour = useMemo(() => buildLastHour(items, clock), [items, clock]);
   const volumeSparkline = useMemo(() => buildFeedStatSparkline(lastHour.points), [lastHour.points]);
   const whaleBars = useMemo(() => buildFeedStatBars(lastHour.points), [lastHour.points]);
+  const mobileTrades = useMemo(
+    () =>
+      visibleItems.map((trade) => ({
+        id: trade.id,
+        side: trade.side === 'SELL' ? 'SELL' : 'BUY',
+        timeAgo: relativeTimeAgo(trade.timestamp),
+        marketIcon: buildMobileMarketIcon(trade),
+        marketName: trade.market?.title || 'Unknown market',
+        marketMeta: `${inferCategory(trade).label} · ${trade.outcome || 'Outcome'}`,
+        size: formatUsdFull(trade.usdSize),
+        price: getPriceValue(trade),
+        trader: {
+          name: getTraderName(trade),
+          address: shortWallet(trade.trader?.proxyWallet),
+          avatarColor: avatarGradient(trade.trader?.proxyWallet || trade.id),
+        },
+        onFollow: async () => {
+          const wallet = trade.trader?.proxyWallet?.toLowerCase();
+          if (!wallet) return;
+          const previous = isWalletFollowedLocally(wallet);
+          const next = !previous;
+          setWalletFollowedLocally(wallet, next);
+          notifyFollowsChanged();
+          try {
+            await setWalletFollowedOnServer(wallet, next);
+          } catch (err) {
+            setWalletFollowedLocally(wallet, previous);
+            notifyFollowsChanged();
+            setError(err.message || 'Follow update failed');
+          }
+        },
+        onOpen: () => {
+          cacheTrade(trade);
+          window.location.href = `/trade/${encodeURIComponent(trade.id)}`;
+        },
+      })),
+    [visibleItems]
+  );
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
@@ -327,6 +375,55 @@ function WhaleFeedPage() {
       setLoadingMore(false);
     }
   }, [apiFilter, cursor, loadingMore]);
+
+  if (isMobileViewport) {
+    return (
+      <MobileFeedScreen
+        liveState={liveState}
+        stats={{
+          volume: formatUsdCompact(stats.volume),
+          sparkline: volumeSparkline,
+          whales: formatNumber(stats.activeTraders),
+          mega: formatNumber(stats.megaTrades),
+          biggest: formatUsdCompact(stats.biggestTradeUsd),
+        }}
+        trades={mobileTrades}
+        activeFilter={followingOnly ? 'following' : rangeId}
+        activeSide={side === 'all' ? 'all' : side.toLowerCase()}
+        sortValue={sort}
+        sortOptions={feedSortOptions}
+        onFilterChange={(filter) => {
+          if (filter === 'following') {
+            const next = !followingOnly;
+            setFollowingOnly(next);
+            updateFollowingQueryParam(next);
+            if (next) setRangeId('all');
+            return;
+          }
+          setRangeId(filter);
+          if (followingOnly) {
+            setFollowingOnly(false);
+            updateFollowingQueryParam(false);
+          }
+        }}
+        onSideChange={(next) => setSide(next === 'all' ? 'all' : next.toUpperCase())}
+        onSortChange={setSort}
+        onRefresh={() => setRefreshNonce((value) => value + 1)}
+        activeTab="feed"
+        onTabChange={(tab) => {
+          if (tab === 'feed') return;
+          if (tab === 'leaders') window.location.href = '/leaderboard';
+          if (tab === 'following') window.location.href = '/profile/following';
+          if (tab === 'alerts') window.location.href = '/alerts';
+        }}
+        loading={loading}
+        error={error}
+        canLoadMore={Boolean(cursor)}
+        loadingMore={loadingMore}
+        onLoadMore={loadMore}
+      />
+    );
+  }
 
   return (
     <div className="feed-shell">
@@ -496,6 +593,9 @@ function WhaleFeedPage() {
 }
 
 function LeaderboardPage() {
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 1020px)').matches
+  );
   const [windowId, setWindowId] = useState('7d');
   const [sort, setSort] = useState('rank');
   const [search, setSearch] = useState('');
@@ -506,6 +606,14 @@ function LeaderboardPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1020px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -549,6 +657,24 @@ function LeaderboardPage() {
   }, [items, search, sort]);
 
   const stats = useMemo(() => buildLeaderboardStats(items), [items]);
+  const mobileRows = useMemo(
+    () =>
+      visibleItems.map((trader, index) => ({
+        key: trader.proxyWallet || `${trader.rank || index}-${trader.displayName || trader.pseudonym || ''}`,
+        rank: Number(trader.rank) || index + 1,
+        name: leaderboardTraderName(trader),
+        wallet: shortWallet(trader.proxyWallet),
+        walletFull: trader.proxyWallet || '',
+        volume: formatUsdCompact(trader.volume),
+        trades: formatNumber(trader.tradeCount),
+        avgTrade: formatUsdCompact(
+          Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0))
+        ),
+        avatarColor: avatarGradient(trader.proxyWallet || `${index}`),
+        href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
+      })),
+    [visibleItems]
+  );
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
@@ -568,8 +694,32 @@ function LeaderboardPage() {
     }
   }, [asOf, cursor, loadingMore, windowId]);
 
+  if (isMobileViewport) {
+    return (
+      <MobileLeaderboardScreen
+        windowId={windowId}
+        sortValue={sort}
+        sortOptions={leaderboardSortOptions}
+        rows={mobileRows}
+        onWindowChange={setWindowId}
+        onSortChange={setSort}
+        loading={loading}
+        error={error}
+        canLoadMore={Boolean(cursor)}
+        loadingMore={loadingMore}
+        onLoadMore={loadMore}
+        onTabChange={(tab) => {
+          if (tab === 'leaders') return;
+          if (tab === 'feed') window.location.href = '/';
+          if (tab === 'following') window.location.href = '/profile/following';
+          if (tab === 'alerts') window.location.href = '/alerts';
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="feed-shell leaderboard-shell">
+    <div className="feed-shell leaderboard-shell no-rail-shell">
       <FeedSidebar activePage="leaderboard" liveState="live" />
 
       <main className="feed-main leaderboard-main">
@@ -596,18 +746,6 @@ function LeaderboardPage() {
             </button>
           </div>
         </header>
-
-        <motion.section
-          className="stats-strip leaderboard-stats"
-          initial="hidden"
-          animate="visible"
-          variants={reveal}
-        >
-          <StatBlock label="Loaded Volume" value={formatUsdCompact(stats.volume)} />
-          <StatBlock label="Ranked Traders" value={formatNumber(stats.traders)} />
-          <StatBlock label="Tracked Trades" value={formatNumber(stats.trades)} />
-          <StatBlock label="Top Wallet" value={formatUsdCompact(stats.topVolume)} />
-        </motion.section>
 
         <section className="filter-row" aria-label="Leaderboard filters">
           <div className="pill-group">
@@ -681,13 +819,314 @@ function LeaderboardPage() {
         </div>
       </main>
 
-      <LeaderboardRail
-        items={items}
-        asOf={asOf}
-        selectedWindow={selectedWindow}
-        stats={stats}
-      />
     </div>
+  );
+}
+
+function MobileLeaderboardScreen({
+  windowId,
+  sortValue,
+  sortOptions,
+  rows,
+  onWindowChange,
+  onSortChange,
+  loading,
+  error,
+  canLoadMore,
+  loadingMore,
+  onLoadMore,
+  onTabChange,
+}) {
+  return (
+    <div style={{ background: '#0a0a0a', minHeight: '100vh', paddingBottom: 92 }}>
+      <div style={{ padding: '6px 14px 0' }}>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22d3a5' }} />
+            <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+              RANKED · POLYMARKET
+            </span>
+          </div>
+          <h1 style={{ fontSize: 26, fontWeight: 500, color: '#fff', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+            Whale <span style={{ color: '#22d3a5' }}>leaderboard</span>
+          </h1>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 999,
+              padding: 2,
+            }}
+          >
+            {leaderboardWindows.map((option) => (
+              (() => {
+                const locked = option.id !== '7d';
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-disabled={locked}
+                    title={locked ? 'Coming soon' : option.caption}
+                    onClick={() => {
+                      if (!locked) onWindowChange(option.id);
+                    }}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 999,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: locked ? 'not-allowed' : 'pointer',
+                      border: 0,
+                      opacity: locked ? 0.72 : 1,
+                      background: windowId === option.id ? '#22d3a5' : 'transparent',
+                      color: windowId === option.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>{option.label}</span>
+                    {locked ? <LockKeyhole size={10} /> : null}
+                  </button>
+                );
+              })()
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
+            <div style={{ marginLeft: 'auto' }}>
+              <MobileSortDropdown
+                value={sortValue}
+                options={sortOptions}
+                onChange={onSortChange}
+                prefix="Sort: "
+              />
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <LeaderboardSkeleton />
+        ) : error && rows.length === 0 ? (
+          <EmptyState title="Leaderboard unavailable" body={error} actionLabel="Try again" onAction={onRefresh} />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title="No ranked traders"
+            body="No rows are available for this window right now."
+            actionLabel="Switch window"
+            onAction={() => onWindowChange('7d')}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rows.map((row) => (
+              <MobileLeaderboardRow key={row.key} row={row} />
+            ))}
+          </div>
+        )}
+
+        {canLoadMore ? (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={onLoadMore}
+              disabled={loadingMore}
+              style={{
+                width: '100%',
+                height: 40,
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.84)',
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: loadingMore ? 'default' : 'pointer',
+              }}
+            >
+              {loadingMore ? 'Loading...' : 'Load more ranked traders'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <MobileBottomNav activeTab="leaders" onTabChange={onTabChange} />
+    </div>
+  );
+}
+
+const mobileLeaderboardRankThemes = {
+  1: {
+    cardBg: 'rgba(255, 200, 60, 0.06)',
+    cardBorder: 'rgba(255, 200, 60, 0.25)',
+    stripeBg: 'linear-gradient(180deg, rgba(255,200,60,0.15), rgba(255,200,60,0.05))',
+    stripeText: '#ffc83c',
+    showCrown: true,
+  },
+  2: {
+    cardBg: 'rgba(200, 200, 208, 0.04)',
+    cardBorder: 'rgba(200, 200, 208, 0.18)',
+    stripeBg: 'linear-gradient(180deg, rgba(200,200,208,0.1), rgba(200,200,208,0.03))',
+    stripeText: '#c8c8d0',
+    showCrown: false,
+  },
+  3: {
+    cardBg: 'rgba(214, 138, 90, 0.05)',
+    cardBorder: 'rgba(214, 138, 90, 0.22)',
+    stripeBg: 'linear-gradient(180deg, rgba(214,138,90,0.12), rgba(214,138,90,0.04))',
+    stripeText: '#d68a5a',
+    showCrown: false,
+  },
+  default: {
+    cardBg: 'rgba(255, 255, 255, 0.025)',
+    cardBorder: 'rgba(255, 255, 255, 0.08)',
+    stripeBg: 'transparent',
+    stripeText: 'rgba(255, 255, 255, 0.4)',
+    showCrown: false,
+  },
+};
+
+function mobileLeaderboardTheme(rank) {
+  return mobileLeaderboardRankThemes[rank] || mobileLeaderboardRankThemes.default;
+}
+
+function MobileLeaderboardRow({ row }) {
+  const [copied, setCopied] = useState(false);
+  const theme = mobileLeaderboardTheme(row.rank);
+
+  const copyWallet = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const wallet = row.walletFull || row.wallet;
+    if (!wallet) return;
+    try {
+      await navigator.clipboard.writeText(wallet);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // ignore clipboard errors on unsupported contexts
+    }
+  };
+
+  const content = (
+    <div
+      style={{
+        background: theme.cardBg,
+        border: `1px solid ${theme.cardBorder}`,
+        borderRadius: 12,
+        display: 'flex',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          background: theme.stripeBg,
+          width: 36,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+          flexShrink: 0,
+        }}
+      >
+        {theme.showCrown ? (
+          <svg width="16" height="11" viewBox="0 0 22 14" fill="none" aria-hidden="true">
+            <path d="M2 12 L4 4 L8 8 L11 2 L14 8 L18 4 L20 12 Z" fill={theme.stripeText} strokeLinejoin="round" />
+            <rect x="2" y="11" width="18" height="2" fill={theme.stripeText} />
+          </svg>
+        ) : null}
+        <div style={{ color: theme.stripeText, fontWeight: 500, fontSize: theme.showCrown ? 13 : 16 }}>{row.rank}</div>
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: row.avatarColor, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#fff',
+                lineHeight: 1.15,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {row.name}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: 2,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9.5,
+                  color: 'rgba(255,255,255,0.4)',
+                  fontFamily: '"SFMono-Regular", Consolas, monospace',
+                  lineHeight: 1.2,
+                  wordBreak: 'break-all',
+                }}
+                title={row.walletFull || row.wallet}
+              >
+                {row.walletFull || row.wallet}
+              </div>
+              <button
+                type="button"
+                onClick={copyWallet}
+                title={copied ? 'Copied' : 'Copy wallet'}
+                aria-label={copied ? 'Wallet copied' : 'Copy wallet'}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 5,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.04)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: copied ? '#22d3a5' : 'rgba(255,255,255,0.58)',
+                  flexShrink: 0,
+                }}
+              >
+                <Copy size={9} />
+              </button>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontSize: 15, color: '#22d3a5', fontWeight: 600, lineHeight: 1 }}>{row.volume}</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>VOLUME</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 10.5 }}>
+          <div>
+            <span style={{ color: 'rgba(255,255,255,0.45)' }}>Trades </span>
+            <span style={{ color: '#fff', fontWeight: 600 }}>{row.trades}</span>
+          </div>
+          <div style={{ marginLeft: 'auto' }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)' }}>Avg </span>
+            <span style={{ color: '#22d3a5', fontWeight: 600 }}>{row.avgTrade}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+
+  if (!row.href) return content;
+  return (
+    <a href={row.href} style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
+      {content}
+    </a>
   );
 }
 
@@ -1172,43 +1611,11 @@ function FollowingPage() {
   const totalVolume = items.reduce((total, item) => total + Number(item.vol7d || 0), 0);
 
   return (
-    <div className="feed-shell detail-shell profile-shell">
+    <div className="feed-shell detail-shell profile-shell no-rail-shell">
       <FeedSidebar activePage="following" liveState="live" />
 
       <main className="feed-main detail-main profile-main">
         <DetailBackBar href="/profile" label="Back to profile" />
-
-        <header className="feed-topbar profile-topbar">
-          <div>
-            <div className="feed-breadcrumb">
-              <Users size={14} aria-hidden="true" />
-              Traders you follow
-            </div>
-            <h1>
-              Following <em>{formatNumber(items.length)}</em>
-            </h1>
-          </div>
-
-          <div className="feed-topbar-actions">
-            <label className="feed-search">
-              <Search size={15} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search followed wallets..."
-              />
-            </label>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={refresh}
-              aria-label="Refresh following list"
-              title="Refresh"
-            >
-              <RefreshCw size={17} aria-hidden="true" />
-            </button>
-          </div>
-        </header>
 
         <section className="stats-strip detail-stats">
           <StatBlock label="Followed Traders" value={formatNumber(items.length)} />
@@ -1254,14 +1661,6 @@ function FollowingPage() {
         </section>
       </main>
 
-      <DetailRail
-        title="Following"
-        items={[
-          ['Feed filter', 'Use the Following chip on the live feed to show only followed wallets.'],
-          ['Identity', "Web follows are tied to this browser until account sign-in exists."],
-          ['Limit', 'The API returns up to 500 followed traders for this account.'],
-        ]}
-      />
     </div>
   );
 }
@@ -1754,6 +2153,617 @@ function FeedStatCard({
   );
 }
 
+function MobileFeedScreen({
+  liveState,
+  stats,
+  trades,
+  activeFilter,
+  activeSide,
+  sortValue,
+  sortOptions,
+  onFilterChange,
+  onSideChange,
+  onSortChange,
+  onRefresh,
+  activeTab,
+  onTabChange,
+  loading,
+  error,
+  canLoadMore,
+  loadingMore,
+  onLoadMore,
+}) {
+  return (
+    <div style={{ background: '#0a0a0a', minHeight: '100vh', paddingBottom: 92 }}>
+      <div style={{ padding: '10px 14px 0' }}>
+        <MobilePageTitle liveState={liveState} />
+        <MobileHeroStats {...stats} />
+        <MobileFilterBar
+          activeFilter={activeFilter}
+          activeSide={activeSide}
+          sortValue={sortValue}
+          sortOptions={sortOptions}
+          onFilterChange={onFilterChange}
+          onSideChange={onSideChange}
+          onSortChange={onSortChange}
+        />
+
+        {loading ? (
+          <FeedSkeleton />
+        ) : error && trades.length === 0 ? (
+          <EmptyState title="Feed unavailable" body={error} actionLabel="Try again" onAction={onRefresh} />
+        ) : trades.length === 0 ? (
+          <EmptyState
+            title="No whales match this view"
+            body="Change filter settings to widen today's New York session."
+            actionLabel="Reset filters"
+            onAction={() => {
+              onFilterChange('all');
+              onSideChange('all');
+            }}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {trades.map((trade) => (
+              <MobileTradeCard key={trade.id} {...trade} />
+            ))}
+          </div>
+        )}
+
+        {canLoadMore ? (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={onLoadMore}
+              disabled={loadingMore}
+              style={{
+                width: '100%',
+                height: 40,
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.84)',
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: loadingMore ? 'default' : 'pointer',
+              }}
+            >
+              {loadingMore ? 'Loading...' : 'Load more whales'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <MobileBottomNav activeTab={activeTab} onTabChange={onTabChange} />
+    </div>
+  );
+}
+
+function MobileTopBar({ onRefresh }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <MobileIconButton onClick={onRefresh}>
+          <RefreshCw size={14} color="rgba(255,255,255,0.65)" />
+        </MobileIconButton>
+        <MobileIconButton onClick={() => (window.location.href = '/privacy')}>
+          <ShieldCheck size={14} color="rgba(255,255,255,0.65)" />
+        </MobileIconButton>
+      </div>
+    </div>
+  );
+}
+
+function MobileIconButton({ children, onClick, size = 34 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 9,
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MobilePageTitle({ liveState }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <span
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: '50%',
+            background: liveState === 'offline' ? '#f48ba0' : '#22d3a5',
+          }}
+        />
+        <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+          LIVE · POLYMARKET
+        </span>
+      </div>
+      <h1 style={{ fontSize: 26, fontWeight: 500, color: '#fff', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+        Whale <span style={{ color: '#22d3a5' }}>trades</span>
+      </h1>
+    </div>
+  );
+}
+
+function MobileHeroStats({
+  volume = '$0',
+  sparkline = [4, 8, 6, 12, 10, 16, 18],
+  whales = 0,
+  mega = 0,
+  biggest = '$0',
+}) {
+  const sparkPath = buildStatSparkPath(sparkline, 80, 28, 2);
+
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(180deg, rgba(34,211,165,0.06) 0%, rgba(34,211,165,0) 100%)',
+        border: '1px solid rgba(34,211,165,0.2)',
+        borderRadius: 12,
+        padding: '12px 14px',
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 4 }}>
+            VOLUME TODAY
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 500, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>
+            {volume}
+          </div>
+        </div>
+        <svg width="70" height="26" viewBox="0 0 80 28" fill="none" aria-hidden="true">
+          <path d={sparkPath} stroke="#22d3a5" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <MobileStatPill label="Whales" value={whales} />
+        <MobileStatPill label="Mega" value={mega} />
+        <MobileStatPill label="Biggest" value={biggest} accent />
+      </div>
+    </div>
+  );
+}
+
+function MobileStatPill({ label, value, accent = false }) {
+  return (
+    <div
+      style={{
+        borderRadius: 999,
+        padding: '4px 10px',
+        fontSize: 11,
+        background: accent ? 'rgba(34,211,165,0.12)' : 'rgba(255,255,255,0.04)',
+        color: accent ? '#22d3a5' : 'rgba(255,255,255,0.75)',
+      }}
+    >
+      <span style={{ marginRight: 6, color: accent ? 'rgba(34,211,165,0.7)' : 'rgba(255,255,255,0.5)' }}>{label}</span>
+      <span style={{ fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+}
+
+const mobileSizeFilters = [
+  { id: 'all', label: 'All' },
+  { id: '50-100', label: '50k-100k' },
+  { id: '100-250', label: '100k-250k' },
+  { id: 'mega', label: '250k+' },
+];
+
+function MobileFilterBar({
+  activeFilter,
+  activeSide,
+  sortValue,
+  sortOptions,
+  onFilterChange,
+  onSideChange,
+  onSortChange,
+}) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div
+        className="mobile-scrollbar-hide"
+        style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, margin: '0 -14px 10px', paddingInline: 14 }}
+      >
+        {mobileSizeFilters.map((filter) => (
+          <MobileSizePill
+            key={filter.id}
+            active={activeFilter === filter.id}
+            onClick={() => onFilterChange(filter.id)}
+          >
+            {filter.label}
+          </MobileSizePill>
+        ))}
+        <button
+          type="button"
+          onClick={() => onFilterChange('following')}
+          style={{
+            flexShrink: 0,
+            padding: '7px 14px',
+            borderRadius: 999,
+            background: activeFilter === 'following' ? 'rgba(34,211,165,0.16)' : 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(34,211,165,0.35)',
+            color: '#22d3a5',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Following
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 999,
+            padding: 2,
+          }}
+        >
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'buy', label: 'Buy' },
+            { id: 'sell', label: 'Sell' },
+          ].map((side) => (
+            <button
+              type="button"
+              key={side.id}
+              onClick={() => onSideChange(side.id)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 999,
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+                border: 0,
+                background: activeSide === side.id ? '#22d3a5' : 'transparent',
+                color: activeSide === side.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
+              }}
+            >
+              {side.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginLeft: 'auto' }}>
+          <MobileSortDropdown value={sortValue} options={sortOptions} onChange={onSortChange} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileSizePill({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flexShrink: 0,
+        padding: '7px 14px',
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        background: active ? '#22d3a5' : 'rgba(255,255,255,0.04)',
+        border: active ? '1px solid transparent' : '1px solid rgba(255,255,255,0.08)',
+        color: active ? '#0a3a2a' : 'rgba(255,255,255,0.7)',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MobileSortDropdown({ value, options, onChange, prefix = '' }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.id === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [open]);
+
+  return (
+    <div style={{ position: 'relative' }} onClick={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen((previous) => !previous)}
+        style={{
+          padding: '7px 12px',
+          borderRadius: 8,
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          color: 'rgba(255,255,255,0.74)',
+          fontSize: 11.5,
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        {prefix}
+        {selected?.label || 'Sort'}
+        <ChevronDown size={10} />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 'calc(100% + 6px)',
+            minWidth: 164,
+            borderRadius: 10,
+            border: '1px solid rgba(255,255,255,0.1)',
+            background: '#111416',
+            boxShadow: '0 14px 28px rgba(0,0,0,0.38)',
+            overflow: 'hidden',
+            zIndex: 40,
+          }}
+        >
+          {options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option.id === value}
+              onClick={() => {
+                onChange(option.id);
+                setOpen(false);
+              }}
+              style={{
+                width: '100%',
+                height: 34,
+                border: 0,
+                background: option.id === value ? 'rgba(34,211,165,0.14)' : 'transparent',
+                color: option.id === value ? '#22d3a5' : 'rgba(255,255,255,0.82)',
+                fontSize: 12,
+                fontWeight: option.id === value ? 600 : 500,
+                cursor: 'pointer',
+                textAlign: 'left',
+                padding: '0 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span>{option.label}</span>
+              {option.id === value ? <Check size={12} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileTradeCard({
+  side = 'BUY',
+  timeAgo,
+  marketIcon,
+  marketName,
+  marketMeta,
+  size,
+  price,
+  trader,
+  onFollow,
+  onOpen,
+}) {
+  const isBuy = side !== 'SELL';
+
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            padding: '3px 7px',
+            borderRadius: 5,
+            letterSpacing: '0.04em',
+            background: isBuy ? 'rgba(34,211,165,0.15)' : 'rgba(244,139,160,0.15)',
+            color: isBuy ? '#22d3a5' : '#f48ba0',
+          }}
+        >
+          {side}
+        </span>
+        <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)' }}>{timeAgo}</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+          <MobileSmallIconButton onClick={onFollow}>
+            <UserPlus size={11} color="rgba(255,255,255,0.55)" />
+          </MobileSmallIconButton>
+          <MobileSmallIconButton onClick={onOpen}>
+            <ExternalLink size={10} color="rgba(255,255,255,0.55)" />
+          </MobileSmallIconButton>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <MobileMarketIcon icon={marketIcon} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: '#fff', fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{marketName}</div>
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={marketMeta}>
+            {marketMeta}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <div>
+          <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.06em', marginBottom: 2 }}>SIZE</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{size}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.06em', marginBottom: 2 }}>PRICE</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>
+            {trimNumber(price)}
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>c</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 22, height: 22, borderRadius: '50%', background: trader.avatarColor }} />
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>{trader.name}</div>
+            <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.4)', fontFamily: '"SFMono-Regular", Consolas, monospace' }}>
+              {trader.address}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileSmallIconButton({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: 26,
+        height: 26,
+        borderRadius: 7,
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MobileMarketIcon({ icon }) {
+  if (!icon) return null;
+  if (icon.type === 'img') {
+    return (
+      <div style={{ width: 32, height: 32, borderRadius: 7, flexShrink: 0, overflow: 'hidden' }}>
+        <img src={icon.value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      </div>
+    );
+  }
+  if (icon.type === 'text') {
+    return (
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 7,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: 11,
+          background: icon.bg || '#444',
+        }}
+      >
+        {icon.value}
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 7,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        fontSize: 16,
+        background: icon.bg || 'rgba(255,255,255,0.06)',
+      }}
+    >
+      {icon.value}
+    </div>
+  );
+}
+
+const mobileNavTabs = [
+  { id: 'feed', label: 'Feed', icon: Activity },
+  { id: 'leaders', label: 'Leaders', icon: BarChart3 },
+  { id: 'following', label: 'Following', icon: Users },
+  { id: 'alerts', label: 'Alerts', icon: Bell },
+];
+
+function MobileBottomNav({ activeTab, onTabChange }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(15,15,15,0.95)',
+        backdropFilter: 'blur(10px)',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        padding: '10px 14px 14px',
+        display: 'flex',
+        justifyContent: 'space-around',
+        zIndex: 25,
+      }}
+    >
+      {mobileNavTabs.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onTabChange(tab.id)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 3,
+              background: 'transparent',
+              border: 0,
+              cursor: 'pointer',
+              padding: '4px 8px',
+            }}
+          >
+            <Icon size={18} color={isActive ? '#22d3a5' : 'rgba(255,255,255,0.5)'} />
+            <span style={{ fontSize: 9.5, color: isActive ? '#22d3a5' : 'rgba(255,255,255,0.5)', fontWeight: isActive ? 600 : 500 }}>
+              {tab.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function TradeRow({ trade, index }) {
   const category = inferCategory(trade);
   const isMega = trade.tier === 'mega' || trade.usdSize >= 250000;
@@ -1801,9 +2811,10 @@ function TradeRow({ trade, index }) {
         </div>
       </div>
 
-      <MetricCell label="Size" value={formatUsdFull(trade.usdSize)} strong={isMega} />
+      <MetricCell label="Size" value={formatUsdFull(trade.usdSize)} strong={isMega} hideLabel />
       <MetricCell
         label={`${trade.outcome || 'Outcome'} @`}
+        labelTitle={`${trade.outcome || 'Outcome'} @`}
         value={formatPrice(trade)}
       />
 
@@ -1837,10 +2848,10 @@ function TradeRow({ trade, index }) {
   );
 }
 
-function MetricCell({ label, value, strong = false }) {
+function MetricCell({ label, value, strong = false, hideLabel = false, labelTitle = '' }) {
   return (
     <div className="metric-cell">
-      <span>{label}</span>
+      {!hideLabel && label ? <span title={labelTitle || label}>{label}</span> : null}
       <strong className={strong ? 'mega-value' : ''}>{value}</strong>
     </div>
   );
@@ -1893,33 +2904,30 @@ function FeedRail({ leaderboard, lastHour }) {
       </div>
 
       <section className="rail-section">
-        <TopWhalesToday traders={leaderboard} timeframe="7D" />
+        <TopWhalesToday traders={leaderboard} timeframe="1D" />
       </section>
     </aside>
   );
 }
 
-const topWhalesPlaceStyles = {
+const PLACE_THEMES = {
   gold: {
-    card: 'top-whales-podium-card gold',
-    avatar: 'top-whales-avatar gold',
-    badge: 'top-whales-badge gold',
-    name: 'top-whales-name-lg',
-    value: 'top-whales-value-lg',
+    color: '#ffc83c',
+    bg: 'rgba(255, 200, 60, 0.10)',
+    border: 'rgba(255, 200, 60, 0.35)',
+    avatarRing: 'rgba(255, 200, 60, 0.5)',
   },
   silver: {
-    card: 'top-whales-podium-card silver',
-    avatar: 'top-whales-avatar',
-    badge: 'top-whales-badge silver',
-    name: 'top-whales-name-sm',
-    value: 'top-whales-value-sm',
+    color: '#c8c8d0',
+    bg: 'rgba(200, 200, 208, 0.06)',
+    border: 'rgba(200, 200, 208, 0.22)',
+    avatarRing: 'rgba(200, 200, 208, 0.35)',
   },
   bronze: {
-    card: 'top-whales-podium-card bronze',
-    avatar: 'top-whales-avatar',
-    badge: 'top-whales-badge bronze',
-    name: 'top-whales-name-sm',
-    value: 'top-whales-value-sm',
+    color: '#d68a5a',
+    bg: 'rgba(214, 138, 90, 0.07)',
+    border: 'rgba(214, 138, 90, 0.28)',
+    avatarRing: 'rgba(214, 138, 90, 0.35)',
   },
 };
 
@@ -1935,14 +2943,51 @@ function TopWhalesToday({ traders, timeframe = '7D' }) {
       key: trader.proxyWallet || `${trader.rank}-${trader.displayName || trader.pseudonym || index}`,
     }))
     .sort((a, b) => a.rank - b.rank)
-    .slice(0, 15);
+    .slice(0, 10);
 
   if (whales.length === 0) {
     return (
-      <div className="top-whales-card">
-        <div className="top-whales-header">
-          <h2>Top whales today</h2>
-          <span>{timeframe}</span>
+      <div
+        style={{
+          background: '#0a0a0a',
+          borderRadius: 16,
+          padding: 20,
+          width: '100%',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 17,
+              fontWeight: 500,
+              color: '#fff',
+              margin: 0,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            Top whales today
+          </h2>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              color: 'rgba(255,255,255,0.5)',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              padding: '3px 8px',
+              borderRadius: 6,
+              fontWeight: 500,
+            }}
+          >
+            {timeframe}
+          </div>
         </div>
         <div className="rail-empty">Leaderboard unavailable</div>
       </div>
@@ -1956,19 +3001,64 @@ function TopWhalesToday({ traders, timeframe = '7D' }) {
   const rest = whales.slice(3);
 
   return (
-    <div className="top-whales-card">
-      <div className="top-whales-header">
-        <h2>Top whales today</h2>
-        <span>{timeframe}</span>
+    <div
+      style={{
+        background: '#0a0a0a',
+        borderRadius: 16,
+        padding: 20,
+        width: '100%',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 20,
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 17,
+            fontWeight: 500,
+            color: '#fff',
+            margin: 0,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          Top whales today
+        </h2>
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.1em',
+            color: 'rgba(255,255,255,0.5)',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            padding: '3px 8px',
+            borderRadius: 6,
+            fontWeight: 500,
+          }}
+        >
+          {timeframe}
+        </div>
       </div>
 
-      <div className="top-whales-podium">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1.1fr 1fr',
+          gap: 8,
+          marginBottom: 14,
+          alignItems: 'end',
+        }}
+      >
         {second ? <TopWhalesPodiumCard whale={second} place="silver" /> : null}
         {first ? <TopWhalesPodiumCard whale={first} place="gold" /> : null}
         {third ? <TopWhalesPodiumCard whale={third} place="bronze" /> : null}
       </div>
 
-      <div className="top-whales-list">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rest.map((whale) => (
           <TopWhalesRankRow key={whale.key} whale={whale} />
         ))}
@@ -1978,39 +3068,127 @@ function TopWhalesToday({ traders, timeframe = '7D' }) {
 }
 
 function TopWhalesPodiumCard({ whale, place }) {
-  const style = topWhalesPlaceStyles[place];
+  const theme = PLACE_THEMES[place];
   const isGold = place === 'gold';
   const content = (
-    <div className={style.card}>
+    <div
+      style={{
+        position: 'relative',
+        background: theme.bg,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 12,
+        padding: isGold ? '16px 6px 10px' : '14px 6px 10px',
+        marginTop: isGold ? 0 : 6,
+        textAlign: 'center',
+        minWidth: 0,
+      }}
+    >
       {isGold ? (
-        <div className="top-whales-crown" aria-hidden="true">
+        <div
+          style={{
+            position: 'absolute',
+            top: -9,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#0a0a0a',
+            padding: '0 4px',
+            lineHeight: 0,
+          }}
+          aria-hidden="true"
+        >
           <svg width="22" height="14" viewBox="0 0 22 14" fill="none">
             <path
               d="M2 12 L4 4 L8 8 L11 2 L14 8 L18 4 L20 12 Z"
-              fill="#ffc83c"
-              stroke="#ffc83c"
+              fill={theme.color}
+              stroke={theme.color}
               strokeWidth="0.5"
               strokeLinejoin="round"
             />
-            <rect x="2" y="11" width="18" height="2" fill="#ffc83c" />
+            <rect x="2" y="11" width="18" height="2" fill={theme.color} />
           </svg>
         </div>
       ) : (
-        <div className={style.badge}>{whale.rank}</div>
+        <div
+          style={{
+            position: 'absolute',
+            top: -8,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#1a1a1a',
+            border: `1px solid ${theme.border}`,
+            color: theme.color,
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 500,
+          }}
+        >
+          {whale.rank}
+        </div>
       )}
 
-      <div className={style.avatar} style={{ background: whale.avatarColor }} aria-hidden="true" />
-      <div className={style.name}>{whale.name}</div>
-      <div className="top-whales-trades">
+      <div
+        style={{
+          width: isGold ? 38 : 32,
+          height: isGold ? 38 : 32,
+          borderRadius: '50%',
+          background: whale.avatarColor,
+          margin: `${isGold ? 6 : 4}px auto 8px`,
+          border: `2px solid ${theme.avatarRing}`,
+        }}
+        aria-hidden="true"
+      />
+
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          color: '#fff',
+          lineHeight: 1.2,
+          marginBottom: 3,
+          minHeight: 26,
+          maxHeight: 26,
+          overflow: 'hidden',
+          wordBreak: 'break-word',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          padding: '0 2px',
+        }}
+        title={whale.name}
+      >
+        {whale.name}
+      </div>
+
+      <div
+        style={{
+          fontSize: 9.5,
+          color: 'rgba(255,255,255,0.4)',
+          marginBottom: 6,
+        }}
+      >
         {formatNumber(whale.trades)} {whale.trades === 1 ? 'trade' : 'trades'}
       </div>
-      <div className={style.value}>{whale.volume}</div>
+
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 500,
+          color: '#22d3a5',
+        }}
+      >
+        {whale.volume}
+      </div>
     </div>
   );
 
   if (!whale.href) return content;
   return (
-    <a href={whale.href} className="top-whales-link">
+    <a href={whale.href} style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
       {content}
     </a>
   );
@@ -2018,22 +3196,79 @@ function TopWhalesPodiumCard({ whale, place }) {
 
 function TopWhalesRankRow({ whale }) {
   const content = (
-    <div className="top-whales-row">
-      <div className="top-whales-row-rank">{whale.rank}</div>
-      <div className="top-whales-row-avatar" style={{ background: whale.avatarColor }} aria-hidden="true" />
-      <div className="top-whales-row-main">
-        <div className="top-whales-row-name">{whale.name}</div>
-        <div className="top-whales-row-trades">
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 12px',
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: 10,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          color: 'rgba(255,255,255,0.4)',
+          fontWeight: 500,
+          width: 16,
+          textAlign: 'center',
+          flexShrink: 0,
+        }}
+      >
+        {whale.rank}
+      </div>
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          background: whale.avatarColor,
+          flexShrink: 0,
+        }}
+        aria-hidden="true"
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 12.5,
+            color: '#fff',
+            fontWeight: 500,
+            lineHeight: 1.2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {whale.name}
+        </div>
+        <div
+          style={{
+            fontSize: 10.5,
+            color: 'rgba(255,255,255,0.4)',
+            marginTop: 2,
+          }}
+        >
           {formatNumber(whale.trades)} {whale.trades === 1 ? 'trade' : 'trades'}
         </div>
       </div>
-      <div className="top-whales-row-volume">{whale.volume}</div>
+      <div
+        style={{
+          fontSize: 12.5,
+          fontWeight: 500,
+          color: '#22d3a5',
+          flexShrink: 0,
+        }}
+      >
+        {whale.volume}
+      </div>
     </div>
   );
 
   if (!whale.href) return content;
   return (
-    <a href={whale.href} className="top-whales-link">
+    <a href={whale.href} style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
       {content}
     </a>
   );
@@ -3314,13 +4549,17 @@ function sortWhales(items, sort) {
 
 function sortLeaderboardItems(items, sort) {
   const sorted = [...items];
-  if (sort === 'volume') {
-    return sorted.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
+  if (sort === 'volume' || sort === 'rank') {
+    return sorted.sort((a, b) => {
+      const volumeDiff = Number(b.volume || 0) - Number(a.volume || 0);
+      if (volumeDiff !== 0) return volumeDiff;
+      return Number(a.rank || 0) - Number(b.rank || 0);
+    });
   }
   if (sort === 'trades') {
     return sorted.sort((a, b) => Number(b.tradeCount || 0) - Number(a.tradeCount || 0));
   }
-  return sorted.sort((a, b) => Number(a.rank || 0) - Number(b.rank || 0));
+  return sorted.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
 }
 
 function searchableText(trade) {
@@ -3536,6 +4775,37 @@ function buildStatSparkPath(points, width, height, padding = 2) {
       return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
+}
+
+function buildMobileMarketIcon(trade) {
+  const imageUrl = getMarketImageUrls(trade)[0];
+  if (imageUrl) {
+    return { type: 'img', value: imageUrl };
+  }
+
+  const outcome = String(trade.outcome || '').trim();
+  if (outcome) {
+    const short = outcome.slice(0, 3).toUpperCase();
+    return {
+      type: 'text',
+      value: short,
+      bg: trade.side === 'SELL' ? '#6b2a3c' : '#1f4a3e',
+    };
+  }
+
+  const category = inferCategory(trade);
+  const categoryTone = {
+    politics: '#4a3d77',
+    sports: '#4f3a21',
+    crypto: '#204153',
+    econ: '#1f4a3e',
+  }[category.id];
+
+  return {
+    type: 'text',
+    value: category.label.slice(0, 3).toUpperCase(),
+    bg: categoryTone || '#3b3b3b',
+  };
 }
 
 function inferCategory(trade) {
