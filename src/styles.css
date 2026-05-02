@@ -1682,10 +1682,61 @@ img {
   min-width: 0;
 }
 
+.trader-identity {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
 .trader-hero h1 {
   max-width: 100%;
   font-size: clamp(42px, 4.5vw, 66px);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-address-line {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(100%, 560px);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.wallet-address-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-address-line button {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.wallet-address-line button:hover {
+  border-color: rgba(94, 231, 173, 0.42);
+  background: rgba(94, 231, 173, 0.08);
+  transform: translateY(-1px);
 }
 
 .profile-actions {
@@ -1711,19 +1762,27 @@ img {
 }
 
 .trader-chart-panel {
-  min-height: 210px;
+  min-height: 254px;
 }
 
 .daily-volume-chart {
-  min-height: 148px;
+  min-height: 178px;
   display: grid;
-  align-content: end;
-  gap: 16px;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
 }
 
 .daily-volume-chart svg {
   width: 100%;
-  height: 92px;
+  height: 132px;
+  overflow: visible;
+}
+
+.chart-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .chart-summary strong,
@@ -1740,6 +1799,41 @@ img {
 .chart-summary span {
   margin-top: 6px;
   color: var(--soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chart-summary .chart-window-label {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(94, 231, 173, 0.28);
+  border-radius: 999px;
+  margin-top: 0;
+  padding: 0 10px;
+  color: var(--accent);
+  background: rgba(94, 231, 173, 0.08);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.daily-volume-chart .chart-grid line {
+  stroke: rgba(255, 255, 255, 0.07);
+  stroke-width: 1;
+}
+
+.daily-volume-chart .chart-baseline {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.4;
+}
+
+.daily-volume-chart .chart-bar {
+  fill: url("#dailyVolumeBarGradient");
+}
+
+.daily-volume-chart .chart-empty-label {
+  fill: var(--soft);
   font-size: 12px;
   font-weight: 800;
 }

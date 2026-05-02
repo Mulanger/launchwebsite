@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Copy,
   DollarSign,
   ExternalLink,
   FileText,
@@ -218,6 +219,8 @@ function WhaleFeedPage() {
     let closed = false;
     let socket;
     let retryTimer;
+    const hydrateController = new AbortController();
+    const hydratingTradeIds = new Set();
 
     if (apiFilter.following) {
       setLiveState('filtered');
@@ -247,9 +250,29 @@ function WhaleFeedPage() {
           if (!passesFilter(whale, apiFilter)) return;
 
           setItems((previous) => {
-            const withoutDuplicate = previous.filter((item) => item.id !== whale.id);
-            return [whale, ...withoutDuplicate].slice(0, 120);
+            const enrichedWhale = enrichWhaleWithExistingMarketMedia(whale, previous);
+            return upsertWhale(previous, enrichedWhale, { promote: true }).slice(0, 120);
           });
+
+          if (!hasMarketImage(whale) && whale.id && !hydratingTradeIds.has(whale.id)) {
+            hydratingTradeIds.add(whale.id);
+            hydrateWhaleTrade(whale.id, hydrateController.signal)
+              .then((hydratedWhale) => {
+                if (closed || !hydratedWhale || !hasMarketImage(hydratedWhale)) return;
+                setItems((previous) => {
+                  const enrichedWhale = enrichWhaleWithExistingMarketMedia(hydratedWhale, previous);
+                  return upsertWhale(previous, enrichedWhale, {
+                    promote: false,
+                    insertIfMissing: false,
+                  });
+                });
+              })
+              .catch(() => {
+                // The next REST refresh/load can still provide market media.
+              })
+              .finally(() => hydratingTradeIds.delete(whale.id));
+          }
+
           setLastUpdatedAt(Date.now());
         } catch {
           // Ignore malformed socket payloads. The REST refresh is the source of truth.
@@ -272,6 +295,7 @@ function WhaleFeedPage() {
     return () => {
       closed = true;
       window.clearTimeout(retryTimer);
+      hydrateController.abort();
       if (socket && socket.readyState <= WebSocket.OPEN) {
         socket.close(1000, 'route changed');
       }
@@ -865,6 +889,7 @@ function TraderProfilePage({ wallet }) {
   const stats = profile ? getProfileStats(profile, windowId) : emptyProfileStats();
   const volumeMix = buildVolumeMix(stats);
   const headingName = profile ? traderProfileName(profile) : '';
+  const profileWallet = profile?.proxyWallet || normalizedWallet;
 
   return (
     <div className="feed-shell detail-shell">
@@ -891,9 +916,9 @@ function TraderProfilePage({ wallet }) {
               </div>
               <div className="trader-hero-row">
                 <ProfileAvatar profile={profile} />
-                <div>
+                <div className="trader-identity">
                   <h1 title={traderProfileFullName(profile)}>{headingName}</h1>
-                  <p>{profile.shortAddress || shortWallet(profile.proxyWallet)}</p>
+                  <WalletAddressLine address={profileWallet} />
                 </div>
                 <div className="profile-actions">
                   {profile.rankBadge ? (
@@ -2073,21 +2098,81 @@ function ProfileAvatar({ profile }) {
   );
 }
 
+function WalletAddressLine({ address }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = async () => {
+    if (!address || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="wallet-address-line">
+      <span title={address}>{address}</span>
+      <button
+        type="button"
+        onClick={copyAddress}
+        aria-label={copied ? 'Wallet address copied' : 'Copy wallet address'}
+        title={copied ? 'Copied' : 'Copy wallet address'}
+      >
+        {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+      </button>
+    </div>
+  );
+}
+
 function DailyVolumeChart({ points }) {
-  const normalized = normalizeDailyVolume(points);
-  const line = pointsToPath(normalized, false);
-  const area = pointsToPath(normalized, true);
-  const total = points.reduce((sum, point) => sum + Number(point.volume || 0), 0);
+  const dailyPoints = Array.isArray(points) ? points : [];
+  const bars = buildDailyVolumeBars(dailyPoints);
+  const total = dailyPoints.reduce((sum, point) => sum + Number(point.volume || 0), 0);
+  const rowLabel = dailyPoints.length === 1 ? '1 tracked day' : `${dailyPoints.length || 0} tracked days`;
 
   return (
     <div className="daily-volume-chart">
       <div className="chart-summary">
-        <strong>{formatUsdCompact(total)}</strong>
-        <span>{points.length || 0} daily rows</span>
+        <div>
+          <strong>{formatUsdCompact(total)}</strong>
+          <span>{rowLabel}</span>
+        </div>
+        <span className="chart-window-label">7D</span>
       </div>
-      <svg viewBox="0 0 280 62" role="img" aria-label="Daily whale volume chart">
-        <path d={area} fill="rgba(94, 231, 173, 0.18)" />
-        <path d={line} fill="none" stroke="#5ee7ad" strokeWidth="2" strokeLinecap="round" />
+      <svg viewBox="0 0 320 128" role="img" aria-label="Daily whale volume chart" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="dailyVolumeBarGradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#5ee7ad" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#5ee7ad" stopOpacity="0.28" />
+          </linearGradient>
+        </defs>
+        <g className="chart-grid" aria-hidden="true">
+          <line x1="20" y1="28" x2="300" y2="28" />
+          <line x1="20" y1="64" x2="300" y2="64" />
+          <line x1="20" y1="100" x2="300" y2="100" />
+        </g>
+        <line className="chart-baseline" x1="20" y1="100" x2="300" y2="100" aria-hidden="true" />
+        {bars.length ? (
+          bars.map((bar) => (
+            <rect
+              className="chart-bar"
+              key={bar.key}
+              x={bar.x}
+              y={bar.y}
+              width={bar.width}
+              height={bar.height}
+              rx="5"
+              fill="url(#dailyVolumeBarGradient)"
+            />
+          ))
+        ) : (
+          <text className="chart-empty-label" x="160" y="68" textAnchor="middle">
+            No daily volume yet
+          </text>
+        )}
       </svg>
     </div>
   );
@@ -2863,6 +2948,17 @@ async function findRecentTradeById(tradeId, signal) {
   }
 }
 
+async function hydrateWhaleTrade(tradeId, signal) {
+  try {
+    const detail = await fetchJson(`/v1/whales/${encodeURIComponent(tradeId)}`, { signal });
+    if (detail?.id) return detail;
+  } catch {
+    // Some deployments only expose the trade through the recent feed endpoint.
+  }
+
+  return findRecentTradeById(tradeId, signal);
+}
+
 function cacheTrade(trade) {
   try {
     window.sessionStorage.setItem(`polywatch:trade:${trade.id}`, JSON.stringify(trade));
@@ -2917,12 +3013,96 @@ function passesFilter(trade, filter) {
 }
 
 function mergeWhales(existing, incoming) {
-  const seen = new Set();
-  return [...existing, ...incoming].filter((item) => {
-    if (!item?.id || seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
+  return incoming.reduce(
+    (items, item) => upsertWhale(items, item, { promote: false }),
+    Array.isArray(existing) ? [...existing] : []
+  );
+}
+
+function upsertWhale(existing, incoming, options = {}) {
+  if (!incoming?.id) return existing;
+
+  const promote = options.promote ?? true;
+  const insertIfMissing = options.insertIfMissing ?? true;
+  const index = existing.findIndex((item) => item.id === incoming.id);
+
+  if (index === -1) {
+    if (!insertIfMissing) return existing;
+    return promote ? [incoming, ...existing] : [...existing, incoming];
+  }
+
+  const merged = mergeWhaleTrade(existing[index], incoming);
+  const withoutExisting = existing.filter((item) => item.id !== incoming.id);
+
+  if (promote) return [merged, ...withoutExisting];
+
+  const next = [...existing];
+  next[index] = merged;
+  return next;
+}
+
+function mergeWhaleTrade(existing = {}, incoming = {}) {
+  const merged = mergeMeaningfulValues(existing, incoming);
+  merged.market = mergeMeaningfulValues(existing.market, incoming.market);
+  merged.trader = mergeMeaningfulValues(existing.trader, incoming.trader);
+  return merged;
+}
+
+function mergeMeaningfulValues(existing = {}, incoming = {}) {
+  const merged = { ...(existing || {}) };
+
+  Object.entries(incoming || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      merged[key] = value;
+    } else if (!(key in merged)) {
+      merged[key] = value;
+    }
   });
+
+  return merged;
+}
+
+function enrichWhaleWithExistingMarketMedia(trade, existingItems) {
+  if (hasMarketImage(trade)) return trade;
+
+  const identityKeys = marketIdentityKeys(trade);
+  if (!identityKeys.length) return trade;
+
+  const matchingTrade = existingItems.find(
+    (item) => hasMarketImage(item) && marketIdentityKeys(item).some((key) => identityKeys.includes(key))
+  );
+
+  if (!matchingTrade?.market) return trade;
+  return mergeWhaleTrade({ market: pickMarketMedia(matchingTrade.market) }, trade);
+}
+
+function pickMarketMedia(market = {}) {
+  return [
+    'icon',
+    'image',
+    'imageUrl',
+    'eventIcon',
+    'eventImage',
+    'thumbnail',
+  ].reduce((media, key) => {
+    if (market?.[key]) media[key] = market[key];
+    return media;
+  }, {});
+}
+
+function marketIdentityKeys(trade) {
+  return [
+    trade?.market?.conditionId,
+    trade?.market?.slug,
+    trade?.market?.eventSlug,
+    trade?.market?.title,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+}
+
+function hasMarketImage(trade) {
+  return getMarketImageUrls(trade).length > 0;
 }
 
 function mergeLeaderboardItems(existing, incoming) {
@@ -3071,6 +3251,31 @@ function normalizeDailyVolume(points) {
   });
 }
 
+function buildDailyVolumeBars(points) {
+  const values = (Array.isArray(points) ? points : []).slice(-7);
+  const max = Math.max(...values.map((point) => Number(point.volume || 0)), 1);
+  const chartLeft = 20;
+  const chartBottom = 100;
+  const plotWidth = 280;
+  const plotHeight = 72;
+  const slotWidth = values.length ? plotWidth / values.length : plotWidth;
+  const barWidth = Math.min(34, Math.max(14, slotWidth * 0.42));
+
+  return values.map((point, index) => {
+    const volume = Number(point.volume || 0);
+    const height = volume > 0 ? Math.max(8, (volume / max) * plotHeight) : 3;
+    const centerX = values.length === 1 ? chartLeft + plotWidth / 2 : chartLeft + slotWidth * index + slotWidth / 2;
+
+    return {
+      key: `${point.date || point.day || index}-${volume}`,
+      x: Number((centerX - barWidth / 2).toFixed(2)),
+      y: Number((chartBottom - height).toFixed(2)),
+      width: Number(barWidth.toFixed(2)),
+      height: Number(height.toFixed(2)),
+    };
+  });
+}
+
 function buildLastHour(items, nowMs) {
   const nowSeconds = Math.floor(nowMs / 1000);
   const bucketCount = 14;
@@ -3129,6 +3334,14 @@ function inferCategory(trade) {
 
 function getMarketImageUrls(trade) {
   return [
+    trade.marketIcon,
+    trade.marketImage,
+    trade.marketImageUrl,
+    trade.icon,
+    trade.image,
+    trade.imageUrl,
+    trade.eventIcon,
+    trade.eventImage,
     trade.market?.icon,
     trade.market?.image,
     trade.market?.imageUrl,
@@ -3156,7 +3369,7 @@ function leaderboardTraderName(trader) {
 function traderProfileName(profile) {
   const raw = traderProfileFullName(profile);
   if (!raw) return 'Unknown trader';
-  if (isWalletLike(raw)) return profile.shortAddress || shortWallet(raw);
+  if (isWalletishLabel(raw)) return shortWalletPrefix(profile.proxyWallet || raw);
   if (raw.length > 34) return `${raw.slice(0, 24)}...${raw.slice(-6)}`;
   return raw;
 }
@@ -3167,6 +3380,10 @@ function traderProfileFullName(profile) {
 
 function isWalletLike(value) {
   return /^0x[0-9a-fA-F]{40}/.test(String(value || ''));
+}
+
+function isWalletishLabel(value) {
+  return /^0x[0-9a-fA-F.]{4,}/.test(String(value || ''));
 }
 
 function formatTraderLabel(name, wallet) {
@@ -3291,6 +3508,13 @@ function shortWallet(wallet) {
   return leadingWallet.length > 12
     ? `${leadingWallet.slice(0, 6)}...${leadingWallet.slice(-4)}`
     : leadingWallet;
+}
+
+function shortWalletPrefix(wallet) {
+  if (!wallet) return '';
+  const raw = String(wallet);
+  const leadingWallet = raw.match(/^0x[0-9a-fA-F]{40}/)?.[0] || raw;
+  return leadingWallet.length > 6 ? `${leadingWallet.slice(0, 6)}..` : leadingWallet;
 }
 
 function truncate(value, length) {
