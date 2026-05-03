@@ -45,6 +45,7 @@ const deviceIdStorageKey = 'polywatch:webDeviceId';
 const followsStorageKey = 'polywatch:followedWallets';
 const followsChangedEvent = 'polywatch:follows-changed';
 const alertPrefsStorageKey = 'polywatch:webAlertPrefs';
+const webAlertsChangedEvent = 'polywatch:web-alerts-changed';
 const walletRegex = /^0x[0-9a-fA-F]{40}$/;
 const firebaseWebConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -104,6 +105,38 @@ function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const tradeMatch = path.match(/^\/trade\/([^/]+)$/);
   const traderMatch = path.match(/^\/trader\/([^/]+)$/);
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe = null;
+
+    const refreshForegroundListener = async () => {
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+
+      try {
+        const nextUnsubscribe = await registerForegroundWebAlertListener();
+        if (disposed) {
+          nextUnsubscribe?.();
+          return;
+        }
+        unsubscribe = nextUnsubscribe;
+      } catch {
+        // Foreground web push is best effort; activation UI reports blocking config/permission issues.
+      }
+    };
+
+    refreshForegroundListener();
+    window.addEventListener(webAlertsChangedEvent, refreshForegroundListener);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener(webAlertsChangedEvent, refreshForegroundListener);
+      unsubscribe?.();
+    };
+  }, []);
 
   if (path === '/privacy') return <PrivacyPage />;
   if (path === '/terms') return <TermsPage />;
@@ -2456,6 +2489,7 @@ function AlertsPage() {
       };
       await saveWebAlertSubscription(nextPrefs, token);
       writeStoredJson(alertPrefsStorageKey, nextPrefs);
+      notifyWebAlertsChanged();
       setPrefs(nextPrefs);
       setSyncedPrefs(nextPrefs);
       setStatus('active');
@@ -2486,6 +2520,7 @@ function AlertsPage() {
       };
       await saveWebAlertSubscription(nextPrefs, prefs.fcmToken);
       writeStoredJson(alertPrefsStorageKey, nextPrefs);
+      notifyWebAlertsChanged();
       setPrefs(nextPrefs);
       setSyncedPrefs(nextPrefs);
       setStatus('active');
@@ -2513,6 +2548,7 @@ function AlertsPage() {
         lastSyncedAt: Date.now(),
       };
       writeStoredJson(alertPrefsStorageKey, nextPrefs);
+      notifyWebAlertsChanged();
       setPrefs(nextPrefs);
       setSyncedPrefs(nextPrefs);
       setStatus(getInitialWebAlertStatus(nextPrefs));
@@ -6022,6 +6058,7 @@ async function getFirebaseMessagingContext() {
     registration,
     getToken: messagingModule.getToken,
     deleteToken: messagingModule.deleteToken,
+    onMessage: messagingModule.onMessage,
   };
 }
 
@@ -6056,6 +6093,39 @@ async function deleteFirebaseWebMessagingToken() {
   }
 }
 
+async function registerForegroundWebAlertListener() {
+  const prefs = readWebAlertPrefs();
+  if (!prefs.enabled || !prefs.fcmToken) return null;
+  if (getNotificationPermission() !== 'granted') return null;
+  const { messaging, onMessage } = await getFirebaseMessagingContext();
+  return onMessage(messaging, (payload) => {
+    showFirebasePayloadNotification(payload).catch(() => {
+      // If the OS/browser suppresses the toast, do not break the app runtime.
+    });
+  });
+}
+
+async function showFirebasePayloadNotification(payload) {
+  if (getNotificationPermission() !== 'granted') {
+    throw new Error('Notification permission is not currently allowed.');
+  }
+  const data = payload?.data || {};
+  const notification = payload?.notification || {};
+  const title = notification.title || 'Polywatch whale alert';
+  const body = notification.body || 'A tracked whale trade matched your alert settings.';
+  const registration = await navigator.serviceWorker.ready;
+  await registration.showNotification(title, {
+    body,
+    icon: '/assets/polywatch-icon.png',
+    badge: '/assets/polywatch-icon.png',
+    tag: data.tradeId ? `polywatch-whale-${data.tradeId}` : data.type === 'test' ? 'polywatch-test-alert' : 'polywatch-whale-alert',
+    data: {
+      ...data,
+      url: data.url || (data.tradeId ? `/trade/${encodeURIComponent(data.tradeId)}` : '/alerts'),
+    },
+  });
+}
+
 async function showLocalBrowserTestAlert(prefs) {
   if (getNotificationPermission() !== 'granted') {
     throw new Error('Notification permission is not currently allowed.');
@@ -6086,6 +6156,10 @@ function readWebAlertPrefs() {
 
 function notifyFollowsChanged() {
   window.dispatchEvent(new CustomEvent(followsChangedEvent));
+}
+
+function notifyWebAlertsChanged() {
+  window.dispatchEvent(new CustomEvent(webAlertsChangedEvent));
 }
 
 function readStoredJson(key) {
