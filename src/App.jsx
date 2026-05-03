@@ -32,6 +32,7 @@ import {
   UserPlus,
   Users,
   Wallet,
+  X,
   Zap,
 } from 'lucide-react';
 
@@ -2585,6 +2586,7 @@ function AlertsPage() {
   const [status, setStatus] = useState(() => getInitialWebAlertStatus());
   const [actionMessage, setActionMessage] = useState('');
   const [isWorking, setIsWorking] = useState(false);
+  const [showWebPushHelp, setShowWebPushHelp] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -2775,6 +2777,10 @@ function AlertsPage() {
   const serviceWorkerStatus = hasWebPushSupport() ? (isActive ? 'Registered' : 'Ready') : 'Unsupported';
   const permissionLabel = getNotificationPermissionLabel();
   const activeLabel = webAlertStatusLabel(status, isActive);
+  const canShowWebPushHelp =
+    status === 'blocked' ||
+    status === 'error' ||
+    /notification permission|check windows|browser notification settings/i.test(actionMessage);
 
   return (
     <div className="feed-shell detail-shell profile-shell no-rail-shell">
@@ -2835,6 +2841,8 @@ function AlertsPage() {
               actionMessage={actionMessage}
               isDenied={isDenied}
               isMissingConfig={isMissingConfig}
+              showHelp={canShowWebPushHelp}
+              onNeedHelp={() => setShowWebPushHelp(true)}
               onTurnOff={turnOffAlerts}
               disabled={!isActive || isWorking}
             />
@@ -2854,6 +2862,8 @@ function AlertsPage() {
           </section>
         </section>
       </main>
+
+      {showWebPushHelp ? <AlertsNotificationHelpModal onClose={() => setShowWebPushHelp(false)} /> : null}
     </div>
   );
 }
@@ -2992,6 +3002,8 @@ function WebPushStatusCard({
   actionMessage,
   isDenied,
   isMissingConfig,
+  showHelp,
+  onNeedHelp,
   onTurnOff,
   disabled,
 }) {
@@ -3045,10 +3057,70 @@ function WebPushStatusCard({
         </p>
       ) : null}
 
+      {showHelp ? (
+        <button className="alerts-help-button" type="button" onClick={onNeedHelp}>
+          Need help?
+        </button>
+      ) : null}
+
       <button className="alerts-danger-button" type="button" onClick={onTurnOff} disabled={disabled}>
         Turn off web alerts
       </button>
     </section>
+  );
+}
+
+function AlertsNotificationHelpModal({ onClose }) {
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const stopPropagation = (event) => event.stopPropagation();
+
+  return (
+    <div className="alerts-help-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="alerts-help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="alerts-help-title"
+        onMouseDown={stopPropagation}
+      >
+        <header className="alerts-help-modal-head">
+          <div>
+            <span>Notification help</span>
+            <h2 id="alerts-help-title">Turn alerts back on</h2>
+            <p>Check both browser site permissions and Windows notification settings, then try activating alerts again.</p>
+          </div>
+          <button type="button" aria-label="Close notification help" onClick={onClose}>
+            <X size={16} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="alerts-help-modal-grid">
+          <article className="alerts-help-card">
+            <div>
+              <strong>1. Allow notifications for Polywatch</strong>
+              <small>Open site information in the browser address bar and toggle notifications on.</small>
+            </div>
+            <img src="/assets/activate-web-notifications.png" alt="Browser site settings showing notifications enabled" />
+          </article>
+
+          <article className="alerts-help-card">
+            <div>
+              <strong>2. Enable Windows notifications</strong>
+              <small>Open Windows notification settings and make sure system notifications are on.</small>
+            </div>
+            <img src="/assets/activate-windows-notifications.png" alt="Windows notifications settings showing notifications enabled" />
+          </article>
+        </div>
+      </section>
+    </div>
   );
 }
 
