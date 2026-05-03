@@ -2510,7 +2510,6 @@ img {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 16px;
 }
 
 .trade-outcome-card {
@@ -2520,9 +2519,14 @@ img {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.trade-outcome-card.accent {
+.trade-outcome-card.yes {
   border-color: rgba(34, 211, 165, 0.25);
   background: rgba(34, 211, 165, 0.08);
+}
+
+.trade-outcome-card.no {
+  border-color: rgba(244, 139, 160, 0.24);
+  background: rgba(244, 139, 160, 0.075);
 }
 
 .trade-outcome-card > span {
@@ -2534,10 +2538,15 @@ img {
   letter-spacing: 0.08em;
 }
 
-.trade-outcome-card.accent > span,
-.trade-outcome-card.accent strong,
+.trade-outcome-card.yes > span,
+.trade-outcome-card.yes strong,
 .trade-outcome-card small.up {
   color: var(--accent);
+}
+
+.trade-outcome-card.no > span,
+.trade-outcome-card.no strong {
+  color: #f48ba0;
 }
 
 .trade-outcome-card div {
@@ -2559,55 +2568,6 @@ img {
 
 .trade-outcome-card small.down {
   color: rgba(244, 139, 160, 0.88);
-}
-
-.trade-price-chart {
-  min-width: 0;
-}
-
-.trade-chart-topline,
-.trade-chart-axis {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.trade-chart-topline {
-  margin-bottom: 9px;
-}
-
-.trade-chart-topline > span {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 11.5px;
-}
-
-.trade-chart-topline div {
-  display: flex;
-  gap: 5px;
-}
-
-.trade-chart-topline button {
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.62);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.trade-chart-topline button.active {
-  border-color: transparent;
-  color: #0a3a2a;
-  background: var(--accent);
-}
-
-.trade-chart-axis {
-  margin-top: 4px;
-  color: rgba(255, 255, 255, 0.38);
-  font-size: 10px;
 }
 
 .related-trades-list,
@@ -6297,7 +6257,6 @@ img {
   .trade-outcome-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
-    margin-bottom: 14px;
   }
 
   .trade-outcome-card {
@@ -6315,27 +6274,6 @@ img {
 
   .trade-outcome-card small {
     font-size: 10px;
-  }
-
-  .trade-chart-topline {
-    align-items: center;
-    flex-direction: row;
-    margin-bottom: 8px;
-  }
-
-  .trade-chart-topline > span {
-    font-size: 10.5px;
-  }
-
-  .trade-chart-topline button {
-    min-height: 20px;
-    padding: 0 7px;
-    border-radius: 5px;
-    font-size: 9.5px;
-  }
-
-  .trade-price-chart svg {
-    height: 70px;
   }
 
   .trade-market-identity {

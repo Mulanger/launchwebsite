@@ -1636,85 +1636,30 @@ function TradeMarketDetailCard({ trade, market }) {
           label="YES"
           price={yesPrice}
           change={priceHistory.yesChange24hCents}
-          accent={String(trade.outcome || '').toUpperCase() === 'YES'}
+          tone="yes"
         />
         <OutcomeDetailCard
           label="NO"
           price={noPrice}
           change={priceHistory.noChange24hCents}
-          accent={String(trade.outcome || '').toUpperCase() === 'NO'}
+          tone="no"
         />
       </div>
-
-      <TradePriceChart history={priceHistory} />
     </section>
   );
 }
 
-function OutcomeDetailCard({ label, price, change, accent = false }) {
+function OutcomeDetailCard({ label, price, change, tone }) {
   const numericChange = Number(change);
   const hasChange = Number.isFinite(numericChange);
   return (
-    <div className={`trade-outcome-card ${accent ? 'accent' : ''}`}>
+    <div className={`trade-outcome-card ${tone || ''}`}>
       <span>{label}</span>
       <div>
         <strong>{trimNumber(Number(price || 0))}c</strong>
         <small className={hasChange && numericChange < 0 ? 'down' : 'up'}>
           {hasChange ? `${numericChange >= 0 ? '+' : ''}${trimNumber(numericChange)}c` : 'Live'}
         </small>
-      </div>
-    </div>
-  );
-}
-
-function TradePriceChart({ history }) {
-  const rawPoints = Array.isArray(history?.points) ? history.points : [];
-  const points = rawPoints.length
-    ? rawPoints.map((point) => Number(point.price ?? point)).filter((point) => Number.isFinite(point))
-    : [0, 1];
-  const width = 600;
-  const height = 82;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const stepX = points.length > 1 ? width / (points.length - 1) : width;
-  const linePath = points
-    .map((point, index) => {
-      const x = index * stepX;
-      const y = height - ((point - min) / range) * (height - 10) - 5;
-      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
-  const fillPath = `${linePath} L${width} ${height} L0 ${height} Z`;
-  const tradeIndex = Math.min(points.length - 1, Math.max(0, Number(history?.tradeIndex || 0)));
-  const markerX = tradeIndex * stepX;
-  const markerY = height - ((points[tradeIndex] - min) / range) * (height - 10) - 5;
-
-  return (
-    <div className="trade-price-chart">
-      <div className="trade-chart-topline">
-        <span>Execution price - same-market trades</span>
-        <div>
-          <button type="button" className="active">24H</button>
-          <button type="button">7D</button>
-          <button type="button">All</button>
-        </div>
-      </div>
-      <svg width="100%" height="82" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="trade-detail-chart-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22d3a5" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#22d3a5" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={fillPath} fill="url(#trade-detail-chart-fill)" />
-        <path d={linePath} stroke="#22d3a5" strokeWidth="1.6" fill="none" />
-        <line x1={markerX} y1="0" x2={markerX} y2={height} stroke="rgba(255,255,255,0.22)" strokeDasharray="3 3" />
-        <circle cx={markerX} cy={markerY} r="3.8" fill="#22d3a5" stroke="#0a0a0a" strokeWidth="1.6" />
-      </svg>
-      <div className="trade-chart-axis">
-        <span>24h ago</span>
-        <span>now</span>
       </div>
     </div>
   );
