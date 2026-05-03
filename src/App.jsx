@@ -141,6 +141,11 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (path === '/') {
+      setWebAlertToast(null);
+      return undefined;
+    }
+
     let timer = null;
     const handleToast = (event) => {
       window.clearTimeout(timer);
@@ -153,7 +158,7 @@ function App() {
       window.clearTimeout(timer);
       window.removeEventListener(webAlertToastEvent, handleToast);
     };
-  }, []);
+  }, [path]);
 
   let page;
   if (path === '/privacy') page = <PrivacyPage />;
@@ -2723,16 +2728,59 @@ function AlertsPage() {
 }
 
 function WebAlertToast({ toast, onClose }) {
+  const [dragStartX, setDragStartX] = useState(null);
+  const [dragX, setDragX] = useState(0);
+  const [didDrag, setDidDrag] = useState(false);
+
+  useEffect(() => {
+    setDragStartX(null);
+    setDragX(0);
+    setDidDrag(false);
+  }, [toast?.id]);
+
   if (!toast) return null;
 
   const openToast = () => {
+    if (didDrag) return;
     if (toast.url) {
       window.location.href = toast.url;
     }
   };
 
+  const endDrag = () => {
+    if (Math.abs(dragX) > 90) {
+      onClose();
+      return;
+    }
+    setDragStartX(null);
+    setDragX(0);
+    window.setTimeout(() => setDidDrag(false), 80);
+  };
+
   return (
-    <div className="web-alert-toast" role="status" aria-live="polite">
+    <div
+      className={`web-alert-toast ${dragStartX !== null ? 'dragging' : ''}`}
+      role="status"
+      aria-live="polite"
+      style={{
+        transform: `translateX(${dragX}px)`,
+        opacity: Math.max(0.35, 1 - Math.abs(dragX) / 220),
+      }}
+      onPointerDown={(event) => {
+        setDragStartX(event.clientX);
+        setDragX(0);
+        setDidDrag(false);
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        if (dragStartX === null) return;
+        const nextX = event.clientX - dragStartX;
+        setDragX(nextX);
+        if (Math.abs(nextX) > 8) setDidDrag(true);
+      }}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
       <button className="web-alert-toast-body" type="button" onClick={openToast}>
         <span className="web-alert-toast-icon">
           <Bell size={16} aria-hidden="true" />
@@ -2743,7 +2791,7 @@ function WebAlertToast({ toast, onClose }) {
         </span>
       </button>
       <button className="web-alert-toast-close" type="button" onClick={onClose} aria-label="Dismiss alert">
-        ×
+        x
       </button>
     </div>
   );

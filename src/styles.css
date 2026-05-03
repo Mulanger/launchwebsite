@@ -4748,7 +4748,17 @@ img {
     linear-gradient(180deg, rgba(34, 211, 165, 0.12), rgba(10, 10, 10, 0.98)),
     #0a0a0a;
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.46);
+  touch-action: pan-y;
+  user-select: none;
   animation: web-alert-toast-in 220ms ease-out;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.web-alert-toast.dragging {
+  cursor: grabbing;
+  transition: none;
 }
 
 .web-alert-toast-body {
