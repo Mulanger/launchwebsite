@@ -2564,9 +2564,7 @@ function AlertsPage() {
             </div>
             {actionMessage ? <p className="alert-status-message">{actionMessage}</p> : null}
             {isDenied ? (
-              <p className="alert-warning-note">
-                Notifications are blocked in this browser. Re-enable them in site settings before activating alerts.
-              </p>
+              <BlockedNotificationHelp />
             ) : null}
             {isMissingConfig ? (
               <p className="alert-warning-note">
@@ -2643,6 +2641,40 @@ function AlertsPage() {
           ['Following-only', 'The server already checks followed wallets for mobile alert subscriptions.'],
         ]}
       />
+    </div>
+  );
+}
+
+function BlockedNotificationHelp() {
+  const help = getBrowserNotificationHelp();
+
+  const openSettings = () => {
+    if (help.settingsUrl) {
+      window.open(help.settingsUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.location.reload();
+  };
+
+  return (
+    <div className="alert-unblock-card">
+      <div>
+        <strong>Notifications are blocked in this browser.</strong>
+        <span>{help.summary}</span>
+      </div>
+      <ol>
+        {help.steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+      <div className="alert-unblock-actions">
+        <button className="secondary-link-button" type="button" onClick={openSettings}>
+          {help.settingsUrl ? 'Open browser settings' : 'Reload after enabling'}
+        </button>
+        <button className="secondary-link-button" type="button" onClick={() => window.location.reload()}>
+          Try again
+        </button>
+      </div>
     </div>
   );
 }
@@ -5529,6 +5561,73 @@ function getNotificationPermissionLabel() {
   if (permission === 'denied') return 'Blocked';
   if (permission === 'default') return 'Not requested';
   return 'Unsupported';
+}
+
+function getBrowserNotificationHelp() {
+  const ua = navigator.userAgent || '';
+  const isEdge = /Edg\//.test(ua);
+  const isChrome = /Chrome\//.test(ua) && !isEdge;
+  const isFirefox = /Firefox\//.test(ua);
+  const isSafari = /Safari\//.test(ua) && !/Chrome\//.test(ua) && !isEdge;
+  const origin = window.location.origin;
+
+  if (isEdge) {
+    return {
+      summary: 'Edge requires you to change the site permission manually.',
+      settingsUrl: 'edge://settings/content/notifications',
+      steps: [
+        'Open browser settings, then find Notifications.',
+        `Move ${origin} from Block to Allow.`,
+        'Return to Polywatch, reload, then press Activate again.',
+      ],
+    };
+  }
+
+  if (isChrome) {
+    return {
+      summary: 'Chrome requires you to change the site permission manually.',
+      settingsUrl: 'chrome://settings/content/notifications',
+      steps: [
+        'Open browser settings, then find Notifications.',
+        `Move ${origin} from Not allowed to Allowed.`,
+        'Return to Polywatch, reload, then press Activate again.',
+      ],
+    };
+  }
+
+  if (isFirefox) {
+    return {
+      summary: 'Firefox keeps notification permissions under Privacy & Security.',
+      settingsUrl: 'about:preferences#privacy',
+      steps: [
+        'Open Privacy & Security settings.',
+        'Find Permissions, then Notifications settings.',
+        `Remove the block for ${origin} or set it to Allow, then reload Polywatch.`,
+      ],
+    };
+  }
+
+  if (isSafari) {
+    return {
+      summary: 'Safari notification permissions are managed in browser or system settings.',
+      settingsUrl: '',
+      steps: [
+        'Open Safari Settings, then Websites.',
+        'Choose Notifications and set Polywatch to Allow.',
+        'On iPhone, install Polywatch to the Home Screen if Safari does not offer web push.',
+      ],
+    };
+  }
+
+  return {
+    summary: 'Browsers do not let websites unblock notifications automatically.',
+    settingsUrl: '',
+    steps: [
+      'Open the site controls beside the address bar.',
+      'Set Notifications to Allow for Polywatch.',
+      'Reload this page, then press Activate again.',
+    ],
+  };
 }
 
 function getInitialWebAlertStatus(prefs = readWebAlertPrefs()) {

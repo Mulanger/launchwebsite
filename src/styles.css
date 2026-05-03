@@ -4123,6 +4123,55 @@ img {
   border: 1px solid rgba(244, 139, 160, 0.18);
 }
 
+.alert-unblock-card {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(244, 139, 160, 0.2);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.74);
+  background:
+    linear-gradient(180deg, rgba(244, 139, 160, 0.08), rgba(244, 139, 160, 0.03)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.alert-unblock-card strong,
+.alert-unblock-card span {
+  display: block;
+}
+
+.alert-unblock-card strong {
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.alert-unblock-card span,
+.alert-unblock-card li {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.alert-unblock-card ol {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.alert-unblock-card li + li {
+  margin-top: 5px;
+}
+
+.alert-unblock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.alert-unblock-actions .secondary-link-button {
+  min-height: 36px;
+  font-size: 12px;
+}
+
 .danger-button {
   color: rgba(244, 139, 160, 0.92);
   border-color: rgba(244, 139, 160, 0.22);
