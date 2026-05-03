@@ -2378,6 +2378,9 @@ function ProfilePage() {
 function FollowingPage() {
   const { items, loading, error, refresh } = useFollowedTraders();
   const [search, setSearch] = useState('');
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 760px)').matches
+  );
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return items;
@@ -2390,6 +2393,39 @@ function FollowingPage() {
     );
   }, [items, search]);
   const totalVolume = items.reduce((total, item) => total + Number(item.vol7d || 0), 0);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  if (isMobileViewport) {
+    return (
+      <div className="following-mobile-screen">
+        <main className="following-mobile-main">
+          <FollowingManagedList
+            loading={loading}
+            error={error}
+            items={items}
+            visibleItems={visibleItems}
+            onClearSearch={() => setSearch('')}
+          />
+        </main>
+        <MobileBottomNav
+          activeTab="following"
+          onTabChange={(tab) => {
+            if (tab === 'following') return;
+            if (tab === 'feed') window.location.href = '/';
+            if (tab === 'leaders') window.location.href = '/leaderboard';
+            if (tab === 'alerts') window.location.href = '/alerts';
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="feed-shell detail-shell profile-shell no-rail-shell">
@@ -2405,44 +2441,56 @@ function FollowingPage() {
           <StatBlock label="Feed Filter" value="Ready" />
         </section>
 
-        <section className="following-list-section" aria-live="polite">
-          <div className="section-title-row">
-            <div>
-              <h2>Managed list</h2>
-              <p>Unfollow directly here or open any trader profile.</p>
-            </div>
-            {error ? <span className="section-error">{error}</span> : null}
-          </div>
-
-          {loading ? (
-            <FollowingSkeleton rows={8} />
-          ) : visibleItems.length ? (
-            <div className="following-list">
-              {visibleItems.map((item) => (
-                <FollowedTraderRow item={item} key={item.proxyWallet} />
-              ))}
-            </div>
-          ) : items.length ? (
-            <EmptyState
-              title="No followed trader matches this search"
-              body="Clear the search field to show the full following list."
-              actionLabel="Clear search"
-              onAction={() => setSearch('')}
-            />
-          ) : (
-            <EmptyState
-              title="You're not following anyone yet"
-              body="Open the leaderboard or a trader profile and follow wallets you want to track."
-              actionLabel="Browse leaderboard"
-              onAction={() => {
-                window.location.href = '/leaderboard';
-              }}
-            />
-          )}
-        </section>
+        <FollowingManagedList
+          loading={loading}
+          error={error}
+          items={items}
+          visibleItems={visibleItems}
+          onClearSearch={() => setSearch('')}
+        />
       </main>
 
     </div>
+  );
+}
+
+function FollowingManagedList({ loading, error, items, visibleItems, onClearSearch }) {
+  return (
+    <section className="following-list-section" aria-live="polite">
+      <div className="section-title-row">
+        <div>
+          <h2>Manage list</h2>
+          <p>Unfollow directly here or open any trader profile.</p>
+        </div>
+        {error ? <span className="section-error">{error}</span> : null}
+      </div>
+
+      {loading ? (
+        <FollowingSkeleton rows={8} />
+      ) : visibleItems.length ? (
+        <div className="following-list">
+          {visibleItems.map((item) => (
+            <FollowedTraderRow item={item} key={item.proxyWallet} />
+          ))}
+        </div>
+      ) : items.length ? (
+        <EmptyState
+          title="No followed trader matches this search"
+          body="Clear the search field to show the full following list."
+          actionLabel="Clear search"
+          onAction={onClearSearch}
+        />
+      ) : (
+        <EmptyState
+          title="You're not following anyone yet"
+          body="Open the leaderboard or a trader profile and follow wallets you want to track."
+          actionLabel="Browse leaderboard"
+          onAction={() => {
+            window.location.href = '/leaderboard';
+          }}
+        />
+      )}
+    </section>
   );
 }
 
