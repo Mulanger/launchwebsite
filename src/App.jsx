@@ -1203,7 +1203,7 @@ function MobileLeaderboardRow({ row }) {
 }
 
 function TradeDetailPage({ tradeId }) {
-  const [trade, setTrade] = useState(null);
+  const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -1215,16 +1215,16 @@ function TradeDetailPage({ tradeId }) {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchJson(`/v1/whales/${encodeURIComponent(tradeId)}`, {
+        const data = await fetchJson(`/v1/whales/${encodeURIComponent(tradeId)}/detail`, {
           signal: controller.signal,
         });
-        setTrade(data);
+        setDetail(normalizeTradeDetailPayload(data));
       } catch (err) {
         if (err.name === 'AbortError') return;
 
         const fallback = readCachedTrade(tradeId) ?? (await findRecentTradeById(tradeId, controller.signal));
         if (fallback) {
-          setTrade(fallback);
+          setDetail(normalizeTradeDetailPayload(fallback));
           setError('');
         } else {
           setError(err.message || 'Failed to load trade.');
@@ -1240,20 +1240,14 @@ function TradeDetailPage({ tradeId }) {
     return () => controller.abort();
   }, [tradeId, refreshNonce]);
 
-  const traderHref = trade?.trader?.proxyWallet
-    ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
-    : null;
-
   return (
     <div className="feed-shell detail-shell no-rail-shell">
       <FeedSidebar activePage="detail" liveState="live" />
 
       <main className="feed-main detail-main">
-        <DetailBackBar href="/" label="Back to feed" />
-
         {loading ? (
           <DetailSkeleton title="Loading trade" />
-        ) : error || !trade ? (
+        ) : error || !detail?.trade ? (
           <EmptyState
             title="Trade unavailable"
             body={error || 'This trade could not be found.'}
@@ -1261,100 +1255,369 @@ function TradeDetailPage({ tradeId }) {
             onAction={() => setRefreshNonce((value) => value + 1)}
           />
         ) : (
-          <>
-            <header className="detail-hero trade-hero">
-              <div className="feed-breadcrumb">
-                <Activity size={14} aria-hidden="true" />
-                Trade - {relativeTime(trade.timestamp)} ago
-              </div>
-              <div className="detail-title-row">
-                <div>
-                  <h1>
-                    {formatUsdFull(trade.usdSize)} <em>{trade.side}</em>
-                  </h1>
-                  <p>{trade.market?.title || 'Unknown market'}</p>
-                </div>
-              </div>
-            </header>
-
-            <section className="stats-strip detail-stats">
-              <StatBlock label="USD Size" value={formatUsdCompact(trade.usdSize)} />
-              <StatBlock label="Price" value={formatPrice(trade)} />
-              <StatBlock label="Shares" value={formatShares(trade.shares)} />
-              <StatBlock label="Side" value={trade.side} tone={trade.side === 'SELL' ? 'down' : 'up'} />
-            </section>
-
-            <section className="detail-grid">
-              <div className="detail-panel primary-detail-panel">
-                <div className="panel-heading">
-                  <Hash size={16} aria-hidden="true" />
-                  <span>Trade Details</span>
-                </div>
-                <DetailRows
-                  rows={[
-                    ['Trade ID', trade.id],
-                    ['Transaction', trade.transactionHash || 'Unknown'],
-                    ['Timestamp', formatDateTimeSeconds(trade.timestamp)],
-                    ['Tier', trade.tier || 'whale'],
-                    ['Polymarket URL', trade.polymarketUrl || trade.market?.polymarketUrl || 'Unavailable'],
-                  ]}
-                />
-              </div>
-
-              <div className="detail-panel">
-                <div className="panel-heading panel-heading-with-action">
-                  <span>
-                    <Layers size={16} aria-hidden="true" />
-                    Market
-                  </span>
-                  <span className="market-price-badge">{formatPrice(trade)}</span>
-                </div>
-                <div className="market-detail-card">
-                  <MarketIcon trade={trade} category={inferCategory(trade)} />
-                  <div>
-                    <strong>{trade.market?.title || 'Unknown market'}</strong>
-                    <span>{inferCategory(trade).label} - {trade.outcome || 'Outcome'}</span>
-                  </div>
-                </div>
-                <div className="detail-action-row">
-                  <a
-                    className="secondary-link-button"
-                    href={trade.polymarketUrl || trade.market?.polymarketUrl || '#'}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open market
-                    <ExternalLink size={16} aria-hidden="true" />
-                  </a>
-                </div>
-              </div>
-
-              <div className="detail-panel trader-detail-panel">
-                <div className="panel-heading">
-                  <Wallet size={16} aria-hidden="true" />
-                  <span>Trader</span>
-                </div>
-                <div className="trader-profile-strip">
-                  <TraderAvatar trade={trade} />
-                  <div>
-                    <strong>{getTraderName(trade)}</strong>
-                    <span>{shortWallet(trade.trader?.proxyWallet) || 'Public wallet'}</span>
-                  </div>
-                </div>
-                {traderHref ? (
-                  <div className="detail-action-row">
-                    <FollowWalletButton wallet={trade.trader?.proxyWallet} variant="wide" />
-                    <a className="primary-link-button" href={traderHref}>
-                      View trader profile
-                      <ArrowRightIcon />
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          </>
+          <TradeDetailRedesign detail={detail} />
         )}
       </main>
+    </div>
+  );
+}
+
+function TradeDetailRedesign({ detail }) {
+  const trade = detail.trade;
+  const market = detail.market || trade.market || {};
+  const trader = detail.trader || trade.trader || {};
+  const scenario = detail.scenario || buildClientTradeScenario(trade);
+  const relatedTrades = Array.isArray(detail.relatedTrades) && detail.relatedTrades.length
+    ? detail.relatedTrades
+    : [trade];
+  const recentTrades = Array.isArray(trader.recentTrades) ? trader.recentTrades : [];
+
+  return (
+    <section className="trade-detail-redesign">
+      <a className="trade-detail-back" href="/">
+        <ArrowLeft size={13} aria-hidden="true" />
+        Back to feed
+      </a>
+
+      <div className="trade-detail-layout">
+        <div className="trade-detail-main-column">
+          <TradeHeroDetailCard trade={trade} scenario={scenario} />
+          <TradeMarketDetailCard trade={trade} market={market} />
+          <RelatedTradesDetailCard
+            trades={relatedTrades}
+            currentTradeId={trade.id}
+            marketTitle={market.title || trade.market?.title}
+          />
+        </div>
+
+        <aside className="trade-detail-side-column">
+          <TradeTraderDetailCard trade={trade} trader={trader} />
+          <TraderRecentDetailCard trades={recentTrades} />
+          <TradeOnChainDetailCard trade={trade} onChain={detail.onChain} />
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function TradeHeroDetailCard({ trade, scenario }) {
+  const isSell = trade.side === 'SELL';
+
+  return (
+    <section className="trade-hero-card-redesign">
+      <div className="trade-detail-meta-line">
+        <span className={`trade-detail-side-pill ${isSell ? 'sell' : 'buy'}`}>{trade.side}</span>
+        <span>{relativeTimeAgo(trade.timestamp)} - {formatDateTimeSeconds(trade.timestamp)}</span>
+      </div>
+
+      <div className="trade-detail-headline">
+        <strong>{formatUsdFull(trade.usdSize)}</strong>
+        <span>
+          @ <b>{formatPrice(trade)}</b>
+        </span>
+      </div>
+
+      <div className="trade-detail-subline">
+        <strong>{formatShares(trade.shares)}</strong> shares
+        <span>{formatTierLabel(trade.tier)}</span>
+      </div>
+
+      <div className="trade-scenario-grid">
+        <ScenarioDetailCell
+          label={scenario.payoutLabel}
+          value={formatScenarioValue(scenario.payoutIfWin, scenario.mode === 'sell' ? 'money' : 'money')}
+          delta={scenario.payoutDelta}
+          tone="accent"
+        />
+        <ScenarioDetailCell
+          label={scenario.lossLabel}
+          value={scenario.mode === 'sell' ? formatShares(scenario.lossIfLose) : `-${formatUsdFull(scenario.lossIfLose)}`}
+          delta={scenario.lossDelta || 'Reduced exposure'}
+          tone="muted"
+        />
+        <ScenarioDetailCell
+          label={scenario.probabilityLabel || 'IMPLIED PROBABILITY'}
+          value={`${trimNumber(scenario.impliedProbability)}%`}
+          delta={scenario.probabilityDelta || 'From execution price'}
+          tone="neutral"
+        />
+      </div>
+    </section>
+  );
+}
+
+function ScenarioDetailCell({ label, value, delta, tone }) {
+  return (
+    <div className="trade-scenario-cell">
+      <span>{label}</span>
+      <strong className={tone}>{value}</strong>
+      <small className={tone}>{delta}</small>
+    </div>
+  );
+}
+
+function TradeMarketDetailCard({ trade, market }) {
+  const marketTrade = { ...trade, market: { ...(trade.market || {}), ...(market || {}) } };
+  const executionPrice = getPriceValue(trade);
+  const outcome = String(trade.outcome || '').toUpperCase();
+  const fallbackYesPrice = outcome === 'YES' ? executionPrice : Math.max(0, 100 - executionPrice);
+  const fallbackNoPrice = outcome === 'NO' ? executionPrice : Math.max(0, 100 - executionPrice);
+  const yesPrice = Number(market.yesPriceCents ?? trade.market?.yesPriceCents ?? fallbackYesPrice);
+  const noPrice = Number(market.noPriceCents ?? trade.market?.noPriceCents ?? fallbackNoPrice);
+  const priceHistory = market.priceHistory || buildFallbackPriceHistory(trade);
+  const polymarketUrl = market.polymarketUrl || trade.polymarketUrl || trade.market?.polymarketUrl || '#';
+
+  return (
+    <section className="trade-detail-panel-card">
+      <div className="trade-detail-section-head">
+        <span>Market</span>
+        <a href={polymarketUrl} target="_blank" rel="noreferrer">
+          View on Polymarket
+          <ExternalLink size={12} aria-hidden="true" />
+        </a>
+      </div>
+
+      <div className="trade-market-identity">
+        <MarketIcon trade={marketTrade} category={inferCategory(marketTrade)} />
+        <div>
+          <strong>{market.title || trade.market?.title || 'Unknown market'}</strong>
+          <span>{inferCategory(marketTrade).label} - {trade.outcome || 'Outcome'}</span>
+        </div>
+      </div>
+
+      <div className="trade-outcome-grid">
+        <OutcomeDetailCard
+          label="YES"
+          price={yesPrice}
+          change={priceHistory.yesChange24hCents}
+          accent={String(trade.outcome || '').toUpperCase() === 'YES'}
+        />
+        <OutcomeDetailCard
+          label="NO"
+          price={noPrice}
+          change={priceHistory.noChange24hCents}
+          accent={String(trade.outcome || '').toUpperCase() === 'NO'}
+        />
+      </div>
+
+      <TradePriceChart history={priceHistory} />
+    </section>
+  );
+}
+
+function OutcomeDetailCard({ label, price, change, accent = false }) {
+  const numericChange = Number(change);
+  const hasChange = Number.isFinite(numericChange);
+  return (
+    <div className={`trade-outcome-card ${accent ? 'accent' : ''}`}>
+      <span>{label}</span>
+      <div>
+        <strong>{trimNumber(Number(price || 0))}c</strong>
+        <small className={hasChange && numericChange < 0 ? 'down' : 'up'}>
+          {hasChange ? `${numericChange >= 0 ? '+' : ''}${trimNumber(numericChange)}c` : 'Live'}
+        </small>
+      </div>
+    </div>
+  );
+}
+
+function TradePriceChart({ history }) {
+  const rawPoints = Array.isArray(history?.points) ? history.points : [];
+  const points = rawPoints.length
+    ? rawPoints.map((point) => Number(point.price ?? point)).filter((point) => Number.isFinite(point))
+    : [0, 1];
+  const width = 600;
+  const height = 82;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const stepX = points.length > 1 ? width / (points.length - 1) : width;
+  const linePath = points
+    .map((point, index) => {
+      const x = index * stepX;
+      const y = height - ((point - min) / range) * (height - 10) - 5;
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const fillPath = `${linePath} L${width} ${height} L0 ${height} Z`;
+  const tradeIndex = Math.min(points.length - 1, Math.max(0, Number(history?.tradeIndex || 0)));
+  const markerX = tradeIndex * stepX;
+  const markerY = height - ((points[tradeIndex] - min) / range) * (height - 10) - 5;
+
+  return (
+    <div className="trade-price-chart">
+      <div className="trade-chart-topline">
+        <span>Execution price - same-market trades</span>
+        <div>
+          <button type="button" className="active">24H</button>
+          <button type="button">7D</button>
+          <button type="button">All</button>
+        </div>
+      </div>
+      <svg width="100%" height="82" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="trade-detail-chart-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#22d3a5" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#22d3a5" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={fillPath} fill="url(#trade-detail-chart-fill)" />
+        <path d={linePath} stroke="#22d3a5" strokeWidth="1.6" fill="none" />
+        <line x1={markerX} y1="0" x2={markerX} y2={height} stroke="rgba(255,255,255,0.22)" strokeDasharray="3 3" />
+        <circle cx={markerX} cy={markerY} r="3.8" fill="#22d3a5" stroke="#0a0a0a" strokeWidth="1.6" />
+      </svg>
+      <div className="trade-chart-axis">
+        <span>24h ago</span>
+        <span>now</span>
+      </div>
+    </div>
+  );
+}
+
+function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
+  const otherCount = trades.filter((trade) => trade.id !== currentTradeId).length;
+  return (
+    <section className="trade-detail-panel-card">
+      <div className="trade-detail-section-head no-action">
+        <span>Related trades on this market</span>
+        <small>{otherCount} other whale trades today</small>
+      </div>
+
+      <div className="related-trades-list">
+        {trades.map((trade) => (
+          <RelatedTradeDetailRow
+            key={trade.id}
+            trade={trade}
+            isCurrent={trade.id === currentTradeId}
+          />
+        ))}
+      </div>
+
+      <a className="trade-detail-wide-button" href={`/?market=${encodeURIComponent(marketTitle || '')}`}>
+        View market feed
+      </a>
+    </section>
+  );
+}
+
+function RelatedTradeDetailRow({ trade, isCurrent }) {
+  const href = `/trade/${encodeURIComponent(trade.id)}`;
+  return (
+    <a className={`related-trade-row ${isCurrent ? 'current' : ''}`} href={href}>
+      <span className={`trade-detail-side-pill ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side}</span>
+      <div className="related-trader">
+        <span style={{ background: avatarGradient(trade.trader?.proxyWallet || trade.id) }} />
+        <strong>{shortWallet(trade.trader?.proxyWallet) || 'Unknown'}</strong>
+        {isCurrent ? <em>THIS</em> : null}
+      </div>
+      <b>{formatUsdFull(trade.usdSize)}</b>
+      <small>{formatPrice(trade)} {trade.outcome || ''}</small>
+      <time>{relativeTimeAgo(trade.timestamp)}</time>
+    </a>
+  );
+}
+
+function TradeTraderDetailCard({ trade, trader }) {
+  const wallet = trader.proxyWallet || trade.trader?.proxyWallet;
+  const traderHref = wallet ? `/trader/${encodeURIComponent(wallet)}` : null;
+  return (
+    <section className="trade-detail-panel-card side-card">
+      <div className="trade-detail-section-head no-action">
+        <span>Trader</span>
+      </div>
+
+      <div className="trade-detail-trader-head">
+        <TraderAvatar trade={{ ...trade, trader }} />
+        <div>
+          <strong>{formatTraderLabel(trader.displayName || trader.pseudonym, wallet)}</strong>
+          <span title={wallet}>{shortWallet(wallet) || 'Public wallet'}</span>
+        </div>
+      </div>
+
+      <div className="trader-detail-stat-grid">
+        <TradeTraderStat label="1D Volume" value={formatUsdCompact(trader.volume1d || 0)} accent />
+        <TradeTraderStat label="1D Rank" value={trader.rank1d ? `#${trader.rank1d}` : '--'} />
+        <TradeTraderStat label="Today Trades" value={formatNumber(trader.tradeCount1d || 0)} />
+        <TradeTraderStat label="Wallet" value={shortWallet(wallet) || '--'} />
+      </div>
+
+      {wallet ? (
+        <div className="trade-detail-action-row">
+          <FollowWalletButton wallet={wallet} variant="wide" />
+          {traderHref ? <a className="trade-detail-profile-button" href={traderHref}>View profile</a> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function TradeTraderStat({ label, value, accent = false }) {
+  return (
+    <div className="trade-trader-stat">
+      <span>{label}</span>
+      <strong className={accent ? 'accent' : ''}>{value}</strong>
+    </div>
+  );
+}
+
+function TraderRecentDetailCard({ trades = [] }) {
+  return (
+    <section className="trade-detail-panel-card side-card">
+      <div className="trade-detail-section-head no-action">
+        <span>Trader's recent</span>
+      </div>
+      <div className="trader-recent-list">
+        {trades.length ? trades.map((trade) => (
+          <a key={trade.id} href={`/trade/${encodeURIComponent(trade.id)}`}>
+            <div>
+              <strong>{trade.market?.title || 'Unknown market'}</strong>
+              <span>{relativeTimeAgo(trade.timestamp)} - {trade.side} {trade.outcome || ''}</span>
+            </div>
+            <small>
+              <b>{formatUsdCompact(trade.usdSize)}</b>
+              @{formatPrice(trade)}
+            </small>
+          </a>
+        )) : <p className="trade-detail-muted">No recent trades available.</p>}
+      </div>
+    </section>
+  );
+}
+
+function TradeOnChainDetailCard({ trade, onChain }) {
+  const txHash = onChain?.transactionHash || trade.transactionHash;
+  const explorer = onChain?.explorerUrl || (txHash ? `https://polygonscan.com/tx/${txHash}` : null);
+  return (
+    <section className="trade-detail-panel-card side-card">
+      <div className="trade-detail-section-head no-action">
+        <span>On-chain</span>
+      </div>
+
+      <div className="onchain-detail-rows">
+        <OnChainDetailRow label="Trade ID" value={trade.id} />
+        <OnChainDetailRow
+          label="Transaction"
+          value={shortHash(txHash)}
+          href={explorer}
+        />
+        <OnChainDetailRow label="Tier" value={formatTierLabel(trade.tier)} />
+      </div>
+    </section>
+  );
+}
+
+function OnChainDetailRow({ label, value, href }) {
+  return (
+    <div className="onchain-detail-row">
+      <span>{label}</span>
+      {href ? (
+        <a href={href} target="_blank" rel="noreferrer">
+          {value || 'Unavailable'}
+          <ExternalLink size={10} aria-hidden="true" />
+        </a>
+      ) : (
+        <strong>{value || 'Unavailable'}</strong>
+      )}
     </div>
   );
 }
@@ -5338,6 +5601,113 @@ function formatTraderMeta(trade) {
   if (vol30d) return `${formatUsdCompact(vol30d)} 30d`;
   if (tradeCount) return `${formatNumber(tradeCount)} trades`;
   return shortWallet(trade.trader?.proxyWallet) || 'Public wallet';
+}
+
+function normalizeTradeDetailPayload(payload) {
+  if (!payload) return null;
+  if (payload.trade) {
+    const trade = payload.trade;
+    return {
+      ...payload,
+      trade,
+      market: payload.market || trade.market || {},
+      trader: payload.trader || trade.trader || {},
+      relatedTrades: Array.isArray(payload.relatedTrades) && payload.relatedTrades.length
+        ? payload.relatedTrades
+        : [trade],
+      scenario: payload.scenario || buildClientTradeScenario(trade),
+      onChain: payload.onChain || buildClientOnChain(trade),
+    };
+  }
+
+  return {
+    trade: payload,
+    market: payload.market || {},
+    trader: payload.trader || {},
+    relatedTrades: [payload],
+    scenario: buildClientTradeScenario(payload),
+    onChain: buildClientOnChain(payload),
+  };
+}
+
+function buildClientOnChain(trade) {
+  const transactionHash = trade?.transactionHash || null;
+  return {
+    transactionHash,
+    explorerUrl: transactionHash ? `https://polygonscan.com/tx/${transactionHash}` : null,
+  };
+}
+
+function buildClientTradeScenario(trade) {
+  const side = trade?.side === 'SELL' ? 'SELL' : 'BUY';
+  const outcome = String(trade?.outcome || 'YES').trim().toUpperCase() || 'YES';
+  const usdSize = Number(trade?.usdSize || 0);
+  const shares = Number(trade?.shares || 0);
+  const impliedProbability = Number(getPriceValue(trade || {}).toFixed(2));
+
+  if (side === 'SELL') {
+    return {
+      mode: 'sell',
+      payoutLabel: 'SALE PROCEEDS',
+      payoutIfWin: usdSize,
+      payoutDelta: 'Position reduced',
+      lossLabel: 'SHARES SOLD',
+      lossIfLose: shares,
+      lossDelta: null,
+      probabilityLabel: 'IMPLIED PROBABILITY',
+      impliedProbability,
+      probabilityDelta: 'From execution price',
+    };
+  }
+
+  const payout = shares;
+  const profit = payout - usdSize;
+  const profitPct = usdSize > 0 ? (profit / usdSize) * 100 : 0;
+
+  return {
+    mode: 'buy',
+    payoutLabel: `IF ${outcome} PAYOUT`,
+    payoutIfWin: payout,
+    payoutDelta: `${profit >= 0 ? '+' : '-'}${formatUsdFull(Math.abs(profit))} (${profitPct >= 0 ? '+' : '-'}${trimNumber(Math.abs(profitPct))}%)`,
+    lossLabel: `IF ${otherBinaryOutcome(outcome)} LOSS`,
+    lossIfLose: usdSize,
+    lossDelta: '-100%',
+    probabilityLabel: 'IMPLIED PROBABILITY',
+    impliedProbability,
+    probabilityDelta: 'From execution price',
+  };
+}
+
+function otherBinaryOutcome(outcome) {
+  if (outcome === 'YES') return 'NO';
+  if (outcome === 'NO') return 'YES';
+  return outcome ? `NOT ${outcome}` : 'OTHER';
+}
+
+function formatScenarioValue(value) {
+  return formatUsdFull(value);
+}
+
+function formatTierLabel(tier) {
+  return String(tier || 'whale').trim().toUpperCase();
+}
+
+function buildFallbackPriceHistory(trade) {
+  const price = getPriceValue(trade || {});
+  return {
+    source: 'current_trade',
+    points: [{ id: trade?.id || 'current', timestamp: trade?.timestamp, price }],
+    tradeIndex: 0,
+    yesChange24hCents: null,
+    noChange24hCents: null,
+  };
+}
+
+function shortHash(hash) {
+  const value = String(hash || '');
+  if (!value) return '';
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 10)}...${value.slice(-6)}`;
 }
 
 function formatUsdFull(value) {

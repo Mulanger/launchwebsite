@@ -90,6 +90,7 @@ Public data:
 
 - `GET /v1/whales?limit=100&minUsd=...&maxUsd=...&side=...&cursor=...`
 - `GET /v1/whales/:tradeId`
+- `GET /v1/whales/:tradeId/detail`
 - `GET /v1/leaderboard?window=7d&limit=50&cursor=...`
 - `GET /v1/traders/:wallet`
 - `WS /v1/whales/stream`
@@ -104,8 +105,10 @@ Auth/follows:
 Important fallback behavior:
 
 - `GET /v1/whales/:tradeId` can fail for some recent trades, so trade detail and feed hydration can fall back to searching the recent whale feed.
+- `GET /v1/whales/:tradeId/detail` is the enhanced trade-detail endpoint. It is additive and should not replace the existing basic `/v1/whales/:tradeId` contract because the Android app also depends on that server.
+- The trade detail page should tolerate the enhanced endpoint being unavailable by normalizing a basic trade into a reduced detail view.
 - Following-only feed uses server auth when available. Without auth, it filters public feed results against local followed wallets.
-- The production API currently rejects `window=1d`, `window=today`, and `window=24h` for `/v1/leaderboard`. Until the backend supports this, the web leaderboard builds today's ranks from fetched `/v1/whales` rows. This keeps the UI consistent but can undercount if the client has not loaded every trade in the New York session.
+- The production API supports `/v1/leaderboard?window=1d`, `7d`, `30d`, and `365d`. Use the API leaderboard for authoritative windows instead of client-derived rank fallbacks.
 
 ## Routes
 
@@ -216,6 +219,19 @@ Before pushing:
 4. Open a trader profile and verify short wallet title, full address copy button, profile chart, follow button, and recent trades.
 5. Open a trade detail and verify market card, trader card, follow button, and back behavior.
 6. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
+
+## Trade Detail Endpoint
+
+The web trade detail route prefers `GET /v1/whales/:tradeId/detail`. The endpoint composes read-only data from existing watcher/server collections:
+
+- `trade`: the original whale DTO.
+- `market`: market metadata plus same-market execution-price history from recent whale trades.
+- `trader`: wallet metadata plus 1D New York-session volume, rank, trade count, and recent trades.
+- `relatedTrades`: today's other whale trades on the same market, matched by `market.conditionId` first and `market.slug` as fallback.
+- `scenario`: formatted inputs for payout/loss/probability display.
+- `onChain`: transaction hash plus Polygonscan URL.
+
+Do not add watcher schema writes for this unless the backend explicitly needs richer market snapshots later. The current implementation is intentionally read-only and additive so the Android app can keep using the existing watcher/server contract.
 
 ## Deployment Notes
 
