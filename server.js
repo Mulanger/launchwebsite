@@ -9,6 +9,8 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const distDir = resolve(__dirname, 'dist');
 const port = Number(process.env.PORT || 4173);
 const apiTarget = (process.env.API_BASE_URL || 'https://whaleserver-production.up.railway.app').replace(/\/$/, '');
+const canonicalHost = 'www.polywhaletrades.com';
+const apexHost = 'polywhaletrades.com';
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -72,6 +74,16 @@ function proxyApiRequest(req, res) {
 }
 
 createServer((req, res) => {
+  const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+  if (host === apexHost) {
+    res.writeHead(301, {
+      Location: `https://${canonicalHost}${req.url || '/'}`,
+      'Cache-Control': 'public, max-age=3600',
+    });
+    res.end();
+    return;
+  }
+
   if ((req.url || '').startsWith('/api/')) {
     proxyApiRequest(req, res);
     return;
