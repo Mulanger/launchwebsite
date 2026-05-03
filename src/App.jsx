@@ -1500,7 +1500,6 @@ function MobileTradeDetailContent({ detail }) {
       <RelatedTradesDetailCard
         trades={relatedTrades}
         currentTradeId={trade.id}
-        marketTitle={market.title || trade.market?.title}
       />
       <TraderRecentDetailCard trades={recentTrades} />
       <TradeOnChainDetailCard trade={trade} onChain={detail.onChain} />
@@ -1532,7 +1531,6 @@ function TradeDetailRedesign({ detail }) {
           <RelatedTradesDetailCard
             trades={relatedTrades}
             currentTradeId={trade.id}
-            marketTitle={market.title || trade.market?.title}
           />
         </div>
 
@@ -1657,8 +1655,12 @@ function OutcomeDetailCard({ label, price, tone }) {
   );
 }
 
-function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
+function RelatedTradesDetailCard({ trades, currentTradeId }) {
+  const [expanded, setExpanded] = useState(false);
   const otherCount = trades.filter((trade) => trade.id !== currentTradeId).length;
+  const initialLimit = 4;
+  const hasMore = trades.length > initialLimit;
+  const visibleTrades = expanded ? trades : trades.slice(0, initialLimit);
   return (
     <section className="trade-detail-panel-card trade-detail-card-related">
       <div className="trade-detail-section-head no-action">
@@ -1667,7 +1669,7 @@ function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
       </div>
 
       <div className="related-trades-list">
-        {trades.map((trade) => (
+        {visibleTrades.map((trade) => (
           <RelatedTradeDetailRow
             key={trade.id}
             trade={trade}
@@ -1676,9 +1678,15 @@ function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
         ))}
       </div>
 
-      <a className="trade-detail-wide-button" href={`/?market=${encodeURIComponent(marketTitle || '')}`}>
-        View all {trades.length} trades
-      </a>
+      {hasMore ? (
+        <button
+          className="trade-detail-wide-button"
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? 'Show fewer trades' : `View all ${trades.length} trades`}
+        </button>
+      ) : null}
     </section>
   );
 }

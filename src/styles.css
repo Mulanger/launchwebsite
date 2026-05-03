@@ -2654,6 +2654,7 @@ img {
 }
 
 .trade-detail-wide-button {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2665,6 +2666,17 @@ img {
   background: rgba(255, 255, 255, 0.035);
   font-size: 12px;
   font-weight: 900;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.trade-detail-wide-button:hover {
+  border-color: rgba(94, 231, 173, 0.22);
+  color: var(--accent);
+  background: rgba(94, 231, 173, 0.08);
 }
 
 .trade-detail-trader-head {
