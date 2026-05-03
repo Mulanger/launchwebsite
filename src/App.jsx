@@ -78,9 +78,12 @@ const feedSortOptions = [
 const leaderboardWindows = [
   { id: '1d', label: '1D', caption: "Today's New York session" },
   { id: '7d', label: '7D', caption: 'Last 7 New York days' },
-  { id: '30d', label: '30D', caption: 'Last 30 days' },
-  { id: '365d', label: '1Y', caption: 'Last 365 days' },
+  { id: '30d', label: '30D', caption: 'Last 30 days', locked: true },
+  { id: '365d', label: '1Y', caption: 'Last 365 days', locked: true },
 ];
+const lockedLeaderboardWindowIds = new Set(
+  leaderboardWindows.filter((option) => option.locked).map((option) => option.id)
+);
 
 const leaderboardSortOptions = [
   { id: 'rank', label: 'Volume' },
@@ -963,6 +966,10 @@ function LeaderboardPage() {
       setLoadingMore(false);
     }
   }, [windowId, cursor, loadingMore]);
+  const handleWindowChange = useCallback((nextWindowId) => {
+    if (lockedLeaderboardWindowIds.has(nextWindowId)) return;
+    setWindowId(nextWindowId);
+  }, []);
 
   if (isMobileViewport) {
     return (
@@ -971,7 +978,7 @@ function LeaderboardPage() {
         sortValue={sort}
         sortOptions={leaderboardSortOptions}
         rows={mobileRows}
-        onWindowChange={setWindowId}
+        onWindowChange={handleWindowChange}
         onSortChange={setSort}
         loading={loading}
         error={error}
@@ -1005,7 +1012,7 @@ function LeaderboardPage() {
             windowId={windowId}
             sort={sort}
             search={search}
-            onWindowChange={setWindowId}
+            onWindowChange={handleWindowChange}
             onSortChange={setSort}
             onSearchChange={setSearch}
             onFilter={() => setSearch('')}
@@ -1091,34 +1098,36 @@ function MobileLeaderboardScreen({
               padding: 2,
             }}
           >
-            {leaderboardWindows.map((option) => (
-              (() => {
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    title={option.caption}
-                    onClick={() => onWindowChange(option.id)}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: 999,
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      border: 0,
-                      opacity: 1,
-                      background: windowId === option.id ? '#22d3a5' : 'transparent',
-                      color: windowId === option.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                    }}
-                  >
-                    <span>{option.label}</span>
-                  </button>
-                );
-              })()
-            ))}
+            {leaderboardWindows.map((option) => {
+              const locked = Boolean(option.locked);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  title={locked ? 'Coming soon' : option.caption}
+                  aria-disabled={locked}
+                  onClick={() => {
+                    if (!locked) onWindowChange(option.id);
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 999,
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    cursor: locked ? 'default' : 'pointer',
+                    border: 0,
+                    opacity: locked ? 0.42 : 1,
+                    background: windowId === option.id ? '#22d3a5' : 'transparent',
+                    color: windowId === option.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                  }}
+                >
+                  <span>{option.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
@@ -3538,17 +3547,29 @@ function LeaderboardControlBar({
   return (
     <section className="leaderboard-controls" aria-label="Leaderboard controls">
       <div className="leaderboard-window-toggle">
-        {leaderboardWindows.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={windowId === option.id ? 'active' : ''}
-            onClick={() => onWindowChange(option.id)}
-            title={option.caption}
-          >
-            {option.label}
-          </button>
-        ))}
+        {leaderboardWindows.map((option) => {
+          const locked = Boolean(option.locked);
+          const classes = [
+            windowId === option.id ? 'active' : '',
+            locked ? 'locked' : '',
+          ].filter(Boolean).join(' ');
+
+          return (
+            <button
+              key={option.id}
+              type="button"
+              className={classes}
+              aria-disabled={locked}
+              onClick={() => {
+                if (!locked) onWindowChange(option.id);
+              }}
+              title={locked ? 'Coming soon' : option.caption}
+            >
+              {option.label}
+              {locked ? <span className="leaderboard-window-tooltip">Coming soon</span> : null}
+            </button>
+          );
+        })}
       </div>
 
       <div className="leaderboard-control-actions">
