@@ -5358,6 +5358,9 @@ function FollowWalletButton({ wallet, variant = 'wide' }) {
       type="button"
       aria-label={`${label} ${shortWallet(normalizedWallet)}`}
       title={error || label}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onTouchStart={(event) => event.stopPropagation()}
       onClick={toggleFollow}
       disabled={pending}
     >
