@@ -2387,6 +2387,7 @@ function FollowingPage() {
 
 function AlertsPage() {
   const [prefs, setPrefs] = useState(() => readWebAlertPrefs());
+  const [syncedPrefs, setSyncedPrefs] = useState(() => readWebAlertPrefs());
   const [savedAt, setSavedAt] = useState(null);
   const [status, setStatus] = useState(() => getInitialWebAlertStatus());
   const [actionMessage, setActionMessage] = useState('');
@@ -2414,6 +2415,7 @@ function AlertsPage() {
         }
         const nextPrefs = mergeServerAlertPrefs(prefs, subscription);
         setPrefs(nextPrefs);
+        setSyncedPrefs(nextPrefs);
         writeStoredJson(alertPrefsStorageKey, nextPrefs);
         setStatus('active');
       })
@@ -2455,6 +2457,7 @@ function AlertsPage() {
       await saveWebAlertSubscription(nextPrefs, token);
       writeStoredJson(alertPrefsStorageKey, nextPrefs);
       setPrefs(nextPrefs);
+      setSyncedPrefs(nextPrefs);
       setStatus('active');
       setSavedAt(Date.now());
       setActionMessage('System alerts are active on this browser.');
@@ -2484,6 +2487,7 @@ function AlertsPage() {
       await saveWebAlertSubscription(nextPrefs, prefs.fcmToken);
       writeStoredJson(alertPrefsStorageKey, nextPrefs);
       setPrefs(nextPrefs);
+      setSyncedPrefs(nextPrefs);
       setStatus('active');
       setSavedAt(Date.now());
       setActionMessage('Alert preferences updated.');
@@ -2510,6 +2514,7 @@ function AlertsPage() {
       };
       writeStoredJson(alertPrefsStorageKey, nextPrefs);
       setPrefs(nextPrefs);
+      setSyncedPrefs(nextPrefs);
       setStatus(getInitialWebAlertStatus(nextPrefs));
       setSavedAt(Date.now());
       setActionMessage('Web alerts are turned off for this browser.');
@@ -2521,127 +2526,386 @@ function AlertsPage() {
     }
   };
 
+  const resetPrefs = () => {
+    setPrefs(syncedPrefs);
+    setSavedAt(null);
+    setActionMessage('Unsaved changes reset.');
+  };
+
+  const sendTestAlert = async () => {
+    setActionMessage('');
+    try {
+      if (!isActive) {
+        setActionMessage('Activate web alerts before sending a test notification.');
+        return;
+      }
+      if (getNotificationPermission() !== 'granted') {
+        setStatus(getNotificationPermission() === 'denied' ? 'blocked' : status);
+        setActionMessage('Notification permission is not currently allowed.');
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification('Polywatch test alert', {
+        body: `You will be notified for whale trades over ${formatUsdFull(prefs.minUsd)}.`,
+        icon: '/assets/polywatch-icon.png',
+        badge: '/assets/polywatch-icon.png',
+        tag: 'polywatch-test-alert',
+        data: { url: '/alerts' },
+      });
+      setActionMessage('Test alert sent to this browser.');
+    } catch (error) {
+      setActionMessage(error.message || 'Could not send the test alert.');
+    }
+  };
+
   const isActive = status === 'active' && Boolean(prefs.fcmToken);
   const isDenied = status === 'blocked';
   const isUnsupported = status === 'unsupported';
   const isMissingConfig = status === 'missing-config';
   const primaryDisabled = isWorking || isDenied || isUnsupported || isMissingConfig;
+  const hasUnsavedChanges = isActive && haveAlertPrefsChanged(prefs, syncedPrefs);
+  const serviceWorkerStatus = hasWebPushSupport() ? (isActive ? 'Registered' : 'Ready') : 'Unsupported';
+  const permissionLabel = getNotificationPermissionLabel();
+  const activeLabel = webAlertStatusLabel(status, isActive);
 
   return (
-    <div className="feed-shell detail-shell profile-shell">
+    <div className="feed-shell detail-shell profile-shell no-rail-shell">
       <FeedSidebar activePage="alerts" liveState="live" />
 
-      <main className="feed-main detail-main profile-main">
-        <header className="feed-topbar profile-topbar">
-          <div>
-            <div className="feed-breadcrumb">
-              <Bell size={14} aria-hidden="true" />
+      <main className="feed-main detail-main profile-main alerts-main">
+        <section className="alerts-setup-page">
+          <header className="alerts-page-header">
+            <div className="alerts-kicker">
+              <Bell size={13} aria-hidden="true" />
               Notifications - web
             </div>
             <h1>
-              Alerts <em>Setup</em>
+              Alerts <em>setup</em>
             </h1>
-          </div>
-        </header>
+            <p>Get notified when whales make significant trades.</p>
+          </header>
 
-        <section className="stats-strip detail-stats">
-          <StatBlock label="Android FCM" value="Live" />
-          <StatBlock label="Web Push" value={webAlertStatusLabel(status, isActive)} tone={isActive ? 'up' : 'down'} />
-          <StatBlock label="Following Mode" value={prefs.followingOnly ? 'On' : 'Off'} />
-          <StatBlock label="Minimum Size" value={formatUsdCompact(prefs.minUsd)} />
-        </section>
+          <AlertsStatusHero
+            active={isActive}
+            minSize={formatUsdFull(prefs.minUsd)}
+            lastAlertTimeAgo={savedAt ? relativeClientTime(savedAt) : null}
+            onTestAlert={sendTestAlert}
+            testDisabled={!isActive || isWorking}
+          />
 
-        <section className="profile-settings-grid alerts-grid">
-          <ProfilePanel icon={isActive ? Bell : BellOff} title="Web push status">
-            <p className="profile-panel-note">
-              Web alerts use the same backend alert matcher as Android, but this browser gets its own
-              Firebase Web Messaging token and service worker registration.
-            </p>
-            <div className="settings-list">
-              <SettingsRow icon={Bell} label="Current delivery" value={webAlertStatusLabel(status, isActive)} />
-              <SettingsRow icon={ShieldCheck} label="Permission" value={getNotificationPermissionLabel()} />
-              <SettingsRow icon={Clock} label="Quiet hours" value={prefs.quietHoursEnabled ? '10pm-7am local' : 'Off'} />
-            </div>
-            {actionMessage ? <p className="alert-status-message">{actionMessage}</p> : null}
-            {isDenied ? (
-              <BlockedNotificationHelp />
-            ) : null}
-            {isMissingConfig ? (
-              <p className="alert-warning-note">
-                Firebase web config is missing. Add the Vite Firebase web environment variables before activating.
-              </p>
-            ) : null}
-          </ProfilePanel>
+          <AlertsChannelGrid
+            channels={[
+              {
+                icon: Radio,
+                label: 'Web push',
+                value: activeLabel,
+                active: isActive,
+              },
+              {
+                icon: Users,
+                label: 'Following mode',
+                value: prefs.followingOnly ? 'On' : 'Off',
+                active: prefs.followingOnly,
+              },
+              {
+                icon: DollarSign,
+                label: 'Minimum size',
+                value: formatUsdCompact(prefs.minUsd),
+                active: true,
+                accent: true,
+              },
+            ]}
+          />
 
-          <ProfilePanel icon={SlidersHorizontal} title={isActive ? 'Alert preferences' : 'Activate alerts'}>
-            <div className="alert-control-stack">
-              <label className="range-control">
-                <span>
-                  <strong>Minimum size</strong>
-                  <small>{formatUsdFull(prefs.minUsd)}</small>
-                </span>
-                <input
-                  type="range"
-                  min="10000"
-                  max="500000"
-                  step="10000"
-                  value={prefs.minUsd}
-                  onChange={(event) => updatePrefs({ minUsd: Number(event.target.value) })}
-                />
-              </label>
-              <ToggleRow
-                title="Mega whale only"
-                subtitle="$250K+ trades only"
-                checked={prefs.megaOnly}
-                onChange={(value) => updatePrefs({ megaOnly: value })}
-              />
-              <ToggleRow
-                title="Following list only"
-                subtitle="Only traders you follow"
-                checked={prefs.followingOnly}
-                onChange={(value) => updatePrefs({ followingOnly: value })}
-              />
-              <ToggleRow
-                title="Quiet hours"
-                subtitle="10pm to 7am"
-                checked={prefs.quietHoursEnabled}
-                onChange={(value) => updatePrefs({ quietHoursEnabled: value })}
-              />
-              <div className="detail-action-row">
-                <button
-                  className="load-more-button"
-                  type="button"
-                  onClick={isActive ? savePrefs : activateAlerts}
-                  disabled={primaryDisabled}
-                >
-                  {isWorking ? 'Working...' : isActive ? 'Save changes' : 'Activate system alerts'}
-                </button>
-                {isActive ? (
-                  <button
-                    className="secondary-link-button danger-button"
-                    type="button"
-                    onClick={turnOffAlerts}
-                    disabled={isWorking}
-                  >
-                    Turn off web alerts
-                  </button>
-                ) : null}
-                {savedAt ? <span className="saved-note">Saved {relativeClientTime(savedAt)}</span> : null}
-              </div>
-            </div>
-          </ProfilePanel>
+          <section className="alerts-setup-grid">
+            <WebPushStatusCard
+              active={isActive}
+              status={activeLabel}
+              permission={permissionLabel}
+              quietHours={prefs.quietHoursEnabled ? '10pm-7am local' : 'Off'}
+              serviceWorkerStatus={serviceWorkerStatus}
+              actionMessage={actionMessage}
+              isDenied={isDenied}
+              isMissingConfig={isMissingConfig}
+              onTurnOff={turnOffAlerts}
+              disabled={!isActive || isWorking}
+            />
+
+            <AlertPreferencesCard
+              prefs={prefs}
+              active={isActive}
+              hasUnsavedChanges={hasUnsavedChanges}
+              isWorking={isWorking}
+              primaryDisabled={primaryDisabled}
+              savedAt={savedAt}
+              onActivate={activateAlerts}
+              onSave={savePrefs}
+              onReset={resetPrefs}
+              onUpdate={updatePrefs}
+            />
+          </section>
         </section>
       </main>
-
-      <DetailRail
-        title="Alert Parity"
-        items={[
-          ['Android', 'Mobile tokens keep using the existing FCM alert subscription path.'],
-          ['Web', 'Browser tokens subscribe through the same matcher without changing watcher output.'],
-          ['Following-only', 'The server already checks followed wallets for mobile alert subscriptions.'],
-        ]}
-      />
     </div>
+  );
+}
+
+function AlertsStatusHero({ active, minSize, lastAlertTimeAgo, onTestAlert, testDisabled }) {
+  return (
+    <section className="alerts-status-hero">
+      <div className="alerts-hero-icon">
+        <Bell size={18} aria-hidden="true" />
+        <span className={active ? 'active' : ''} aria-hidden="true" />
+      </div>
+      <div className="alerts-hero-copy">
+        <div className="alerts-hero-title">
+          <strong>{active ? 'Alerts are active' : 'Alerts are not active'}</strong>
+          {active ? <span>Live</span> : null}
+        </div>
+        <p>
+          {active ? 'You will get notified' : 'Activate browser notifications'} for whale trades over{' '}
+          <strong>{minSize}</strong>
+          {lastAlertTimeAgo ? (
+            <>
+              {' '}
+              - last update <strong>{lastAlertTimeAgo}</strong>
+            </>
+          ) : null}
+        </p>
+      </div>
+      <button className="alerts-ghost-button" type="button" onClick={onTestAlert} disabled={testDisabled}>
+        Send test alert
+      </button>
+    </section>
+  );
+}
+
+function AlertsChannelGrid({ channels }) {
+  return (
+    <section className="alerts-channel-grid">
+      {channels.map((channel) => (
+        <AlertsChannelCard key={channel.label} {...channel} />
+      ))}
+    </section>
+  );
+}
+
+function AlertsChannelCard({ icon: Icon, label, value, active, accent = false }) {
+  return (
+    <div className={`alerts-channel-card ${accent ? 'accent' : ''}`}>
+      <div className="alerts-channel-label">
+        <Icon size={12} aria-hidden="true" />
+        <span>{label}</span>
+      </div>
+      <div className="alerts-channel-value">
+        <strong>{value}</strong>
+        {!accent ? <span className={active ? 'active' : ''} aria-hidden="true" /> : null}
+      </div>
+    </div>
+  );
+}
+
+function WebPushStatusCard({
+  active,
+  status,
+  permission,
+  quietHours,
+  serviceWorkerStatus,
+  actionMessage,
+  isDenied,
+  isMissingConfig,
+  onTurnOff,
+  disabled,
+}) {
+  return (
+    <section className="alerts-panel alerts-web-status-card">
+      <div className="alerts-panel-heading">
+        <Radio size={14} aria-hidden="true" />
+        <span>Web push status</span>
+      </div>
+      <p>
+        This browser can receive system notifications for matching whale trades, even when the Polywatch
+        tab is not in front.
+      </p>
+
+      <div className="alerts-status-list">
+        <AlertsStatusListItem
+          icon={Bell}
+          label="Current delivery"
+          subtitle={active ? 'This browser is subscribed' : 'Not subscribed on this browser'}
+          status={status}
+          active={active}
+        />
+        <AlertsStatusListItem
+          icon={ShieldCheck}
+          label="Browser permission"
+          subtitle="Controlled by this browser's site settings"
+          status={permission}
+          active={permission === 'Allowed'}
+        />
+        <AlertsStatusListItem
+          icon={Clock}
+          label="Quiet hours"
+          subtitle="Suppresses matching alerts overnight"
+          status={quietHours}
+        />
+        <AlertsStatusListItem
+          icon={Activity}
+          label="Service worker"
+          subtitle="Handles delivery while the tab is closed"
+          status={serviceWorkerStatus}
+          active={serviceWorkerStatus === 'Registered'}
+          isLast
+        />
+      </div>
+
+      {actionMessage ? <p className="alert-status-message">{actionMessage}</p> : null}
+      {isDenied ? <BlockedNotificationHelp /> : null}
+      {isMissingConfig ? (
+        <p className="alert-warning-note">
+          Firebase web config is missing. Add the Vite Firebase web environment variables before activating.
+        </p>
+      ) : null}
+
+      <button className="alerts-danger-button" type="button" onClick={onTurnOff} disabled={disabled}>
+        Turn off web alerts
+      </button>
+    </section>
+  );
+}
+
+function AlertsStatusListItem({ icon: Icon, label, subtitle, status, active = false, isLast = false }) {
+  return (
+    <div className={`alerts-status-list-item ${isLast ? 'last' : ''}`}>
+      <span className={active ? 'active' : ''}>
+        <Icon size={14} aria-hidden="true" />
+      </span>
+      <div>
+        <strong>{label}</strong>
+        <small>{subtitle}</small>
+      </div>
+      <em className={active ? 'active' : ''}>
+        {active ? <i aria-hidden="true" /> : null}
+        {status}
+      </em>
+    </div>
+  );
+}
+
+function AlertPreferencesCard({
+  prefs,
+  active,
+  hasUnsavedChanges,
+  isWorking,
+  primaryDisabled,
+  savedAt,
+  onActivate,
+  onSave,
+  onReset,
+  onUpdate,
+}) {
+  return (
+    <section className="alerts-panel alerts-preferences-card">
+      <div className="alerts-preferences-heading">
+        <div>
+          <div className="alerts-panel-heading">
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            <span>Alert preferences</span>
+          </div>
+          <p>Tune what triggers a notification.</p>
+        </div>
+        {hasUnsavedChanges ? <span>Unsaved</span> : null}
+      </div>
+
+      <AlertMinSizeControl
+        value={prefs.minUsd}
+        formattedValue={formatUsdFull(prefs.minUsd)}
+        onChange={(value) => onUpdate({ minUsd: value })}
+      />
+      <AlertPreferenceToggle
+        label="Mega whales only"
+        subtitle="Trades $250K and above"
+        checked={prefs.megaOnly}
+        onChange={(value) => onUpdate({ megaOnly: value })}
+      />
+      <AlertPreferenceToggle
+        label="Following list only"
+        subtitle="Only traders you follow"
+        checked={prefs.followingOnly}
+        onChange={(value) => onUpdate({ followingOnly: value })}
+      />
+      <AlertPreferenceToggle
+        label="Quiet hours"
+        subtitle="No alerts 10:00 PM - 7:00 AM"
+        checked={prefs.quietHoursEnabled}
+        onChange={(value) => onUpdate({ quietHoursEnabled: value })}
+      />
+
+      <div className="alerts-action-row">
+        <button
+          className="alerts-primary-button"
+          type="button"
+          onClick={active ? onSave : onActivate}
+          disabled={primaryDisabled}
+        >
+          {isWorking ? 'Working...' : active ? 'Save changes' : 'Activate system alerts'}
+        </button>
+        {active ? (
+          <button className="alerts-reset-button" type="button" onClick={onReset} disabled={isWorking || !hasUnsavedChanges}>
+            Reset
+          </button>
+        ) : null}
+        {savedAt ? <span className="saved-note">Saved {relativeClientTime(savedAt)}</span> : null}
+      </div>
+    </section>
+  );
+}
+
+function AlertMinSizeControl({ value, formattedValue, onChange }) {
+  const min = 10000;
+  const max = 500000;
+  const fillPct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+
+  return (
+    <div className="alerts-min-size-control">
+      <div>
+        <span>
+          <strong>Minimum trade size</strong>
+          <small>Only alert me about trades above this</small>
+        </span>
+        <em>{formattedValue}</em>
+      </div>
+      <label className="alerts-slider" style={{ '--fill': `${fillPct}%` }}>
+        <span aria-hidden="true" />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step="10000"
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+      </label>
+      <div className="alerts-slider-ticks">
+        <span>$10K</span>
+        <span>$100K</span>
+        <span>$250K</span>
+        <span>$500K</span>
+      </div>
+    </div>
+  );
+}
+
+function AlertPreferenceToggle({ label, subtitle, checked, onChange }) {
+  return (
+    <label className="alerts-pref-toggle">
+      <span>
+        <strong>{label}</strong>
+        <small>{subtitle}</small>
+      </span>
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <em aria-hidden="true" />
+    </label>
   );
 }
 
@@ -5667,6 +5931,15 @@ function mergeServerAlertPrefs(current, subscription) {
     permission: getNotificationPermission(),
     lastSyncedAt: Date.now(),
   };
+}
+
+function haveAlertPrefsChanged(a, b) {
+  return (
+    Number(a?.minUsd || 0) !== Number(b?.minUsd || 0) ||
+    Boolean(a?.megaOnly) !== Boolean(b?.megaOnly) ||
+    Boolean(a?.followingOnly) !== Boolean(b?.followingOnly) ||
+    Boolean(a?.quietHoursEnabled) !== Boolean(b?.quietHoursEnabled)
+  );
 }
 
 function buildAlertQuietHours(prefs) {
