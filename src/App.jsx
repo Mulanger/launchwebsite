@@ -222,6 +222,50 @@ function WhaleFeedPage() {
   }, [filterKey, refreshNonce, todaySession.dateKey]);
 
   useEffect(() => {
+    if (apiFilter.following) return undefined;
+
+    let closed = false;
+    let inFlight = false;
+    const controller = new AbortController();
+
+    async function refreshDashboardSilently() {
+      if (closed || inFlight || document.hidden) return;
+      inFlight = true;
+
+      try {
+        const nextDashboard = await fetchTodayDashboard(apiFilter, { signal: controller.signal });
+        if (closed) return;
+
+        const incoming = Array.isArray(nextDashboard?.items) ? nextDashboard.items : [];
+        setDashboard(nextDashboard ?? null);
+        setItems((previous) => sortWhales(mergeWhales(incoming, previous), 'recent'));
+        setLastUpdatedAt(Date.now());
+        setError('');
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          // Keep the existing dashboard visible; the next interval or websocket update can recover.
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const interval = window.setInterval(refreshDashboardSilently, 30000);
+    const onVisible = () => {
+      if (!document.hidden) void refreshDashboardSilently();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      closed = true;
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [apiFilter, filterKey, todaySession.dateKey]);
+
+  useEffect(() => {
     let closed = false;
     let socket;
     let retryTimer;
@@ -662,6 +706,55 @@ function LeaderboardPage() {
     loadLeaderboard();
     return () => controller.abort();
   }, [refreshNonce, todaySession.dateKey]);
+
+  useEffect(() => {
+    let closed = false;
+    let inFlight = false;
+    const controller = new AbortController();
+
+    async function refreshLeaderboardSilently() {
+      if (closed || inFlight || document.hidden) return;
+      inFlight = true;
+
+      try {
+        const dashboard = await fetchTodayDashboard(
+          { minUsd: 10000 },
+          { signal: controller.signal, leaderboardLimit: 100 }
+        );
+        if (closed) return;
+
+        const trades = Array.isArray(dashboard?.items) ? dashboard.items : [];
+        setSourceTrades((previous) => mergeWhales(trades, previous));
+        if (Array.isArray(dashboard?.leaderboard)) {
+          setItems(dashboard.leaderboard);
+        } else {
+          setItems(buildTodayLeaderboardFromTrades(trades, Date.now()));
+        }
+        setAsOf(dashboard?.asOf ?? Math.floor(Date.now() / 1000));
+        setError('');
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          // The visible leaderboard remains usable; the next interval will retry.
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const interval = window.setInterval(refreshLeaderboardSilently, 30000);
+    const onVisible = () => {
+      if (!document.hidden) void refreshLeaderboardSilently();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      closed = true;
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [todaySession.dateKey]);
 
   const selectedWindow = useMemo(
     () => leaderboardWindows.find((option) => option.id === windowId) ?? leaderboardWindows[0],
