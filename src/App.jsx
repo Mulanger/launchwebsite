@@ -1610,7 +1610,6 @@ function TradeMarketDetailCard({ trade, market }) {
   const fallbackNoPrice = outcome === 'NO' ? executionPrice : Math.max(0, 100 - executionPrice);
   const yesPrice = Number(market.yesPriceCents ?? trade.market?.yesPriceCents ?? fallbackYesPrice);
   const noPrice = Number(market.noPriceCents ?? trade.market?.noPriceCents ?? fallbackNoPrice);
-  const priceHistory = market.priceHistory || buildFallbackPriceHistory(trade);
   const polymarketUrl = market.polymarketUrl || trade.polymarketUrl || trade.market?.polymarketUrl || '#';
 
   return (
@@ -1635,13 +1634,11 @@ function TradeMarketDetailCard({ trade, market }) {
         <OutcomeDetailCard
           label="YES"
           price={yesPrice}
-          change={priceHistory.yesChange24hCents}
           tone="yes"
         />
         <OutcomeDetailCard
           label="NO"
           price={noPrice}
-          change={priceHistory.noChange24hCents}
           tone="no"
         />
       </div>
@@ -1649,17 +1646,12 @@ function TradeMarketDetailCard({ trade, market }) {
   );
 }
 
-function OutcomeDetailCard({ label, price, change, tone }) {
-  const numericChange = Number(change);
-  const hasChange = Number.isFinite(numericChange);
+function OutcomeDetailCard({ label, price, tone }) {
   return (
     <div className={`trade-outcome-card ${tone || ''}`}>
       <span>{label}</span>
       <div>
         <strong>{trimNumber(Number(price || 0))}c</strong>
-        <small className={hasChange && numericChange < 0 ? 'down' : 'up'}>
-          {hasChange ? `${numericChange >= 0 ? '+' : ''}${trimNumber(numericChange)}c` : 'Live'}
-        </small>
       </div>
     </div>
   );
@@ -3364,7 +3356,8 @@ function FeedSidebar({ activePage, liveState }) {
       label: 'Leaderboard',
       href: '/leaderboard',
       icon: BarChart3,
-      badge: '7d',
+      badgeIcon: Trophy,
+      badgeLabel: 'Leaderboard',
       active: activePage === 'leaderboard',
     },
     {
@@ -3433,12 +3426,14 @@ function FeedSidebar({ activePage, liveState }) {
   );
 }
 
-function NavItem({ label, href, icon: Icon, badge, active = false }) {
+function NavItem({ label, href, icon: Icon, badge, badgeIcon: BadgeIcon, badgeLabel, active = false }) {
   return (
     <a className={`feed-nav-item ${active ? 'active' : ''}`} href={href}>
       <Icon size={17} aria-hidden="true" />
       <span>{label}</span>
-      <small>{badge}</small>
+      <small className={BadgeIcon ? 'icon-badge' : ''} aria-label={badgeLabel || badge}>
+        {BadgeIcon ? <BadgeIcon size={12} aria-hidden="true" /> : badge}
+      </small>
     </a>
   );
 }
@@ -7228,17 +7223,6 @@ function formatScenarioValue(value) {
 
 function formatTierLabel(tier) {
   return String(tier || 'whale').trim().toUpperCase();
-}
-
-function buildFallbackPriceHistory(trade) {
-  const price = getPriceValue(trade || {});
-  return {
-    source: 'current_trade',
-    points: [{ id: trade?.id || 'current', timestamp: trade?.timestamp, price }],
-    tradeIndex: 0,
-    yesChange24hCents: null,
-    noChange24hCents: null,
-  };
 }
 
 function shortHash(hash) {
