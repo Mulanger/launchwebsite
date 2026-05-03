@@ -1436,6 +1436,395 @@ img {
   padding-bottom: 34px;
 }
 
+.leaderboard-desktop-card {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 28px;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 16px;
+  background: #0a0a0a;
+}
+
+.leaderboard-desktop-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.leaderboard-desktop-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.leaderboard-desktop-kicker svg {
+  color: var(--accent);
+}
+
+.leaderboard-desktop-header h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(30px, 3vw, 42px);
+  font-weight: 850;
+  letter-spacing: -0.045em;
+  line-height: 0.96;
+}
+
+.leaderboard-desktop-header h1 em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.leaderboard-refresh-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.leaderboard-refresh-button:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.leaderboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.leaderboard-summary-stat {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.leaderboard-summary-stat.primary {
+  border-color: rgba(34, 211, 165, 0.18);
+  background: linear-gradient(180deg, rgba(34, 211, 165, 0.06), rgba(34, 211, 165, 0));
+}
+
+.leaderboard-summary-stat.accent {
+  border-color: rgba(34, 211, 165, 0.18);
+}
+
+.leaderboard-summary-stat span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.leaderboard-summary-stat.accent span,
+.leaderboard-summary-stat.accent strong {
+  color: var(--accent);
+}
+
+.leaderboard-summary-stat strong {
+  display: block;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 850;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.leaderboard-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.leaderboard-window-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.leaderboard-window-toggle button {
+  min-width: 56px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.62);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.leaderboard-window-toggle button:hover {
+  color: var(--text);
+}
+
+.leaderboard-window-toggle button.active {
+  color: #0a3a2a;
+  background: var(--accent);
+}
+
+.leaderboard-control-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.leaderboard-search {
+  width: 180px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.04);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.leaderboard-search:focus-within {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.leaderboard-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.leaderboard-search input::placeholder {
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.leaderboard-filter-button,
+.desktop-redesign-sort .sort-menu-trigger {
+  min-height: 34px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.leaderboard-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  font-weight: 800;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.leaderboard-filter-button:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.leaderboard-desktop-table {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.leaderboard-desktop-table-head,
+.leaderboard-desktop-row {
+  display: grid;
+  grid-template-columns: 60px minmax(220px, 1fr) minmax(160px, 200px) 100px 120px 80px;
+  gap: 16px;
+  align-items: center;
+}
+
+.leaderboard-desktop-table-head {
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.leaderboard-desktop-table-head span:nth-child(4),
+.leaderboard-desktop-table-head span:nth-child(5) {
+  text-align: right;
+}
+
+.leaderboard-desktop-row {
+  min-height: 64px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.leaderboard-desktop-row.last {
+  border-bottom: 0;
+}
+
+.leaderboard-desktop-row:hover {
+  transform: translateX(2px);
+  background-color: rgba(255, 255, 255, 0.035) !important;
+}
+
+.leaderboard-desktop-rank {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.leaderboard-desktop-rank.crown-rank {
+  padding-left: 0;
+  font-size: 16px;
+}
+
+.leaderboard-desktop-trader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.leaderboard-desktop-trader .trader-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.leaderboard-desktop-trader strong,
+.leaderboard-desktop-trader span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-desktop-trader strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.leaderboard-desktop-trader span {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.leaderboard-desktop-volume {
+  min-width: 0;
+}
+
+.leaderboard-desktop-volume strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.leaderboard-desktop-number {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+  text-align: right;
+}
+
+.leaderboard-desktop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.leaderboard-desktop-actions button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.leaderboard-desktop-actions button:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.leaderboard-footer-action {
+  margin-top: 16px;
+}
+
 .leaderboard-topbar .feed-breadcrumb svg {
   color: var(--accent);
 }

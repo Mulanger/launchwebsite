@@ -66,13 +66,14 @@ const feedSortOptions = [
 ];
 
 const leaderboardWindows = [
-  { id: '7d', label: '7D', caption: 'Last 7 days' },
+  { id: '1d', label: '1D', caption: "Today's New York session" },
+  { id: '7d', label: '7D', caption: 'Last 7 New York days' },
   { id: '30d', label: '30D', caption: 'Last 30 days' },
   { id: '365d', label: '1Y', caption: 'Last 365 days' },
 ];
 
 const leaderboardSortOptions = [
-  { id: 'rank', label: 'Rank' },
+  { id: 'rank', label: 'Volume' },
   { id: 'trades', label: 'Trade count' },
 ];
 
@@ -640,11 +641,10 @@ function LeaderboardPage() {
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     window.matchMedia('(max-width: 1020px)').matches
   );
-  const [windowId, setWindowId] = useState('7d');
+  const [windowId, setWindowId] = useState('1d');
   const [sort, setSort] = useState('rank');
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
-  const [sourceTrades, setSourceTrades] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [asOf, setAsOf] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -683,15 +683,10 @@ function LeaderboardPage() {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchTodayDashboardWithFallback(
-          { minUsd: 10000 },
-          { signal: controller.signal, leaderboardLimit: 100 }
-        );
-        const trades = Array.isArray(data.items) ? data.items : [];
-        setSourceTrades(trades);
-        setItems(Array.isArray(data.dashboard?.leaderboard) ? data.dashboard.leaderboard : buildTodayLeaderboardFromTrades(trades, Date.now()));
+        const data = await fetchLeaderboardPage(windowId, null, { signal: controller.signal, limit: 100 });
+        setItems(Array.isArray(data.items) ? data.items : []);
         setCursor(data.nextCursor ?? null);
-        setAsOf(data.dashboard?.asOf ?? Math.floor(Date.now() / 1000));
+        setAsOf(data.asOf ?? Math.floor(Date.now() / 1000));
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Failed to load leaderboard.');
@@ -705,7 +700,7 @@ function LeaderboardPage() {
 
     loadLeaderboard();
     return () => controller.abort();
-  }, [refreshNonce, todaySession.dateKey]);
+  }, [windowId, refreshNonce, todaySession.dateKey]);
 
   useEffect(() => {
     let closed = false;
@@ -717,20 +712,12 @@ function LeaderboardPage() {
       inFlight = true;
 
       try {
-        const dashboard = await fetchTodayDashboard(
-          { minUsd: 10000 },
-          { signal: controller.signal, leaderboardLimit: 100 }
-        );
+        const data = await fetchLeaderboardPage(windowId, null, { signal: controller.signal, limit: 100 });
         if (closed) return;
 
-        const trades = Array.isArray(dashboard?.items) ? dashboard.items : [];
-        setSourceTrades((previous) => mergeWhales(trades, previous));
-        if (Array.isArray(dashboard?.leaderboard)) {
-          setItems(dashboard.leaderboard);
-        } else {
-          setItems(buildTodayLeaderboardFromTrades(trades, Date.now()));
-        }
-        setAsOf(dashboard?.asOf ?? Math.floor(Date.now() / 1000));
+        setItems(Array.isArray(data.items) ? data.items : []);
+        setCursor(data.nextCursor ?? null);
+        setAsOf(data.asOf ?? Math.floor(Date.now() / 1000));
         setError('');
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -754,7 +741,7 @@ function LeaderboardPage() {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [todaySession.dateKey]);
+  }, [windowId, todaySession.dateKey]);
 
   const selectedWindow = useMemo(
     () => leaderboardWindows.find((option) => option.id === windowId) ?? leaderboardWindows[0],
@@ -770,6 +757,24 @@ function LeaderboardPage() {
   }, [items, search, sort]);
 
   const stats = useMemo(() => buildLeaderboardStats(items), [items]);
+  const desktopWallets = useMemo(
+    () =>
+      visibleItems.map((trader, index) => ({
+        rank: Number(trader.rank) || index + 1,
+        name: leaderboardTraderName(trader),
+        address: shortWallet(trader.proxyWallet),
+        walletFull: trader.proxyWallet || '',
+        volume: formatUsdCompact(trader.volume),
+        volumeNumeric: Number(trader.volume || 0),
+        trades: formatNumber(trader.tradeCount),
+        avgTrade: formatUsdCompact(
+          Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0))
+        ),
+        avatarColor: avatarGradient(trader.proxyWallet || `${index}`),
+        href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
+      })),
+    [visibleItems]
+  );
   const mobileRows = useMemo(
     () =>
       visibleItems.map((trader, index) => ({
@@ -795,20 +800,17 @@ function LeaderboardPage() {
     setLoadingMore(true);
     setError('');
     try {
-      const data = await fetchWhalesForFilter({ minUsd: 10000 }, cursor);
+      const data = await fetchLeaderboardPage(windowId, cursor, { limit: 100 });
       const incoming = Array.isArray(data.items) ? data.items : [];
-      const reachedPreviousSession = incoming.some((trade) => !isInNewYorkSession(trade.timestamp, todaySession.dateKey));
-      const mergedTrades = mergeWhales(sourceTrades, incoming);
-      setSourceTrades(mergedTrades);
-      setItems(buildTodayLeaderboardFromTrades(mergedTrades, Date.now()));
-      setCursor(reachedPreviousSession ? null : data.nextCursor ?? null);
-      setAsOf(Math.floor(Date.now() / 1000));
+      setItems((previous) => mergeLeaderboardItems(previous, incoming));
+      setCursor(data.nextCursor ?? null);
+      setAsOf(data.asOf ?? Math.floor(Date.now() / 1000));
     } catch (err) {
       setError(err.message || 'Failed to load more leaderboard rows.');
     } finally {
       setLoadingMore(false);
     }
-  }, [cursor, loadingMore, sourceTrades, todaySession.dateKey]);
+  }, [windowId, cursor, loadingMore]);
 
   if (isMobileViewport) {
     return (
@@ -821,6 +823,7 @@ function LeaderboardPage() {
         onSortChange={setSort}
         loading={loading}
         error={error}
+        onRefresh={() => setRefreshNonce((value) => value + 1)}
         canLoadMore={Boolean(cursor)}
         loadingMore={loadingMore}
         onLoadMore={loadMore}
@@ -839,61 +842,27 @@ function LeaderboardPage() {
       <FeedSidebar activePage="leaderboard" liveState="live" />
 
       <main className="feed-main leaderboard-main">
-        <header className="feed-topbar leaderboard-topbar">
-          <div>
-            <div className="feed-breadcrumb">
-              <Trophy size={14} aria-hidden="true" />
-              Ranked wallets - today's New York session
-            </div>
-            <h1>
-              Leaderboard <em>1D</em>
-            </h1>
-          </div>
-
-          <div className="feed-topbar-actions">
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setRefreshNonce((value) => value + 1)}
-              aria-label="Refresh leaderboard"
-              title="Refresh"
-            >
-              <RefreshCw size={17} aria-hidden="true" />
-            </button>
-          </div>
-        </header>
-
-        <section className="filter-row" aria-label="Leaderboard filters">
-          <div className="pill-group">
-            {leaderboardWindows.map((option) => (
-              <WindowFilterButton
-                key={option.id}
-                option={option.id === '7d' ? { ...option, label: '1D', caption: "Today's New York session" } : option}
-                active={windowId === option.id}
-                onSelect={setWindowId}
-              />
-            ))}
-          </div>
-
-          <SortMenu
-            value={sort}
-            onChange={setSort}
-            options={leaderboardSortOptions}
-            className="leaderboard-sort"
+        <section className="leaderboard-desktop-card" aria-live="polite">
+          <LeaderboardDesktopHeader
+            timeframe={selectedWindow.label}
+            caption={selectedWindow.caption}
+            onRefresh={() => setRefreshNonce((value) => value + 1)}
           />
-        </section>
-
-        <section className="leaderboard-table" aria-live="polite">
-          <div className="leaderboard-table-head">
-            <span>Rank</span>
-            <span>Trader</span>
-            <span>Whale volume</span>
-            <span>Trades</span>
-            <span>Avg trade</span>
-          </div>
+          <LeaderboardSummaryCards stats={stats} />
+          <LeaderboardControlBar
+            windowId={windowId}
+            sort={sort}
+            search={search}
+            onWindowChange={setWindowId}
+            onSortChange={setSort}
+            onSearchChange={setSearch}
+            onFilter={() => setSearch('')}
+          />
 
           {loading ? (
-            <LeaderboardSkeleton />
+            <section className="leaderboard-table" aria-label="Loading leaderboard">
+              <LeaderboardSkeleton />
+            </section>
           ) : error && visibleItems.length === 0 ? (
             <EmptyState
               title="Leaderboard unavailable"
@@ -909,30 +878,21 @@ function LeaderboardPage() {
               onAction={() => setSearch('')}
             />
           ) : (
-            <div className="leaderboard-list">
-              {visibleItems.map((trader, index) => (
-                <LeaderboardRow
-                  key={trader.proxyWallet}
-                  trader={trader}
-                  index={index}
-                  maxVolume={stats.topVolume}
-                />
-              ))}
-            </div>
+            <LeaderboardDesktopTable wallets={desktopWallets} />
           )}
-        </section>
 
-        <div className="feed-footer-action">
-          {error && visibleItems.length > 0 ? <span>{error}</span> : null}
-          <button
-            className="load-more-button"
-            type="button"
-            disabled={!cursor || loadingMore}
-            onClick={loadMore}
-          >
-            {loadingMore ? 'Loading...' : cursor ? 'Load more ranked traders' : 'End of leaderboard'}
-          </button>
-        </div>
+          <div className="feed-footer-action leaderboard-footer-action">
+            {error && visibleItems.length > 0 ? <span>{error}</span> : null}
+            <button
+              className="load-more-button"
+              type="button"
+              disabled={!cursor || loadingMore}
+              onClick={loadMore}
+            >
+              {loadingMore ? 'Loading...' : cursor ? 'Load more ranked traders' : 'End of leaderboard'}
+            </button>
+          </div>
+        </section>
       </main>
 
     </div>
@@ -948,6 +908,7 @@ function MobileLeaderboardScreen({
   onSortChange,
   loading,
   error,
+  onRefresh,
   canLoadMore,
   loadingMore,
   onLoadMore,
@@ -980,24 +941,20 @@ function MobileLeaderboardScreen({
           >
             {leaderboardWindows.map((option) => (
               (() => {
-                const locked = option.id !== '7d';
                 return (
                   <button
                     key={option.id}
                     type="button"
-                    aria-disabled={locked}
-                    title={locked ? 'Coming soon' : option.caption}
-                    onClick={() => {
-                      if (!locked) onWindowChange(option.id);
-                    }}
+                    title={option.caption}
+                    onClick={() => onWindowChange(option.id)}
                     style={{
                       padding: '6px 14px',
                       borderRadius: 999,
                       fontSize: 11.5,
                       fontWeight: 600,
-                      cursor: locked ? 'not-allowed' : 'pointer',
+                      cursor: 'pointer',
                       border: 0,
-                      opacity: locked ? 0.72 : 1,
+                      opacity: 1,
                       background: windowId === option.id ? '#22d3a5' : 'transparent',
                       color: windowId === option.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
                       display: 'inline-flex',
@@ -1005,8 +962,7 @@ function MobileLeaderboardScreen({
                       gap: 5,
                     }}
                   >
-                    <span>{option.id === '7d' ? '1D' : option.label}</span>
-                    {locked ? <LockKeyhole size={10} /> : null}
+                    <span>{option.label}</span>
                   </button>
                 );
               })()
@@ -2145,22 +2101,267 @@ function SortMenu({ value, onChange, options, className = '' }) {
 }
 
 function WindowFilterButton({ option, active, onSelect }) {
-  const locked = option.id !== '7d';
-
   return (
     <button
-      className={`filter-pill window-pill ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
+      className={`filter-pill window-pill ${active ? 'active' : ''}`}
       type="button"
-      aria-disabled={locked}
-      title={locked ? 'Coming soon' : option.caption}
-      onClick={() => {
-        if (!locked) onSelect(option.id);
-      }}
+      title={option.caption}
+      onClick={() => onSelect(option.id)}
     >
       <span>{option.label}</span>
-      {locked ? <LockKeyhole className="locked-icon" size={13} aria-hidden="true" /> : null}
-      {locked ? <span className="locked-tooltip">Coming soon</span> : null}
     </button>
+  );
+}
+
+function LeaderboardDesktopHeader({ timeframe, caption, onRefresh }) {
+  return (
+    <header className="leaderboard-desktop-header">
+      <div>
+        <div className="leaderboard-desktop-kicker">
+          <Trophy size={14} aria-hidden="true" />
+          Ranked wallets - {caption}
+        </div>
+        <h1>
+          Leaderboard <em>{timeframe}</em>
+        </h1>
+      </div>
+
+      <button
+        className="leaderboard-refresh-button"
+        type="button"
+        onClick={onRefresh}
+        aria-label="Refresh leaderboard"
+        title="Refresh"
+      >
+        <RefreshCw size={15} aria-hidden="true" />
+      </button>
+    </header>
+  );
+}
+
+function LeaderboardSummaryCards({ stats }) {
+  return (
+    <section className="leaderboard-summary-grid" aria-label="Leaderboard summary">
+      <LeaderboardSummaryCard label="Session volume" value={formatUsdCompact(stats.volume)} primary />
+      <LeaderboardSummaryCard label="Ranked wallets" value={formatNumber(stats.traders)} />
+      <LeaderboardSummaryCard label="Total trades" value={formatNumber(stats.trades)} />
+      <LeaderboardSummaryCard label="Top wallet" value={formatUsdCompact(stats.topVolume)} accent />
+    </section>
+  );
+}
+
+function LeaderboardSummaryCard({ label, value, primary = false, accent = false }) {
+  return (
+    <div className={`leaderboard-summary-stat ${primary ? 'primary' : ''} ${accent ? 'accent' : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function LeaderboardControlBar({
+  windowId,
+  sort,
+  search,
+  onWindowChange,
+  onSortChange,
+  onSearchChange,
+  onFilter,
+}) {
+  return (
+    <section className="leaderboard-controls" aria-label="Leaderboard controls">
+      <div className="leaderboard-window-toggle">
+        {leaderboardWindows.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={windowId === option.id ? 'active' : ''}
+            onClick={() => onWindowChange(option.id)}
+            title={option.caption}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="leaderboard-control-actions">
+        <label className="leaderboard-search">
+          <Search size={13} aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Search wallet"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </label>
+
+        <button className="leaderboard-filter-button" type="button" onClick={onFilter}>
+          <SlidersHorizontal size={13} aria-hidden="true" />
+          Filter
+        </button>
+
+        <SortMenu
+          value={sort}
+          onChange={onSortChange}
+          options={leaderboardSortOptions}
+          className="leaderboard-sort desktop-redesign-sort"
+        />
+      </div>
+    </section>
+  );
+}
+
+function LeaderboardDesktopTable({ wallets }) {
+  const maxVolume = Math.max(...wallets.map((wallet) => wallet.volumeNumeric || 0), 1);
+
+  return (
+    <section className="leaderboard-desktop-table">
+      <div className="leaderboard-desktop-table-head">
+        <span>Rank</span>
+        <span>Trader</span>
+        <span>Whale volume</span>
+        <span>Trades</span>
+        <span>Avg trade</span>
+        <span />
+      </div>
+
+      <div className="leaderboard-desktop-list">
+        {wallets.map((wallet, index) => (
+          <LeaderboardDesktopRow
+            key={wallet.walletFull || wallet.rank}
+            wallet={wallet}
+            maxVolume={maxVolume}
+            isLast={index === wallets.length - 1}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const leaderboardRankThemes = {
+  1: {
+    rowGradient: 'linear-gradient(90deg, rgba(255, 200, 60, 0.06), transparent 42%)',
+    rankColor: '#ffc83c',
+    showCrown: true,
+  },
+  2: {
+    rowGradient: 'linear-gradient(90deg, rgba(200, 200, 208, 0.045), transparent 42%)',
+    rankColor: '#c8c8d0',
+    showCrown: false,
+  },
+  3: {
+    rowGradient: 'linear-gradient(90deg, rgba(214, 138, 90, 0.055), transparent 42%)',
+    rankColor: '#d68a5a',
+    showCrown: false,
+  },
+  default: {
+    rowGradient: 'transparent',
+    rankColor: 'rgba(255, 255, 255, 0.4)',
+    showCrown: false,
+  },
+};
+
+function getLeaderboardRankTheme(rank) {
+  return leaderboardRankThemes[rank] || leaderboardRankThemes.default;
+}
+
+function LeaderboardDesktopRow({ wallet, maxVolume, isLast }) {
+  const theme = getLeaderboardRankTheme(wallet.rank);
+  const barWidth = maxVolume > 0 ? Math.max(2, (wallet.volumeNumeric / maxVolume) * 100) : 0;
+  const openWallet = () => {
+    if (wallet.href) window.location.href = wallet.href;
+  };
+
+  return (
+    <motion.article
+      className={`leaderboard-desktop-row ${isLast ? 'last' : ''}`}
+      style={{ background: theme.rowGradient }}
+      role={wallet.href ? 'link' : undefined}
+      tabIndex={wallet.href ? 0 : undefined}
+      onClick={openWallet}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') openWallet();
+      }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, delay: Math.min((wallet.rank - 1) * 0.015, 0.16) }}
+    >
+      <LeaderboardDesktopRank rank={wallet.rank} theme={theme} />
+
+      <div className="leaderboard-desktop-trader">
+        <div className="trader-avatar fallback" style={{ background: wallet.avatarColor }} aria-hidden="true" />
+        <div>
+          <strong>{wallet.name}</strong>
+          <span title={wallet.walletFull}>{wallet.address}</span>
+        </div>
+      </div>
+
+      <div className="leaderboard-desktop-volume">
+        <strong>{wallet.volume}</strong>
+        <div className="volume-track" aria-hidden="true">
+          <span style={{ width: `${barWidth}%` }} />
+        </div>
+      </div>
+
+      <div className="leaderboard-desktop-number">{wallet.trades}</div>
+      <div className="leaderboard-desktop-number">{wallet.avgTrade}</div>
+
+      <div className="leaderboard-desktop-actions">
+        <button
+          type="button"
+          aria-label={`Follow ${wallet.name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!wallet.walletFull) return;
+            const walletKey = wallet.walletFull.toLowerCase();
+            const next = !isWalletFollowedLocally(walletKey);
+            setWalletFollowedLocally(walletKey, next);
+            notifyFollowsChanged();
+            setWalletFollowedOnServer(walletKey, next).catch(() => {
+              setWalletFollowedLocally(walletKey, !next);
+              notifyFollowsChanged();
+            });
+          }}
+        >
+          <UserPlus size={13} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label={`Open ${wallet.name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            openWallet();
+          }}
+        >
+          <ExternalLink size={13} aria-hidden="true" />
+        </button>
+      </div>
+    </motion.article>
+  );
+}
+
+function LeaderboardDesktopRank({ rank, theme }) {
+  if (theme.showCrown) {
+    return (
+      <div className="leaderboard-desktop-rank crown-rank" style={{ color: theme.rankColor }}>
+        <svg width="14" height="10" viewBox="0 0 22 14" fill="none" aria-hidden="true">
+          <path
+            d="M2 12 L4 4 L8 8 L11 2 L14 8 L18 4 L20 12 Z"
+            fill={theme.rankColor}
+            strokeLinejoin="round"
+          />
+          <rect x="2" y="11" width="18" height="2" fill={theme.rankColor} />
+        </svg>
+        <span>{rank}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="leaderboard-desktop-rank" style={{ color: theme.rankColor }}>
+      <span>{rank}</span>
+    </div>
   );
 }
 
@@ -4239,6 +4440,11 @@ async function fetchTodayDashboard(filter, options = {}) {
   return fetchJson(buildDashboardTodayPath(filter, { recentLimit, leaderboardLimit }), requestOptions);
 }
 
+async function fetchLeaderboardPage(windowId, cursor = null, options = {}) {
+  const { limit, ...requestOptions } = options;
+  return fetchJson(buildLeaderboardPath(windowId, cursor, limit), requestOptions);
+}
+
 async function fetchJson(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -4543,10 +4749,10 @@ function buildWhalesPath(filter, cursor = null) {
   return `/v1/whales?${params.toString()}`;
 }
 
-function buildLeaderboardPath(windowId, cursor = null) {
+function buildLeaderboardPath(windowId, cursor = null, limit = 50) {
   const params = new URLSearchParams();
   params.set('window', windowId);
-  params.set('limit', '50');
+  params.set('limit', String(limit || 50));
   if (cursor) params.set('cursor', cursor);
   return `/v1/leaderboard?${params.toString()}`;
 }
