@@ -175,8 +175,82 @@ function App() {
   return (
     <>
       {page}
+      <ScrollToTopButton />
       <WebAlertToast toast={webAlertToast} onClose={() => setWebAlertToast(null)} />
     </>
+  );
+}
+
+function ScrollToTopButton({
+  threshold = 400,
+  bottom = null,
+  right = 24,
+  container = null,
+  onClick,
+}) {
+  const [visible, setVisible] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 760px)').matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    const target = container?.current || window;
+    const getScroll = () => (container?.current ? container.current.scrollTop : window.scrollY);
+    const handleScroll = () => setVisible(getScroll() > threshold);
+
+    target.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => target.removeEventListener('scroll', handleScroll);
+  }, [threshold, container]);
+
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+      return;
+    }
+
+    if (container?.current) {
+      container.current.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const effectiveBottom = bottom ?? (isMobileViewport ? 82 : 24);
+
+  return (
+    <button
+      type="button"
+      className={`scroll-to-top-button ${visible ? 'visible' : ''}`}
+      aria-label="Scroll to top"
+      onClick={handleClick}
+      style={{
+        bottom: `${effectiveBottom}px`,
+        right: `${right}px`,
+      }}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        aria-hidden="true"
+      >
+        <line x1="12" y1="19" x2="12" y2="5" />
+        <polyline points="5 12 12 5 19 12" />
+      </svg>
+    </button>
   );
 }
 
