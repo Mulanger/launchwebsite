@@ -1743,6 +1743,9 @@ function OnChainDetailRow({ label, value, href }) {
 
 function TraderProfilePage({ wallet }) {
   const normalizedWallet = wallet.toLowerCase();
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 1020px)').matches
+  );
   const [profile, setProfile] = useState(null);
   const [windowId, setWindowId] = useState(() => {
     const queryWindow = new URLSearchParams(window.location.search).get('window');
@@ -1751,6 +1754,14 @@ function TraderProfilePage({ wallet }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1020px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1780,6 +1791,22 @@ function TraderProfilePage({ wallet }) {
 
   const stats = profile ? getProfileStats(profile, windowId) : emptyProfileStats();
   const profileWallet = profile?.proxyWallet || normalizedWallet;
+  const retry = () => setRefreshNonce((value) => value + 1);
+
+  if (isMobileViewport) {
+    return (
+      <MobileWalletProfileScreen
+        profile={profile}
+        wallet={profileWallet}
+        stats={stats}
+        windowId={windowId}
+        onWindowChange={setWindowId}
+        loading={loading}
+        error={error}
+        onRetry={retry}
+      />
+    );
+  }
 
   return (
     <div className="feed-shell detail-shell no-rail-shell">
@@ -1793,7 +1820,7 @@ function TraderProfilePage({ wallet }) {
             title="Trader unavailable"
             body={error || 'This trader could not be found.'}
             actionLabel="Try again"
-            onAction={() => setRefreshNonce((value) => value + 1)}
+            onAction={retry}
           />
         ) : (
           <WalletProfileRedesign
@@ -1802,7 +1829,7 @@ function TraderProfilePage({ wallet }) {
             stats={stats}
             windowId={windowId}
             onWindowChange={setWindowId}
-            onRefresh={() => setRefreshNonce((value) => value + 1)}
+            onRefresh={retry}
           />
         )}
       </main>
@@ -1810,16 +1837,62 @@ function TraderProfilePage({ wallet }) {
   );
 }
 
-function WalletProfileRedesign({ profile, wallet, stats, windowId, onWindowChange, onRefresh }) {
+function MobileWalletProfileScreen({
+  profile,
+  wallet,
+  stats,
+  windowId,
+  onWindowChange,
+  loading,
+  error,
+  onRetry,
+}) {
+  const handleTabChange = (tab) => {
+    if (tab === 'leaders') window.location.href = '/leaderboard';
+    if (tab === 'feed') window.location.href = '/';
+    if (tab === 'following') window.location.href = '/profile/following';
+    if (tab === 'alerts') window.location.href = '/alerts';
+  };
+
+  return (
+    <div className="wallet-profile-mobile-screen">
+      <div className="wallet-profile-mobile-content">
+        {loading ? (
+          <DetailSkeleton title="Loading trader" />
+        ) : error || !profile ? (
+          <EmptyState
+            title="Trader unavailable"
+            body={error || 'This trader could not be found.'}
+            actionLabel="Try again"
+            onAction={onRetry}
+          />
+        ) : (
+          <WalletProfileRedesign
+            profile={profile}
+            wallet={wallet}
+            stats={stats}
+            windowId={windowId}
+            onWindowChange={onWindowChange}
+            onRefresh={onRetry}
+            mobile
+          />
+        )}
+      </div>
+      <MobileBottomNav activeTab="leaders" onTabChange={handleTabChange} />
+    </div>
+  );
+}
+
+function WalletProfileRedesign({ profile, wallet, stats, windowId, onWindowChange, onRefresh, mobile = false }) {
   const dailyVolume = buildWalletDailyVolume(profile.dailyVolume || []);
   const volumeMix = buildWalletVolumeMix(stats);
   const recentTrades = Array.isArray(profile.recentWhales) ? profile.recentWhales : [];
 
   return (
-    <section className="wallet-profile-page">
+    <section className={`wallet-profile-page ${mobile ? 'mobile' : ''}`}>
       <a className="trade-detail-back wallet-profile-back" href="/leaderboard">
         <ArrowLeft size={13} aria-hidden="true" />
-        Back to leaderboard
+        {mobile ? 'Back' : 'Back to leaderboard'}
       </a>
 
       <WalletProfileHero profile={profile} wallet={wallet} windowId={windowId} />
