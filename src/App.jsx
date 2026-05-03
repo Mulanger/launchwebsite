@@ -38,6 +38,9 @@ import {
 
 const supportEmail = 'support@whaletracker.com';
 const lastUpdated = 'May 1, 2026';
+const siteOrigin = 'https://www.polywhaletrades.com';
+const siteName = 'Polywatch';
+const seoImage = `${siteOrigin}/assets/polywatch-icon.png`;
 const prodApiUrl = 'https://whaleserver-production.up.railway.app';
 const apiBaseUrl = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || '/api');
 const wsBaseUrl = normalizeWsBase(import.meta.env.VITE_WS_BASE_URL || prodApiUrl);
@@ -92,10 +95,68 @@ const leaderboardSortOptions = [
 ];
 
 const legalLinks = [
+  { href: '/about', label: 'About Polywatch', icon: Radio },
   { href: '/privacy', label: 'Privacy Policy', icon: LockKeyhole },
   { href: '/terms', label: 'Terms of Service', icon: FileText },
   { href: '/delete-data', label: 'Delete Data', icon: ShieldCheck },
 ];
+
+const seoDefaults = {
+  title: 'Polywatch | Live Polymarket Whale Trades, Top Whales & Whale Feed',
+  description:
+    'Track live Polymarket whale trades, todayâ€™s whale volume, top whales, trader leaderboards, wallet profiles, and large trade alerts with Polywatch.',
+  keywords:
+    'Polywatch, Polymarket whale trades, live whale feed, Polymarket whales, top whales today, whale leaderboard, whale alerts, Polymarket trader rankings, Polymarket wallet tracking',
+  path: '/',
+  robots: 'index,follow,max-image-preview:large',
+};
+
+const seoByPath = {
+  '/': {
+    ...seoDefaults,
+    structuredData: [
+      buildWebsiteStructuredData(),
+      buildSoftwareStructuredData(),
+    ],
+  },
+  '/about': {
+    title: 'About Polywatch | Live Polymarket Whale Feed & Top Whale Tracking',
+    description:
+      'Learn how Polywatch tracks live Polymarket whale trades, top whales today, whale leaderboards, wallet profiles, market activity, and large trade alerts.',
+    keywords:
+      'about Polywatch, Polymarket whale feed, Polymarket top whales, live whale trades, whale trade alerts, prediction market whales, Polymarket leaderboard',
+    path: '/about',
+    robots: 'index,follow,max-image-preview:large',
+    structuredData: [buildAboutStructuredData(), buildFaqStructuredData()],
+  },
+  '/leaderboard': {
+    title: 'Polymarket Whale Leaderboard | Top Whales Today | Polywatch',
+    description:
+      'See the top Polymarket whales ranked by whale volume, trades, average trade size, and wallet activity for todayâ€™s New York session.',
+    keywords:
+      'Polymarket leaderboard, top Polymarket whales, top whales today, whale volume, wallet rankings, prediction market leaderboard',
+    path: '/leaderboard',
+    robots: 'index,follow,max-image-preview:large',
+  },
+  '/privacy': {
+    title: 'Privacy Policy | Polywatch',
+    description: 'Polywatch privacy policy for live Polymarket whale monitoring, alerts, follows, and anonymous app sessions.',
+    path: '/privacy',
+    robots: 'index,follow',
+  },
+  '/terms': {
+    title: 'Terms of Service | Polywatch',
+    description: 'Terms for using Polywatch, a read-only public Polymarket whale trade monitoring and alert service.',
+    path: '/terms',
+    robots: 'index,follow',
+  },
+  '/delete-data': {
+    title: 'Delete Data | Polywatch',
+    description: 'Request deletion of Polywatch alert, follow, notification, and anonymous session data.',
+    path: '/delete-data',
+    robots: 'index,follow',
+  },
+};
 
 const reveal = {
   hidden: { opacity: 0, y: 18 },
@@ -106,11 +167,211 @@ const reveal = {
   },
 };
 
+function buildWebsiteStructuredData() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: siteName,
+    url: siteOrigin,
+    description: seoDefaults.description,
+    publisher: {
+      '@type': 'Organization',
+      name: siteName,
+      url: siteOrigin,
+      logo: seoImage,
+    },
+  };
+}
+
+function buildSoftwareStructuredData() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: siteName,
+    applicationCategory: 'FinanceApplication',
+    operatingSystem: 'Web',
+    url: siteOrigin,
+    image: seoImage,
+    description:
+      'A read-only web dashboard for live Polymarket whale trades, top whales, whale leaderboards, wallet profiles, and large trade alerts.',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+  };
+}
+
+function buildAboutStructuredData() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    name: 'About Polywatch',
+    url: `${siteOrigin}/about`,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: siteName,
+      url: siteOrigin,
+    },
+    description:
+      'About Polywatch, an independent dashboard for live Polymarket whale trades, top whales, leaderboard rankings, wallet profiles, and whale alerts.',
+  };
+}
+
+function buildFaqStructuredData() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: 'What is a Polymarket whale trade?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'A Polymarket whale trade is a large public trade made on a Polymarket market. Polywatch highlights these trades so users can monitor size, side, market, price, and wallet activity.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Does Polywatch show a live Polymarket whale feed?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Yes. Polywatch provides a live whale feed for large public Polymarket trades, including todayâ€™s whale volume, active whales, mega trades, and the biggest trade for the current New York session.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'How does the Polywatch leaderboard rank top whales?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'The leaderboard ranks public wallets by whale volume and shows supporting signals such as trade count and average trade size for the selected timeframe.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Can Polywatch send alerts for large Polymarket trades?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Polywatch supports browser alerts for large whale trades. Users can choose a minimum trade size threshold and activate web push notifications from the Alerts page.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Is Polywatch affiliated with Polymarket?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'No. Polywatch is an independent monitoring tool for public Polymarket activity and is not affiliated with, endorsed by, or operated by Polymarket.',
+        },
+      },
+    ],
+  };
+}
+
+function getSeoForPath(path, tradeMatch, traderMatch) {
+  if (seoByPath[path]) return seoByPath[path];
+
+  if (tradeMatch) {
+    return {
+      title: 'Polymarket Whale Trade Detail | Polywatch',
+      description:
+        'Inspect a public Polymarket whale trade, including size, price, trader profile, same-market whale trades, and on-chain context.',
+      path,
+      robots: 'noindex,follow',
+    };
+  }
+
+  if (traderMatch) {
+    return {
+      title: 'Polymarket Whale Wallet Profile | Polywatch',
+      description:
+        'View a public Polymarket whale wallet profile, recent whale trades, wallet rank, volume mix, and large trade history.',
+      path,
+      robots: 'noindex,follow',
+    };
+  }
+
+  return {
+    ...seoDefaults,
+    title: `${siteName} App`,
+    description:
+      'Polywatch app page for monitoring public Polymarket whale trades, followed wallets, alerts, and trader activity.',
+    path,
+    robots: 'noindex,follow',
+  };
+}
+
+function usePageSeo(seo) {
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const canonicalUrl = `${siteOrigin}${seo.path === '/' ? '/' : seo.path}`;
+    const title = seo.title || seoDefaults.title;
+    const description = seo.description || seoDefaults.description;
+    const keywords = seo.keywords || seoDefaults.keywords;
+    const robots = seo.robots || seoDefaults.robots;
+
+    document.title = title;
+    setMetaTag('name', 'description', description);
+    setMetaTag('name', 'keywords', keywords);
+    setMetaTag('name', 'robots', robots);
+    setLinkTag('canonical', canonicalUrl);
+    setMetaTag('property', 'og:site_name', siteName);
+    setMetaTag('property', 'og:title', title);
+    setMetaTag('property', 'og:description', description);
+    setMetaTag('property', 'og:type', 'website');
+    setMetaTag('property', 'og:url', canonicalUrl);
+    setMetaTag('property', 'og:image', seoImage);
+    setMetaTag('name', 'twitter:card', 'summary_large_image');
+    setMetaTag('name', 'twitter:title', title);
+    setMetaTag('name', 'twitter:description', description);
+    setMetaTag('name', 'twitter:image', seoImage);
+
+    const structuredData = seo.structuredData || [];
+    const existingScript = document.querySelector('script[data-polywatch-seo="jsonld"]');
+    if (!structuredData.length) {
+      existingScript?.remove();
+      return;
+    }
+
+    let script = existingScript;
+    if (!script) {
+      script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.dataset.polywatchSeo = 'jsonld';
+      document.head.appendChild(script);
+    }
+    script.textContent = JSON.stringify(structuredData.length === 1 ? structuredData[0] : structuredData);
+  }, [seo]);
+}
+
+function setMetaTag(attribute, key, content) {
+  let tag = document.querySelector(`meta[${attribute}="${key}"]`);
+  if (!tag) {
+    tag = document.createElement('meta');
+    tag.setAttribute(attribute, key);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute('content', content);
+}
+
+function setLinkTag(rel, href) {
+  let tag = document.querySelector(`link[rel="${rel}"]`);
+  if (!tag) {
+    tag = document.createElement('link');
+    tag.setAttribute('rel', rel);
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute('href', href);
+}
+
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const tradeMatch = path.match(/^\/trade\/([^/]+)$/);
   const traderMatch = path.match(/^\/trader\/([^/]+)$/);
+  const seo = useMemo(() => getSeoForPath(path, tradeMatch, traderMatch), [path, tradeMatch, traderMatch]);
   const [webAlertToast, setWebAlertToast] = useState(null);
+
+  usePageSeo(seo);
 
   useEffect(() => {
     let disposed = false;
@@ -165,7 +426,8 @@ function App() {
   }, [path]);
 
   let page;
-  if (path === '/privacy') page = <PrivacyPage />;
+  if (path === '/about') page = <AboutPage />;
+  else if (path === '/privacy') page = <PrivacyPage />;
   else if (path === '/terms') page = <TermsPage />;
   else if (path === '/delete-data') page = <DeleteDataPage />;
   else if (path === '/leaderboard') page = <LeaderboardPage />;
@@ -3426,6 +3688,7 @@ function FeedSidebar({ activePage, liveState }) {
       </div>
 
       <div className="sidebar-links">
+        <a href="/about">About</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="/delete-data">Delete data</a>
@@ -5498,6 +5761,7 @@ function LegalChrome({ children }) {
           <span>Polywatch</span>
         </a>
         <nav className="legal-nav" aria-label="Legal pages">
+          <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/delete-data">Delete data</a>
@@ -5506,6 +5770,143 @@ function LegalChrome({ children }) {
       {children}
       <LegalFooter />
     </div>
+  );
+}
+
+function AboutPage() {
+  return (
+    <LegalLayout
+      eyebrow="Polymarket whale intelligence"
+      title="About Polywatch"
+      intro="Polywatch is an independent dashboard for tracking live Polymarket whale trades, top whales today, wallet leaderboards, market activity, and large trade alerts."
+      updatedLabel="Built for live public market monitoring"
+    >
+      <section className="about-seo-panel" aria-label="Polywatch overview">
+        <div>
+          <span>Live whale feed</span>
+          <strong>Large public Polymarket trades as they appear.</strong>
+        </div>
+        <div>
+          <span>Top whales</span>
+          <strong>Wallets ranked by whale volume and trade count.</strong>
+        </div>
+        <div>
+          <span>Whale alerts</span>
+          <strong>Browser notifications for trades over your threshold.</strong>
+        </div>
+      </section>
+
+      <LegalSection title="What Polywatch is">
+        <p>
+          Polywatch is a read-only market intelligence surface for public Polymarket activity.
+          The app focuses on large trades, also called whale trades, so users can see which
+          wallets are moving size, what markets they are trading, and how todayâ€™s activity
+          compares across the live whale feed, top whales, leaderboard, and wallet profiles.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="What Polywatch tracks">
+        <div className="about-feature-grid">
+          <a href="/" className="about-feature-link">
+            <Activity size={18} aria-hidden="true" />
+            <span>
+              <strong>Live Polymarket whale feed</strong>
+              <em>Large buy and sell trades with market, price, size, side, and trader context.</em>
+            </span>
+          </a>
+          <a href="/leaderboard" className="about-feature-link">
+            <Trophy size={18} aria-hidden="true" />
+            <span>
+              <strong>Top whales today</strong>
+              <em>Wallet leaderboard ranked by whale volume, trades, and average trade size.</em>
+            </span>
+          </a>
+          <a href="/alerts" className="about-feature-link">
+            <Bell size={18} aria-hidden="true" />
+            <span>
+              <strong>Large trade alerts</strong>
+              <em>Web push notifications for Polymarket whale trades above your chosen threshold.</em>
+            </span>
+          </a>
+          <a href="/profile/following" className="about-feature-link">
+            <Users size={18} aria-hidden="true" />
+            <span>
+              <strong>Following list</strong>
+              <em>Save wallets you care about and keep their whale activity easier to revisit.</em>
+            </span>
+          </a>
+        </div>
+      </LegalSection>
+
+      <LegalSection title="Why watch Polymarket whales">
+        <p>
+          Large public trades can show where attention and conviction are clustering across
+          prediction markets. Polywatch helps users monitor whale volume, active whales,
+          mega trades, todayâ€™s biggest trade, same-market activity, and public wallet behavior
+          without needing to manually scan every Polymarket market.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="How today works">
+        <p>
+          The public feed, today stats, top whales, and leaderboard are designed around the
+          current New York session. â€œTodayâ€ resets at New York midnight so daily whale volume,
+          active wallets, and largest trades stay aligned across the app.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="What Polywatch is not">
+        <p>
+          Polywatch does not execute trades, custody funds, accept deposits, or provide
+          financial advice. It is an independent monitoring tool for public Polymarket data
+          and is not affiliated with, endorsed by, or operated by Polymarket.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Frequently asked questions">
+        <div className="about-faq-list">
+          <article>
+            <h3>What is a Polymarket whale trade?</h3>
+            <p>
+              A whale trade is a large public trade on a Polymarket market. Polywatch surfaces
+              these trades by size so users can track meaningful wallet activity quickly.
+            </p>
+          </article>
+          <article>
+            <h3>Does Polywatch show live Polymarket whale trades?</h3>
+            <p>
+              Yes. The whale feed updates with large public trades and includes details such as
+              market, side, price, size, trader name, and today-scoped stats.
+            </p>
+          </article>
+          <article>
+            <h3>How are top whales ranked?</h3>
+            <p>
+              The leaderboard ranks public wallets by whale volume and shows trade count and
+              average trade size to make the rank easier to understand.
+            </p>
+          </article>
+          <article>
+            <h3>Can I get alerts for large Polymarket trades?</h3>
+            <p>
+              Yes. The Alerts page lets users activate browser notifications and choose the
+              minimum trade size that should trigger a whale alert.
+            </p>
+          </article>
+        </div>
+      </LegalSection>
+
+      <div className="about-cta-row">
+        <a className="primary-link-button" href="/">
+          Open live whale feed
+          <ArrowRight size={18} aria-hidden="true" />
+        </a>
+        <a className="about-secondary-link" href="/leaderboard">
+          View top whales
+          <Trophy size={16} aria-hidden="true" />
+        </a>
+      </div>
+    </LegalLayout>
   );
 }
 
@@ -5702,7 +6103,7 @@ function DeleteDataPage() {
   );
 }
 
-function LegalLayout({ eyebrow, title, intro, children }) {
+function LegalLayout({ eyebrow, title, intro, updatedLabel, children }) {
   return (
     <LegalChrome>
       <main className="legal-main">
@@ -5710,7 +6111,7 @@ function LegalLayout({ eyebrow, title, intro, children }) {
           <div className="section-kicker">{eyebrow}</div>
           <h1>{title}</h1>
           <p>{intro}</p>
-          <span>Last updated: {lastUpdated}</span>
+          <span>{updatedLabel || `Last updated: ${lastUpdated}`}</span>
         </section>
         <section className="legal-content">{children}</section>
       </main>

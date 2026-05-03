@@ -1,2 +1,33 @@
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /trade/
+Disallow: /trader/
+Disallow: /profile
+Disallow: /alerts
+
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /trade/
+Disallow: /trader/
+Disallow: /profile
+Disallow: /alerts
+
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /trade/
+Disallow: /trader/
+Disallow: /profile
+Disallow: /alerts
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /api/
+Disallow: /trade/
+Disallow: /trader/
+Disallow: /profile
+Disallow: /alerts
+
+Sitemap: https://www.polywhaletrades.com/sitemap.xml

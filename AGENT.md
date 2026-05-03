@@ -129,6 +129,7 @@ Important fallback behavior:
 All route selection lives in `src/App.jsx` inside `App()`.
 
 - `/` -> `WhaleFeedPage`
+- `/about` -> `AboutPage`
 - `/leaderboard` -> `LeaderboardPage`
 - `/trade/:tradeId` -> `TradeDetailPage`
 - `/trader/:wallet` -> `TraderProfilePage`
@@ -153,6 +154,7 @@ All route selection lives in `src/App.jsx` inside `App()`.
 - `FollowWalletButton`, follow helpers, auth helpers: follow/unfollow and anonymous auth.
 - `fetchJson`, `authFetchJson`, `buildWhalesPath`, `buildLeaderboardPath`: API wrappers.
 - Legal page components near the bottom: privacy, terms, delete-data pages.
+- SEO support lives in `src/App.jsx` near the top: route metadata, canonical URLs, robots directives, and JSON-LD helpers. Static crawler defaults are in `index.html`, `public/robots.txt`, and `public/sitemap.xml`.
 
 `src/styles.css`
 
