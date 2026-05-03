@@ -1746,7 +1746,7 @@ function TraderProfilePage({ wallet }) {
   const [profile, setProfile] = useState(null);
   const [windowId, setWindowId] = useState(() => {
     const queryWindow = new URLSearchParams(window.location.search).get('window');
-    return queryWindow === '7d' ? queryWindow : '7d';
+    return leaderboardWindows.some((option) => option.id === queryWindow) ? queryWindow : '7d';
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1779,17 +1779,13 @@ function TraderProfilePage({ wallet }) {
   }, [normalizedWallet, refreshNonce]);
 
   const stats = profile ? getProfileStats(profile, windowId) : emptyProfileStats();
-  const volumeMix = buildVolumeMix(stats);
-  const headingName = profile ? traderProfileName(profile) : '';
   const profileWallet = profile?.proxyWallet || normalizedWallet;
 
   return (
-    <div className="feed-shell detail-shell">
+    <div className="feed-shell detail-shell no-rail-shell">
       <FeedSidebar activePage="detail" liveState="live" />
 
-      <main className="feed-main detail-main trader-profile-main">
-        <DetailBackBar href="/leaderboard" label="Back to leaderboard" />
-
+      <main className="feed-main detail-main trader-profile-main wallet-profile-main">
         {loading ? (
           <DetailSkeleton title="Loading trader" />
         ) : error || !profile ? (
@@ -1800,102 +1796,291 @@ function TraderProfilePage({ wallet }) {
             onAction={() => setRefreshNonce((value) => value + 1)}
           />
         ) : (
-          <>
-            <header className="detail-hero trader-hero">
-              <div className="feed-breadcrumb">
-                <Wallet size={14} aria-hidden="true" />
-                Trader profile - public wallet
-              </div>
-              <div className="trader-hero-row">
-                <ProfileAvatar profile={profile} />
-                <div className="trader-identity">
-                  <h1 title={traderProfileFullName(profile)}>{headingName}</h1>
-                  <WalletAddressLine address={profileWallet} />
-                </div>
-                <div className="profile-actions">
-                  {profile.rankBadge ? (
-                    <span className="rank-badge">
-                      #{profile.rankBadge.rank} - {String(profile.rankBadge.window).toUpperCase()}
-                    </span>
-                  ) : null}
-                  <FollowWalletButton wallet={profile.proxyWallet} variant="wide" />
-                </div>
-              </div>
-            </header>
-
-            <section className="filter-row profile-window-row" aria-label="Trader stat window">
-              <div className="pill-group">
-                {leaderboardWindows.map((option) => (
-                  <WindowFilterButton
-                    key={option.id}
-                    option={option}
-                    active={windowId === option.id}
-                    onSelect={setWindowId}
-                  />
-                ))}
-              </div>
-            </section>
-
-            <section className="stats-strip detail-stats">
-              <StatBlock label="Whale Volume" value={formatUsdCompact(stats.volume)} />
-              <StatBlock label="Whale Trades" value={formatNumber(stats.whaleCount)} />
-              <StatBlock label="Buy Volume" value={formatUsdCompact(stats.buyVolume)} />
-              <StatBlock label="Sell Volume" value={formatUsdCompact(stats.sellVolume)} tone="down" />
-            </section>
-
-            <section className="trader-profile-grid">
-              <div className="detail-panel trader-chart-panel">
-                <div className="panel-heading">
-                  <BarChart3 size={16} aria-hidden="true" />
-                  <span>Daily Whale Volume</span>
-                </div>
-                <DailyVolumeChart points={profile.dailyVolume || []} />
-              </div>
-
-              <div className="detail-panel volume-mix-panel">
-                <div className="panel-heading">
-                  <Target size={16} aria-hidden="true" />
-                  <span>Volume Mix</span>
-                </div>
-                <VolumeMixBar mix={volumeMix} />
-                <DetailRows
-                  rows={[
-                    ['Buy volume', formatUsdFull(stats.buyVolume)],
-                    ['Sell volume', formatUsdFull(stats.sellVolume)],
-                    ['Total trades', formatNumber(stats.tradeCount)],
-                    ['First seen', formatDateTimeSeconds(profile.firstSeen)],
-                  ]}
-                />
-              </div>
-            </section>
-
-            <section className="recent-section">
-              <div className="section-title-row">
-                <div>
-                  <h2>Recent whale trades</h2>
-                  <p>Latest feed-visible trades from this wallet.</p>
-                </div>
-              </div>
-              {profile.recentWhales?.length ? (
-                <div className="feed-list">
-                  {profile.recentWhales.map((trade, index) => (
-                    <TradeRow trade={trade} key={trade.id} index={index} />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title="No recent whale trades"
-                  body="This wallet has no visible recent whale trades in the current API response."
-                  actionLabel="Refresh"
-                  onAction={() => setRefreshNonce((value) => value + 1)}
-                />
-              )}
-            </section>
-          </>
+          <WalletProfileRedesign
+            profile={profile}
+            wallet={profileWallet}
+            stats={stats}
+            windowId={windowId}
+            onWindowChange={setWindowId}
+            onRefresh={() => setRefreshNonce((value) => value + 1)}
+          />
         )}
       </main>
+    </div>
+  );
+}
 
-      <TraderProfileRail profile={profile} stats={stats} />
+function WalletProfileRedesign({ profile, wallet, stats, windowId, onWindowChange, onRefresh }) {
+  const dailyVolume = buildWalletDailyVolume(profile.dailyVolume || []);
+  const volumeMix = buildWalletVolumeMix(stats);
+  const recentTrades = Array.isArray(profile.recentWhales) ? profile.recentWhales : [];
+
+  return (
+    <section className="wallet-profile-page">
+      <a className="trade-detail-back wallet-profile-back" href="/leaderboard">
+        <ArrowLeft size={13} aria-hidden="true" />
+        Back to leaderboard
+      </a>
+
+      <WalletProfileHero profile={profile} wallet={wallet} windowId={windowId} />
+      <WalletProfileControlBar
+        windowId={windowId}
+        firstSeen={profile.firstSeen}
+        onWindowChange={onWindowChange}
+      />
+      <WalletProfileStatCards stats={stats} />
+      <div className="wallet-profile-charts">
+        <WalletDailyVolumeCard dailyVolume={dailyVolume} />
+        <WalletVolumeMixCard mix={volumeMix} />
+      </div>
+      <WalletRecentTradesTable trades={recentTrades} onRefresh={onRefresh} />
+    </section>
+  );
+}
+
+function WalletProfileHero({ profile, wallet, windowId }) {
+  const rank = profile.rankBadge?.rank;
+  const rankWindow = String(profile.rankBadge?.window || windowId).toUpperCase();
+
+  return (
+    <section className="wallet-profile-hero">
+      <ProfileAvatar profile={profile} />
+      <div className="wallet-profile-identity">
+        <div className="wallet-profile-kicker">
+          <Wallet size={12} aria-hidden="true" />
+          <span>Trader profile - public wallet</span>
+        </div>
+        <div className="wallet-profile-title-row">
+          <h1 title={wallet}>{shortWallet(wallet)}</h1>
+          <WalletAddressCopyButton address={wallet} />
+        </div>
+      </div>
+      <div className="wallet-profile-actions">
+        <div className="wallet-rank-badge">
+          <span>Rank {rankWindow}</span>
+          <strong>{rank ? `#${rank}` : '--'}</strong>
+        </div>
+        <FollowWalletButton wallet={wallet} variant="wide" />
+      </div>
+    </section>
+  );
+}
+
+function WalletAddressCopyButton({ address }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = async () => {
+    if (!address || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="wallet-copy-button"
+      onClick={copyAddress}
+      title={copied ? 'Copied' : address}
+    >
+      {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
+      {copied ? 'Copied' : 'Copy full address'}
+    </button>
+  );
+}
+
+function WalletProfileControlBar({ windowId, firstSeen, onWindowChange }) {
+  return (
+    <section className="wallet-profile-control" aria-label="Trader stat window">
+      <div className="wallet-window-toggle">
+        {leaderboardWindows.map((option) => (
+          <button
+            type="button"
+            key={option.id}
+            className={windowId === option.id ? 'active' : ''}
+            onClick={() => onWindowChange(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <div className="wallet-first-seen">
+        First seen <span>{firstSeen ? formatDateShort(firstSeen) : 'Unknown'}</span>
+      </div>
+    </section>
+  );
+}
+
+function WalletProfileStatCards({ stats }) {
+  return (
+    <section className="wallet-stat-grid">
+      <WalletStatCard label="Whale Volume" value={formatUsdCompact(stats.volume)} />
+      <WalletStatCard label="Whale Trades" value={formatNumber(stats.whaleCount || stats.tradeCount)} />
+      <WalletStatCard label="Buy Volume" value={formatUsdCompact(stats.buyVolume)} variant="buy" />
+      <WalletStatCard label="Sell Volume" value={formatUsdCompact(stats.sellVolume)} variant="sell" />
+    </section>
+  );
+}
+
+function WalletStatCard({ label, value, variant = 'default' }) {
+  const isZeroSell = variant === 'sell' && (String(value) === '$0' || String(value) === '0');
+  return (
+    <div className={`wallet-stat-card ${variant} ${isZeroSell ? 'muted' : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function WalletDailyVolumeCard({ dailyVolume }) {
+  return (
+    <section className="wallet-panel wallet-daily-panel">
+      <div className="wallet-panel-heading">
+        <div>
+          <span>Daily Whale Volume</span>
+          <strong>{dailyVolume.avg}</strong>
+        </div>
+        <small>avg over {dailyVolume.days.length} tracked days</small>
+      </div>
+      <WalletDailyVolumeChart days={dailyVolume.days} />
+    </section>
+  );
+}
+
+function WalletDailyVolumeChart({ days }) {
+  const chartDays = days.length ? days : [{ date: 'No data', volume: 0, label: '' }];
+  const max = Math.max(...chartDays.map((day) => Number(day.volume || 0)), 1);
+  const width = 600;
+  const height = 106;
+  const baseY = 82;
+  const slot = width / chartDays.length;
+  const barWidth = Math.min(64, Math.max(18, slot * 0.46));
+
+  return (
+    <svg className="wallet-daily-chart" width="100%" height="106" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <line x1="0" y1={baseY} x2={width} y2={baseY} stroke="rgba(255,255,255,0.07)" />
+      {chartDays.map((day, index) => {
+        const volume = Number(day.volume || 0);
+        const barHeight = volume > 0 ? (volume / max) * 66 + 12 : 3;
+        const x = index * slot + slot / 2 - barWidth / 2;
+        const y = baseY - barHeight;
+        return (
+          <g key={`${day.date || day.label}-${index}`}>
+            <rect x={x} y={y} width={barWidth} height={barHeight} rx="3" fill="#22d3a5" opacity={index === chartDays.length - 1 ? 1 : 0.82} />
+            <text x={index * slot + slot / 2} y="101" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.42)">
+              {day.label || formatDailyLabel(day.date)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function WalletVolumeMixCard({ mix }) {
+  return (
+    <section className="wallet-panel wallet-mix-panel">
+      <div className="wallet-panel-heading compact">
+        <span>Volume Mix</span>
+      </div>
+      <div className="wallet-mix-track" aria-hidden="true">
+        <span className="buy" style={{ width: `${mix.buyPct}%` }} />
+        <span className="sell" style={{ width: `${mix.sellPct}%` }} />
+      </div>
+      <div className="wallet-mix-legend">
+        <span><i className="buy" /> Buy <b>{trimNumber(mix.buyPct)}%</b></span>
+        <span><i className="sell" /> Sell <b>{trimNumber(mix.sellPct)}%</b></span>
+      </div>
+      <div className="wallet-mix-breakdown">
+        <WalletBreakdownRow label="Buy volume" value={formatUsdFull(mix.buyVolume)} tone="buy" />
+        <WalletBreakdownRow label="Sell volume" value={formatUsdFull(mix.sellVolume)} tone="sell" muted={!mix.sellVolume} />
+        <WalletBreakdownRow label="Total trades" value={formatNumber(mix.totalTrades)} />
+      </div>
+    </section>
+  );
+}
+
+function WalletBreakdownRow({ label, value, tone = '', muted = false }) {
+  return (
+    <div className="wallet-breakdown-row">
+      <span>{label}</span>
+      <strong className={`${tone} ${muted ? 'muted' : ''}`}>{value}</strong>
+    </div>
+  );
+}
+
+function WalletRecentTradesTable({ trades, onRefresh }) {
+  return (
+    <section className="wallet-recent-table">
+      <div className="wallet-recent-heading">
+        <div>
+          <h2>Recent whale trades</h2>
+          <p>Latest feed-visible trades from this wallet</p>
+        </div>
+        <span>{formatNumber(trades.length)} trades</span>
+      </div>
+      {trades.length ? (
+        <>
+          <div className="wallet-recent-header">
+            <span>Side</span>
+            <span>Market</span>
+            <span>Size</span>
+            <span>Price</span>
+            <span>When</span>
+          </div>
+          {trades.map((trade, index) => (
+            <WalletRecentTradeRow key={trade.id || index} trade={trade} isLast={index === trades.length - 1} />
+          ))}
+        </>
+      ) : (
+        <EmptyState
+          title="No recent whale trades"
+          body="This wallet has no visible recent whale trades in the current API response."
+          actionLabel="Refresh"
+          onAction={onRefresh}
+        />
+      )}
+    </section>
+  );
+}
+
+function WalletRecentTradeRow({ trade, isLast }) {
+  const category = inferCategory(trade);
+  const isSell = trade.side === 'SELL';
+  const tradeHref = `/trade/${encodeURIComponent(trade.id)}`;
+  const openTrade = () => {
+    cacheTrade(trade);
+    window.location.href = tradeHref;
+  };
+
+  return (
+    <div
+      className={`wallet-recent-row ${isLast ? 'last' : ''}`}
+      role="link"
+      tabIndex={0}
+      onClick={openTrade}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') openTrade();
+      }}
+    >
+      <span className={`wallet-side-pill ${isSell ? 'sell' : 'buy'}`}>{trade.side === 'SELL' ? 'SELL' : 'BUY'}</span>
+      <div className="wallet-recent-market">
+        <MarketIcon trade={trade} category={category} />
+        <div>
+          <strong title={trade.market?.title || 'Unknown market'}>{trade.market?.title || 'Unknown market'}</strong>
+          <span>{category.label} - {trade.outcome || 'Outcome'}</span>
+        </div>
+      </div>
+      <strong className="wallet-recent-size">{formatUsdFull(trade.usdSize)}</strong>
+      <div className="wallet-recent-price">
+        <strong>{formatPrice(trade)}</strong>
+        <span>{trade.outcome || ''}</span>
+      </div>
+      <time>{relativeTimeAgo(trade.timestamp)}</time>
     </div>
   );
 }
@@ -5470,6 +5655,44 @@ function buildVolumeMix(stats) {
   };
 }
 
+function buildWalletVolumeMix(stats) {
+  const buyVolume = Number(stats.buyVolume || 0);
+  const sellVolume = Number(stats.sellVolume || 0);
+  const totalVolume = buyVolume + sellVolume;
+  return {
+    buyVolume,
+    sellVolume,
+    totalTrades: Number(stats.tradeCount || stats.whaleCount || 0),
+    buyPct: totalVolume > 0 ? (buyVolume / totalVolume) * 100 : 50,
+    sellPct: totalVolume > 0 ? (sellVolume / totalVolume) * 100 : 50,
+  };
+}
+
+function buildWalletDailyVolume(points) {
+  const days = (Array.isArray(points) ? points : [])
+    .slice(-14)
+    .map((point) => ({
+      date: point.date || point.day || point.timestamp || '',
+      label: formatDailyLabel(point.date || point.day || point.timestamp),
+      volume: Number(point.volume || 0),
+    }));
+  const total = days.reduce((sum, day) => sum + day.volume, 0);
+  const avg = days.length ? total / days.length : 0;
+  return {
+    avg: formatUsdCompact(avg),
+    days,
+  };
+}
+
+function formatDailyLabel(value) {
+  if (!value) return '';
+  const date = typeof value === 'number'
+    ? new Date(value * (value > 100000000000 ? 1 : 1000))
+    : new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return String(value).slice(5) || String(value);
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+}
+
 function normalizeDailyVolume(points) {
   const bucketCount = Math.max(points.length, 2);
   const max = Math.max(...points.map((point) => Number(point.volume || 0)), 1);
@@ -5941,6 +6164,15 @@ function formatDateTimeSeconds(timestampSeconds) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  }).format(new Date(Number(timestampSeconds) * 1000));
+}
+
+function formatDateShort(timestampSeconds) {
+  if (!timestampSeconds) return 'Unknown';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   }).format(new Date(Number(timestampSeconds) * 1000));
 }
 
