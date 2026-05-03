@@ -2124,6 +2124,19 @@ img {
   background: #0a0a0a;
 }
 
+.trade-detail-mobile-screen {
+  min-height: 100vh;
+  padding-bottom: 92px;
+  background: #0a0a0a;
+}
+
+.trade-detail-mobile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 14px 0;
+}
+
 .trade-detail-back {
   display: inline-flex;
   align-items: center;
@@ -2493,6 +2506,7 @@ img {
   padding: 8px 10px;
   border-radius: 9px;
   color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
   font-size: 12.5px;
 }
 
@@ -2510,6 +2524,11 @@ img {
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
+}
+
+.related-trader.disabled {
+  cursor: inherit;
 }
 
 .related-trader > span {
@@ -4170,6 +4189,10 @@ img {
 }
 
 @media (max-width: 760px) {
+  .detail-main {
+    padding: 0;
+  }
+
   .trade-detail-redesign {
     padding: 16px;
     border-radius: 0;
@@ -4177,10 +4200,58 @@ img {
     border-right: 0;
   }
 
+  .trade-detail-mobile-screen .trade-detail-back {
+    align-self: flex-start;
+    min-height: 31px;
+    margin: 0 0 2px;
+    padding: 0 11px;
+    border-radius: 8px;
+    font-size: 11.5px;
+  }
+
   .trade-hero-card-redesign,
   .trade-detail-panel-card {
     padding: 16px;
     border-radius: 14px;
+  }
+
+  .trade-detail-mobile-screen .trade-hero-card-redesign,
+  .trade-detail-mobile-screen .trade-detail-panel-card {
+    border-radius: 16px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-panel-card {
+    padding: 16px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-section-head {
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-section-head > span {
+    font-size: 10px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-section-head a {
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 10.5px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-meta-line {
+    gap: 7px;
+    margin-bottom: 12px;
+    font-size: 11px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-side-pill {
+    min-height: 21px;
+    padding: 0 8px;
+    font-size: 10px;
   }
 
   .trade-detail-headline {
@@ -4191,35 +4262,212 @@ img {
     font-size: 38px;
   }
 
-  .trade-scenario-grid,
+  .trade-detail-mobile-screen .trade-detail-headline span {
+    font-size: 14px;
+  }
+
+  .trade-detail-mobile-screen .trade-detail-subline {
+    margin-top: 9px;
+    font-size: 12.5px;
+  }
+
+  .trade-scenario-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 17px;
+    padding-top: 14px;
+  }
+
+  .trade-scenario-cell span {
+    font-size: 9.5px;
+  }
+
+  .trade-scenario-cell strong {
+    font-size: 16px;
+  }
+
+  .trade-scenario-cell small {
+    font-size: 10px;
+  }
+
+  .trade-scenario-cell:nth-child(3) {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .trade-scenario-cell:nth-child(3) span,
+  .trade-scenario-cell:nth-child(3) strong {
+    grid-column: 1;
+  }
+
+  .trade-scenario-cell:nth-child(3) small {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    margin-top: 0;
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--accent);
+    background: rgba(34, 211, 165, 0.1);
+    white-space: nowrap;
+  }
+
   .trade-detail-side-column,
   .trader-detail-stat-grid {
     grid-template-columns: 1fr;
   }
 
   .trade-outcome-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .trade-outcome-card {
+    padding: 10px;
+    border-radius: 9px;
+  }
+
+  .trade-outcome-card > span {
+    font-size: 9px;
+  }
+
+  .trade-outcome-card strong {
+    font-size: 16px;
+  }
+
+  .trade-outcome-card small {
+    font-size: 10px;
   }
 
   .trade-chart-topline {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    margin-bottom: 8px;
+  }
+
+  .trade-chart-topline > span {
+    font-size: 10.5px;
+  }
+
+  .trade-chart-topline button {
+    min-height: 20px;
+    padding: 0 7px;
+    border-radius: 5px;
+    font-size: 9.5px;
+  }
+
+  .trade-price-chart svg {
+    height: 70px;
+  }
+
+  .trade-market-identity {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .trade-market-identity strong {
+    font-size: 13.5px;
+  }
+
+  .trade-market-identity span {
+    font-size: 10.5px;
+  }
+
+  .trade-detail-trader-head {
+    margin-bottom: 14px;
+  }
+
+  .trade-detail-trader-head strong {
+    font-size: 13.5px;
+  }
+
+  .trade-detail-trader-head span {
+    font-size: 10px;
+  }
+
+  .trader-detail-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .trade-trader-stat {
+    padding: 10px;
+    border-radius: 8px;
+  }
+
+  .trade-trader-stat span {
+    font-size: 9px;
+  }
+
+  .trade-trader-stat strong {
+    font-size: 14px;
   }
 
   .related-trade-row {
-    grid-template-columns: 58px minmax(0, 1fr) auto;
-    gap: 9px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    min-height: 0;
+    padding: 10px;
+    border-radius: 10px;
   }
 
-  .related-trade-row small,
+  .related-trade-row.current {
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .related-trader {
+    gap: 7px;
+  }
+
+  .related-trader strong {
+    font-size: 11px;
+  }
+
+  .related-trader > span {
+    width: 16px;
+    height: 16px;
+  }
+
+  .related-trade-row b {
+    grid-column: 2;
+    text-align: left;
+    font-size: 13px;
+  }
+
+  .related-trade-row small {
+    display: block;
+    grid-column: 3;
+    font-size: 12px;
+  }
+
   .related-trade-row time {
-    display: none;
+    display: block;
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 10px;
   }
 
   .trade-detail-section-head {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .trader-recent-list a {
+    padding: 9px 0;
+  }
+
+  .onchain-detail-row {
+    font-size: 11px;
+  }
+
+  .onchain-detail-row a,
+  .onchain-detail-row strong {
+    font-size: 10px;
   }
 }
 

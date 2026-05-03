@@ -372,13 +372,16 @@ function WhaleFeedPage() {
         timeAgo: relativeTimeAgo(trade.timestamp),
         marketIcon: buildMobileMarketIcon(trade),
         marketName: trade.market?.title || 'Unknown market',
-        marketMeta: `${inferCategory(trade).label} · ${trade.outcome || 'Outcome'}`,
+        marketMeta: `${inferCategory(trade).label} - ${trade.outcome || 'Outcome'}`,
         size: formatUsdFull(trade.usdSize),
         price: getPriceValue(trade),
         trader: {
           name: getTraderName(trade),
           address: shortWallet(trade.trader?.proxyWallet),
           avatarColor: avatarGradient(trade.trader?.proxyWallet || trade.id),
+          href: trade.trader?.proxyWallet
+            ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
+            : null,
         },
         onFollow: async () => {
           const wallet = trade.trader?.proxyWallet?.toLowerCase();
@@ -398,6 +401,11 @@ function WhaleFeedPage() {
         onOpen: () => {
           cacheTrade(trade);
           window.location.href = `/trade/${encodeURIComponent(trade.id)}`;
+        },
+        onTraderOpen: () => {
+          if (trade.trader?.proxyWallet) {
+            window.location.href = `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`;
+          }
         },
       })),
     [visibleItems]
@@ -921,7 +929,7 @@ function MobileLeaderboardScreen({
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22d3a5' }} />
             <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
-              RANKED · POLYMARKET
+              RANKED - POLYMARKET
             </span>
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 500, color: '#fff', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
@@ -1203,10 +1211,21 @@ function MobileLeaderboardRow({ row }) {
 }
 
 function TradeDetailPage({ tradeId }) {
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 1020px)').matches
+  );
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1020px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1240,6 +1259,19 @@ function TradeDetailPage({ tradeId }) {
     return () => controller.abort();
   }, [tradeId, refreshNonce]);
 
+  const retry = () => setRefreshNonce((value) => value + 1);
+
+  if (isMobileViewport) {
+    return (
+      <MobileTradeDetailScreen
+        detail={detail}
+        loading={loading}
+        error={error}
+        onRetry={retry}
+      />
+    );
+  }
+
   return (
     <div className="feed-shell detail-shell no-rail-shell">
       <FeedSidebar activePage="detail" liveState="live" />
@@ -1252,13 +1284,73 @@ function TradeDetailPage({ tradeId }) {
             title="Trade unavailable"
             body={error || 'This trade could not be found.'}
             actionLabel="Try again"
-            onAction={() => setRefreshNonce((value) => value + 1)}
+            onAction={retry}
           />
         ) : (
           <TradeDetailRedesign detail={detail} />
         )}
       </main>
     </div>
+  );
+}
+
+function MobileTradeDetailScreen({ detail, loading, error, onRetry }) {
+  const handleTabChange = (tab) => {
+    if (tab === 'feed') window.location.href = '/';
+    if (tab === 'leaders') window.location.href = '/leaderboard';
+    if (tab === 'following') window.location.href = '/profile/following';
+    if (tab === 'alerts') window.location.href = '/alerts';
+  };
+
+  return (
+    <div className="trade-detail-mobile-screen">
+      <div className="trade-detail-mobile-content">
+        <a className="trade-detail-back" href="/">
+          <ArrowLeft size={12} aria-hidden="true" />
+          Back
+        </a>
+
+        {loading ? (
+          <DetailSkeleton title="Loading trade" />
+        ) : error || !detail?.trade ? (
+          <EmptyState
+            title="Trade unavailable"
+            body={error || 'This trade could not be found.'}
+            actionLabel="Try again"
+            onAction={onRetry}
+          />
+        ) : (
+          <MobileTradeDetailContent detail={detail} />
+        )}
+      </div>
+      <MobileBottomNav activeTab="feed" onTabChange={handleTabChange} />
+    </div>
+  );
+}
+
+function MobileTradeDetailContent({ detail }) {
+  const trade = detail.trade;
+  const market = detail.market || trade.market || {};
+  const trader = detail.trader || trade.trader || {};
+  const scenario = detail.scenario || buildClientTradeScenario(trade);
+  const relatedTrades = Array.isArray(detail.relatedTrades) && detail.relatedTrades.length
+    ? detail.relatedTrades
+    : [trade];
+  const recentTrades = Array.isArray(trader.recentTrades) ? trader.recentTrades : [];
+
+  return (
+    <>
+      <TradeHeroDetailCard trade={trade} scenario={scenario} />
+      <TradeMarketDetailCard trade={trade} market={market} />
+      <TradeTraderDetailCard trade={trade} trader={trader} />
+      <RelatedTradesDetailCard
+        trades={relatedTrades}
+        currentTradeId={trade.id}
+        marketTitle={market.title || trade.market?.title}
+      />
+      <TraderRecentDetailCard trades={recentTrades} />
+      <TradeOnChainDetailCard trade={trade} onChain={detail.onChain} />
+    </>
   );
 }
 
@@ -1304,7 +1396,7 @@ function TradeHeroDetailCard({ trade, scenario }) {
   const isSell = trade.side === 'SELL';
 
   return (
-    <section className="trade-hero-card-redesign">
+    <section className="trade-hero-card-redesign trade-detail-card-hero">
       <div className="trade-detail-meta-line">
         <span className={`trade-detail-side-pill ${isSell ? 'sell' : 'buy'}`}>{trade.side}</span>
         <span>{relativeTimeAgo(trade.timestamp)} - {formatDateTimeSeconds(trade.timestamp)}</span>
@@ -1368,7 +1460,7 @@ function TradeMarketDetailCard({ trade, market }) {
   const polymarketUrl = market.polymarketUrl || trade.polymarketUrl || trade.market?.polymarketUrl || '#';
 
   return (
-    <section className="trade-detail-panel-card">
+    <section className="trade-detail-panel-card trade-detail-card-market">
       <div className="trade-detail-section-head">
         <span>Market</span>
         <a href={polymarketUrl} target="_blank" rel="noreferrer">
@@ -1477,7 +1569,7 @@ function TradePriceChart({ history }) {
 function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
   const otherCount = trades.filter((trade) => trade.id !== currentTradeId).length;
   return (
-    <section className="trade-detail-panel-card">
+    <section className="trade-detail-panel-card trade-detail-card-related">
       <div className="trade-detail-section-head no-action">
         <span>Related trades on this market</span>
         <small>{otherCount} other whale trades today</small>
@@ -1494,7 +1586,7 @@ function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
       </div>
 
       <a className="trade-detail-wide-button" href={`/?market=${encodeURIComponent(marketTitle || '')}`}>
-        View market feed
+        View all {trades.length} trades
       </a>
     </section>
   );
@@ -1502,10 +1594,37 @@ function RelatedTradesDetailCard({ trades, currentTradeId, marketTitle }) {
 
 function RelatedTradeDetailRow({ trade, isCurrent }) {
   const href = `/trade/${encodeURIComponent(trade.id)}`;
+  const traderHref = trade.trader?.proxyWallet
+    ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
+    : null;
+  const openTrade = () => {
+    cacheTrade(trade);
+    window.location.href = href;
+  };
+  const openTrader = (event) => {
+    event.stopPropagation();
+    if (traderHref) window.location.href = traderHref;
+  };
   return (
-    <a className={`related-trade-row ${isCurrent ? 'current' : ''}`} href={href}>
+    <div
+      className={`related-trade-row ${isCurrent ? 'current' : ''}`}
+      role="link"
+      tabIndex={0}
+      onClick={openTrade}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') openTrade();
+      }}
+    >
       <span className={`trade-detail-side-pill ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side}</span>
-      <div className="related-trader">
+      <div
+        className={`related-trader ${traderHref ? '' : 'disabled'}`}
+        role={traderHref ? 'link' : undefined}
+        tabIndex={traderHref ? 0 : undefined}
+        onClick={traderHref ? openTrader : undefined}
+        onKeyDown={(event) => {
+          if (traderHref && event.key === 'Enter') openTrader(event);
+        }}
+      >
         <span style={{ background: avatarGradient(trade.trader?.proxyWallet || trade.id) }} />
         <strong>{shortWallet(trade.trader?.proxyWallet) || 'Unknown'}</strong>
         {isCurrent ? <em>THIS</em> : null}
@@ -1513,7 +1632,7 @@ function RelatedTradeDetailRow({ trade, isCurrent }) {
       <b>{formatUsdFull(trade.usdSize)}</b>
       <small>{formatPrice(trade)} {trade.outcome || ''}</small>
       <time>{relativeTimeAgo(trade.timestamp)}</time>
-    </a>
+    </div>
   );
 }
 
@@ -1521,7 +1640,7 @@ function TradeTraderDetailCard({ trade, trader }) {
   const wallet = trader.proxyWallet || trade.trader?.proxyWallet;
   const traderHref = wallet ? `/trader/${encodeURIComponent(wallet)}` : null;
   return (
-    <section className="trade-detail-panel-card side-card">
+    <section className="trade-detail-panel-card side-card trade-detail-card-trader">
       <div className="trade-detail-section-head no-action">
         <span>Trader</span>
       </div>
@@ -1562,7 +1681,7 @@ function TradeTraderStat({ label, value, accent = false }) {
 
 function TraderRecentDetailCard({ trades = [] }) {
   return (
-    <section className="trade-detail-panel-card side-card">
+    <section className="trade-detail-panel-card side-card trade-detail-card-recent">
       <div className="trade-detail-section-head no-action">
         <span>Trader's recent</span>
       </div>
@@ -1588,7 +1707,7 @@ function TradeOnChainDetailCard({ trade, onChain }) {
   const txHash = onChain?.transactionHash || trade.transactionHash;
   const explorer = onChain?.explorerUrl || (txHash ? `https://polygonscan.com/tx/${txHash}` : null);
   return (
-    <section className="trade-detail-panel-card side-card">
+    <section className="trade-detail-panel-card side-card trade-detail-card-onchain">
       <div className="trade-detail-section-head no-action">
         <span>On-chain</span>
       </div>
@@ -2869,7 +2988,7 @@ function MobilePageTitle({ liveState }) {
           }}
         />
         <span style={{ fontSize: 10, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
-          LIVE · POLYMARKET
+          LIVE - POLYMARKET
         </span>
       </div>
       <h1 style={{ fontSize: 26, fontWeight: 500, color: '#fff', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
@@ -3152,11 +3271,29 @@ function MobileTradeCard({
   trader,
   onFollow,
   onOpen,
+  onTraderOpen,
 }) {
   const isBuy = side !== 'SELL';
+  const hasTraderRoute = Boolean(trader?.href || onTraderOpen);
+  const openTrader = (event) => {
+    event.stopPropagation();
+    if (onTraderOpen) {
+      onTraderOpen();
+    } else if (trader?.href) {
+      window.location.href = trader.href;
+    }
+  };
 
   return (
-    <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') onOpen?.();
+      }}
+      style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, cursor: 'pointer' }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span
           style={{
@@ -3204,7 +3341,15 @@ function MobileTradeCard({
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>c</span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div
+          role={hasTraderRoute ? 'link' : undefined}
+          tabIndex={hasTraderRoute ? 0 : undefined}
+          onClick={hasTraderRoute ? openTrader : undefined}
+          onKeyDown={(event) => {
+            if (hasTraderRoute && event.key === 'Enter') openTrader(event);
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: hasTraderRoute ? 'pointer' : 'default' }}
+        >
           <div style={{ width: 22, height: 22, borderRadius: '50%', background: trader.avatarColor }} />
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>{trader.name}</div>
@@ -3222,7 +3367,10 @@ function MobileSmallIconButton({ children, onClick }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.(event);
+      }}
       style={{
         width: 26,
         height: 26,
