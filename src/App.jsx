@@ -46,6 +46,14 @@ const followsStorageKey = 'polywatch:followedWallets';
 const followsChangedEvent = 'polywatch:follows-changed';
 const alertPrefsStorageKey = 'polywatch:webAlertPrefs';
 const walletRegex = /^0x[0-9a-fA-F]{40}$/;
+const firebaseWebConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+};
+const firebaseVapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || '';
 
 const rangeOptions = [
   { id: 'all', label: 'All', minUsd: 10000 },
@@ -2380,16 +2388,144 @@ function FollowingPage() {
 function AlertsPage() {
   const [prefs, setPrefs] = useState(() => readWebAlertPrefs());
   const [savedAt, setSavedAt] = useState(null);
+  const [status, setStatus] = useState(() => getInitialWebAlertStatus());
+  const [actionMessage, setActionMessage] = useState('');
+  const [isWorking, setIsWorking] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!hasStoredAuth()) {
+      setStatus(getInitialWebAlertStatus());
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setStatus((current) => (current === 'missing-config' || current === 'unsupported' ? current : 'checking'));
+
+    authFetchJson('/v1/alerts/me')
+      .then((data) => {
+        if (cancelled) return;
+        const subscription = data?.subscription;
+        if (!subscription) {
+          setStatus(getInitialWebAlertStatus());
+          return;
+        }
+        const nextPrefs = mergeServerAlertPrefs(prefs, subscription);
+        setPrefs(nextPrefs);
+        writeStoredJson(alertPrefsStorageKey, nextPrefs);
+        setStatus('active');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        if (error.status === 404) {
+          setStatus(getInitialWebAlertStatus());
+          return;
+        }
+        setStatus('error');
+        setActionMessage(error.message || 'Could not load alert subscription.');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // The server hydration should run once per visit; local preference edits stay local until saved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updatePrefs = (patch) => {
     setPrefs((current) => ({ ...current, ...patch }));
     setSavedAt(null);
+    setActionMessage('');
   };
 
-  const savePrefs = () => {
-    writeStoredJson(alertPrefsStorageKey, prefs);
-    setSavedAt(Date.now());
+  const activateAlerts = async () => {
+    setIsWorking(true);
+    setActionMessage('');
+    try {
+      const token = await getFirebaseWebMessagingToken();
+      const nextPrefs = {
+        ...prefs,
+        enabled: true,
+        fcmToken: token,
+        permission: 'granted',
+        lastSyncedAt: Date.now(),
+      };
+      await saveWebAlertSubscription(nextPrefs, token);
+      writeStoredJson(alertPrefsStorageKey, nextPrefs);
+      setPrefs(nextPrefs);
+      setStatus('active');
+      setSavedAt(Date.now());
+      setActionMessage('System alerts are active on this browser.');
+    } catch (error) {
+      const nextStatus = deriveWebAlertErrorStatus(error);
+      setStatus(nextStatus);
+      setActionMessage(error.message || 'Could not activate browser notifications.');
+    } finally {
+      setIsWorking(false);
+    }
   };
+
+  const savePrefs = async () => {
+    setIsWorking(true);
+    setActionMessage('');
+    try {
+      if (!prefs.fcmToken) {
+        await activateAlerts();
+        return;
+      }
+      const nextPrefs = {
+        ...prefs,
+        enabled: true,
+        permission: getNotificationPermission(),
+        lastSyncedAt: Date.now(),
+      };
+      await saveWebAlertSubscription(nextPrefs, prefs.fcmToken);
+      writeStoredJson(alertPrefsStorageKey, nextPrefs);
+      setPrefs(nextPrefs);
+      setStatus('active');
+      setSavedAt(Date.now());
+      setActionMessage('Alert preferences updated.');
+    } catch (error) {
+      setStatus('error');
+      setActionMessage(error.message || 'Could not save alert preferences.');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const turnOffAlerts = async () => {
+    setIsWorking(true);
+    setActionMessage('');
+    try {
+      await deleteWebAlertSubscription(prefs.fcmToken);
+      await deleteFirebaseWebMessagingToken();
+      const nextPrefs = {
+        ...prefs,
+        enabled: false,
+        fcmToken: '',
+        permission: getNotificationPermission(),
+        lastSyncedAt: Date.now(),
+      };
+      writeStoredJson(alertPrefsStorageKey, nextPrefs);
+      setPrefs(nextPrefs);
+      setStatus(getInitialWebAlertStatus(nextPrefs));
+      setSavedAt(Date.now());
+      setActionMessage('Web alerts are turned off for this browser.');
+    } catch (error) {
+      setStatus('error');
+      setActionMessage(error.message || 'Could not turn off web alerts.');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const isActive = status === 'active' && Boolean(prefs.fcmToken);
+  const isDenied = status === 'blocked';
+  const isUnsupported = status === 'unsupported';
+  const isMissingConfig = status === 'missing-config';
+  const primaryDisabled = isWorking || isDenied || isUnsupported || isMissingConfig;
 
   return (
     <div className="feed-shell detail-shell profile-shell">
@@ -2410,25 +2546,36 @@ function AlertsPage() {
 
         <section className="stats-strip detail-stats">
           <StatBlock label="Android FCM" value="Live" />
-          <StatBlock label="Web Push" value="Pending" tone="down" />
+          <StatBlock label="Web Push" value={webAlertStatusLabel(status, isActive)} tone={isActive ? 'up' : 'down'} />
           <StatBlock label="Following Mode" value={prefs.followingOnly ? 'On' : 'Off'} />
           <StatBlock label="Minimum Size" value={formatUsdCompact(prefs.minUsd)} />
         </section>
 
         <section className="profile-settings-grid alerts-grid">
-          <ProfilePanel icon={BellOff} title="Web push status">
+          <ProfilePanel icon={isActive ? Bell : BellOff} title="Web push status">
             <p className="profile-panel-note">
-              The website can store alert preferences, but browser push delivery still needs Firebase Web
-              Messaging and a service worker before it can receive notifications like Android.
+              Web alerts use the same backend alert matcher as Android, but this browser gets its own
+              Firebase Web Messaging token and service worker registration.
             </p>
             <div className="settings-list">
-              <SettingsRow icon={Bell} label="Current delivery" value="Android app" />
-              <SettingsRow icon={ShieldCheck} label="Backend support" value="FCM mobile token" />
-              <SettingsRow icon={Clock} label="Next web step" value="Service worker" />
+              <SettingsRow icon={Bell} label="Current delivery" value={webAlertStatusLabel(status, isActive)} />
+              <SettingsRow icon={ShieldCheck} label="Permission" value={getNotificationPermissionLabel()} />
+              <SettingsRow icon={Clock} label="Quiet hours" value={prefs.quietHoursEnabled ? '10pm-7am local' : 'Off'} />
             </div>
+            {actionMessage ? <p className="alert-status-message">{actionMessage}</p> : null}
+            {isDenied ? (
+              <p className="alert-warning-note">
+                Notifications are blocked in this browser. Re-enable them in site settings before activating alerts.
+              </p>
+            ) : null}
+            {isMissingConfig ? (
+              <p className="alert-warning-note">
+                Firebase web config is missing. Add the Vite Firebase web environment variables before activating.
+              </p>
+            ) : null}
           </ProfilePanel>
 
-          <ProfilePanel icon={SlidersHorizontal} title="Preference draft">
+          <ProfilePanel icon={SlidersHorizontal} title={isActive ? 'Alert preferences' : 'Activate alerts'}>
             <div className="alert-control-stack">
               <label className="range-control">
                 <span>
@@ -2463,9 +2610,24 @@ function AlertsPage() {
                 onChange={(value) => updatePrefs({ quietHoursEnabled: value })}
               />
               <div className="detail-action-row">
-                <button className="load-more-button" type="button" onClick={savePrefs}>
-                  Save web draft
+                <button
+                  className="load-more-button"
+                  type="button"
+                  onClick={isActive ? savePrefs : activateAlerts}
+                  disabled={primaryDisabled}
+                >
+                  {isWorking ? 'Working...' : isActive ? 'Save changes' : 'Activate system alerts'}
                 </button>
+                {isActive ? (
+                  <button
+                    className="secondary-link-button danger-button"
+                    type="button"
+                    onClick={turnOffAlerts}
+                    disabled={isWorking}
+                  >
+                    Turn off web alerts
+                  </button>
+                ) : null}
                 {savedAt ? <span className="saved-note">Saved {relativeClientTime(savedAt)}</span> : null}
               </div>
             </div>
@@ -2476,8 +2638,8 @@ function AlertsPage() {
       <DetailRail
         title="Alert Parity"
         items={[
-          ['Android', 'FCM notifications remain the production alert channel.'],
-          ['Web', 'The UI is ready, but delivery needs Firebase Web Messaging configuration.'],
+          ['Android', 'Mobile tokens keep using the existing FCM alert subscription path.'],
+          ['Web', 'Browser tokens subscribe through the same matcher without changing watcher output.'],
           ['Following-only', 'The server already checks followed wallets for mobile alert subscriptions.'],
         ]}
       />
@@ -5178,13 +5340,25 @@ async function getWebAuth(force = false) {
   }
 
   const deviceId = getOrCreateDeviceId();
-  const data = await fetchJson('/v1/auth/anonymous', {
-    method: 'POST',
-    body: {
-      deviceId,
-      platform: 'unknown',
-    },
-  });
+  let data;
+  try {
+    data = await fetchJson('/v1/auth/anonymous', {
+      method: 'POST',
+      body: {
+        deviceId,
+        platform: 'web',
+      },
+    });
+  } catch (error) {
+    if (error.status !== 400) throw error;
+    data = await fetchJson('/v1/auth/anonymous', {
+      method: 'POST',
+      body: {
+        deviceId,
+        platform: 'unknown',
+      },
+    });
+  }
 
   const auth = {
     token: data.token,
@@ -5324,6 +5498,185 @@ function updateFollowingQueryParam(enabled) {
   window.history.replaceState({}, '', url);
 }
 
+function hasWebPushSupport() {
+  return Boolean(
+    typeof window !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+  );
+}
+
+function hasFirebaseWebPushConfig() {
+  return Boolean(
+    firebaseVapidKey &&
+      firebaseWebConfig.apiKey &&
+      firebaseWebConfig.authDomain &&
+      firebaseWebConfig.projectId &&
+      firebaseWebConfig.messagingSenderId &&
+      firebaseWebConfig.appId
+  );
+}
+
+function getNotificationPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  return Notification.permission;
+}
+
+function getNotificationPermissionLabel() {
+  const permission = getNotificationPermission();
+  if (permission === 'granted') return 'Allowed';
+  if (permission === 'denied') return 'Blocked';
+  if (permission === 'default') return 'Not requested';
+  return 'Unsupported';
+}
+
+function getInitialWebAlertStatus(prefs = readWebAlertPrefs()) {
+  if (!hasWebPushSupport()) return 'unsupported';
+  if (!hasFirebaseWebPushConfig()) return 'missing-config';
+  if (getNotificationPermission() === 'denied') return 'blocked';
+  if (prefs.enabled && prefs.fcmToken) return 'active';
+  return 'inactive';
+}
+
+function webAlertStatusLabel(status, isActive = false) {
+  if (isActive) return 'Active';
+  if (status === 'checking') return 'Checking';
+  if (status === 'blocked') return 'Blocked';
+  if (status === 'unsupported') return 'Unsupported';
+  if (status === 'missing-config') return 'Config needed';
+  if (status === 'error') return 'Needs attention';
+  return 'Inactive';
+}
+
+function deriveWebAlertErrorStatus(error) {
+  if (error?.code === 'permission-denied' || getNotificationPermission() === 'denied') return 'blocked';
+  if (error?.code === 'unsupported') return 'unsupported';
+  if (error?.code === 'missing-config') return 'missing-config';
+  return 'error';
+}
+
+function mergeServerAlertPrefs(current, subscription) {
+  return {
+    ...current,
+    enabled: true,
+    fcmToken: subscription.fcmToken || current.fcmToken || '',
+    minUsd: Number(subscription.minUsd || current.minUsd || 50000),
+    megaOnly: Boolean(subscription.megaOnly),
+    followingOnly: Boolean(subscription.followingOnly),
+    quietHoursEnabled: Boolean(subscription.quietHours),
+    permission: getNotificationPermission(),
+    lastSyncedAt: Date.now(),
+  };
+}
+
+function buildAlertQuietHours(prefs) {
+  if (!prefs.quietHoursEnabled) return null;
+  return {
+    start: '22:00',
+    end: '07:00',
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  };
+}
+
+function buildWebAlertPayload(prefs, fcmToken) {
+  return {
+    fcmToken,
+    minUsd: Number(prefs.minUsd || 50000),
+    megaOnly: Boolean(prefs.megaOnly),
+    followingOnly: Boolean(prefs.followingOnly),
+    categories: [],
+    quietHours: buildAlertQuietHours(prefs),
+  };
+}
+
+async function saveWebAlertSubscription(prefs, fcmToken) {
+  await authFetchJson('/v1/alerts/subscribe', {
+    method: 'POST',
+    body: buildWebAlertPayload(prefs, fcmToken),
+  });
+}
+
+async function deleteWebAlertSubscription(fcmToken) {
+  if (!fcmToken) return;
+  await authFetchJson('/v1/alerts/subscribe', {
+    method: 'DELETE',
+    body: { fcmToken },
+  });
+}
+
+function buildFirebaseServiceWorkerUrl() {
+  const params = new URLSearchParams(firebaseWebConfig);
+  return `/firebase-messaging-sw.js?${params.toString()}`;
+}
+
+async function getFirebaseMessagingContext() {
+  if (!hasWebPushSupport()) {
+    const error = new Error('This browser does not support web push notifications.');
+    error.code = 'unsupported';
+    throw error;
+  }
+  if (!hasFirebaseWebPushConfig()) {
+    const error = new Error('Firebase web push configuration is missing.');
+    error.code = 'missing-config';
+    throw error;
+  }
+
+  const messagingModule = await import('firebase/messaging');
+  const supported = await messagingModule.isSupported();
+  if (!supported) {
+    const error = new Error('Firebase messaging is not supported in this browser.');
+    error.code = 'unsupported';
+    throw error;
+  }
+
+  const { initializeApp, getApps, getApp } = await import('firebase/app');
+  const appName = 'polywatch-web-push';
+  const app = getApps().some((candidate) => candidate.name === appName)
+    ? getApp(appName)
+    : initializeApp(firebaseWebConfig, appName);
+  const registration = await navigator.serviceWorker.register(buildFirebaseServiceWorkerUrl());
+  await navigator.serviceWorker.ready;
+
+  return {
+    messaging: messagingModule.getMessaging(app),
+    registration,
+    getToken: messagingModule.getToken,
+    deleteToken: messagingModule.deleteToken,
+  };
+}
+
+async function getFirebaseWebMessagingToken() {
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    const error = new Error('Notification permission was not granted.');
+    error.code = 'permission-denied';
+    throw error;
+  }
+
+  const { messaging, registration, getToken } = await getFirebaseMessagingContext();
+  const token = await getToken(messaging, {
+    vapidKey: firebaseVapidKey,
+    serviceWorkerRegistration: registration,
+  });
+
+  if (!token) {
+    throw new Error('Firebase did not return a web messaging token.');
+  }
+
+  return token;
+}
+
+async function deleteFirebaseWebMessagingToken() {
+  if (!hasWebPushSupport() || !hasFirebaseWebPushConfig()) return;
+  try {
+    const { messaging, deleteToken } = await getFirebaseMessagingContext();
+    await deleteToken(messaging);
+  } catch {
+    // Server-side unsubscribe is the source of truth. Token deletion is best effort.
+  }
+}
+
 function readWebAlertPrefs() {
   const stored = readStoredJson(alertPrefsStorageKey);
   return {
@@ -5331,6 +5684,10 @@ function readWebAlertPrefs() {
     megaOnly: Boolean(stored?.megaOnly),
     followingOnly: Boolean(stored?.followingOnly),
     quietHoursEnabled: Boolean(stored?.quietHoursEnabled),
+    enabled: Boolean(stored?.enabled),
+    fcmToken: typeof stored?.fcmToken === 'string' ? stored.fcmToken : '',
+    permission: typeof stored?.permission === 'string' ? stored.permission : getNotificationPermission(),
+    lastSyncedAt: Number(stored?.lastSyncedAt || 0),
   };
 }
 

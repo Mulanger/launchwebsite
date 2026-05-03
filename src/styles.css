@@ -4102,6 +4102,43 @@ img {
   font-weight: 800;
 }
 
+.alert-status-message,
+.alert-warning-note {
+  margin: 14px 0 0;
+  padding: 11px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.alert-status-message {
+  color: var(--accent);
+  background: rgba(94, 231, 173, 0.08);
+  border: 1px solid rgba(94, 231, 173, 0.18);
+}
+
+.alert-warning-note {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(244, 139, 160, 0.08);
+  border: 1px solid rgba(244, 139, 160, 0.18);
+}
+
+.danger-button {
+  color: rgba(244, 139, 160, 0.92);
+  border-color: rgba(244, 139, 160, 0.22);
+}
+
+.danger-button:hover {
+  color: #ffc1cc;
+  border-color: rgba(244, 139, 160, 0.38);
+}
+
+.secondary-link-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+  transform: none;
+}
+
 .detail-skeleton-title,
 .skeleton-stat span,
 .skeleton-stat strong,

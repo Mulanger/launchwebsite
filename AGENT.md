@@ -68,6 +68,12 @@ Frontend/Vite:
 - `VITE_API_BASE_URL`: REST base used by `src/App.jsx`. Defaults to `/api`.
 - `VITE_WS_BASE_URL`: websocket base. Defaults to `https://whaleserver-production.up.railway.app`, normalized to `wss://...`.
 - `VITE_DEV_API_TARGET`: Vite dev/preview proxy target for `/api`. Defaults to production API.
+- `VITE_FIREBASE_API_KEY`: Firebase Web app API key for browser notifications.
+- `VITE_FIREBASE_AUTH_DOMAIN`: Firebase Web app auth domain.
+- `VITE_FIREBASE_PROJECT_ID`: Firebase project id. Use the same project as the existing Android FCM setup.
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`: Firebase Cloud Messaging sender id for the Web app.
+- `VITE_FIREBASE_APP_ID`: Firebase Web app id.
+- `VITE_FIREBASE_VAPID_KEY`: Firebase Web Push certificate key used by `getToken()`.
 
 Production server:
 
@@ -101,6 +107,14 @@ Auth/follows:
 - `GET /v1/users/me/follows`
 - `POST /v1/users/me/follows`
 - `DELETE /v1/users/me/follows/:wallet`
+
+Alerts:
+
+- `POST /v1/alerts/subscribe`
+- `DELETE /v1/alerts/subscribe`
+- `GET /v1/alerts/me`
+
+Web alerts use Firebase Web Messaging in `public/firebase-messaging-sw.js`. The website asks notification permission only when the user presses Activate, obtains a browser FCM token, then stores the same alert preferences through the existing authenticated alert subscription endpoint used by Android. This is additive: Android tokens still use the same collection and dispatcher, while web users are created with platform `web` once the API server supports that enum.
 
 Important fallback behavior:
 
@@ -206,7 +220,7 @@ When the backend supports `window=today`, remove the frontend-derived leaderboar
 - `polywatch:webAuth`: anonymous auth token and user id.
 - `polywatch:webDeviceId`: generated web device id.
 - `polywatch:followedWallets`: local followed wallet list.
-- `polywatch:webAlertPrefs`: web alert preference placeholders.
+- `polywatch:webAlertPrefs`: web alert preferences, activation state, browser FCM token, permission snapshot, and last sync time.
 - `polywatch:trade:{tradeId}`: sessionStorage cached trade for detail-page fallback.
 
 ## Testing Checklist
