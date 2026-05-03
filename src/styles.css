@@ -1030,10 +1030,29 @@ img {
   background: rgba(94, 231, 173, 0.08);
 }
 
+.row-actions .follow-button.compact.following,
+.follow-button.compact.following {
+  color: #06120e;
+  border-color: rgba(94, 231, 173, 0.88);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(94, 231, 173, 0.1);
+}
+
 .follow-button.following:hover {
   color: var(--rose);
   border-color: rgba(255, 123, 138, 0.42);
   background: rgba(255, 123, 138, 0.08);
+}
+
+.mobile-trade-card .follow-button.compact {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.mobile-trade-card .follow-button.compact svg {
+  width: 11px;
+  height: 11px;
 }
 
 .skeleton-row > div {

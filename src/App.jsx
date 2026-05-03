@@ -447,6 +447,7 @@ function WhaleFeedPage() {
         price: getPriceValue(trade),
         trader: {
           name: getTraderName(trade),
+          wallet: trade.trader?.proxyWallet || '',
           avatarColor: avatarGradient(trade.trader?.proxyWallet || trade.id),
           href: trade.trader?.proxyWallet
             ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
@@ -4196,6 +4197,7 @@ function MobileTradeCard({
 
   return (
     <div
+      className="mobile-trade-card"
       role="link"
       tabIndex={0}
       onClick={onOpen}
@@ -4220,9 +4222,13 @@ function MobileTradeCard({
         </span>
         <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)' }}>{timeAgo}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          <MobileSmallIconButton onClick={onFollow}>
-            <UserPlus size={11} color="rgba(255,255,255,0.55)" />
-          </MobileSmallIconButton>
+          {trader?.wallet ? (
+            <FollowWalletButton wallet={trader.wallet} variant="icon" />
+          ) : (
+            <MobileSmallIconButton onClick={onFollow}>
+              <UserPlus size={11} color="rgba(255,255,255,0.55)" />
+            </MobileSmallIconButton>
+          )}
           <MobileSmallIconButton onClick={onOpen}>
             <ExternalLink size={10} color="rgba(255,255,255,0.55)" />
           </MobileSmallIconButton>
