@@ -2544,16 +2544,23 @@ function AlertsPage() {
         setActionMessage('Notification permission is not currently allowed.');
         return;
       }
-      const registration = await navigator.serviceWorker.ready;
-      await registration.showNotification('Polywatch test alert', {
-        body: `You will be notified for whale trades over ${formatUsdFull(prefs.minUsd)}.`,
-        icon: '/assets/polywatch-icon.png',
-        badge: '/assets/polywatch-icon.png',
-        tag: 'polywatch-test-alert',
-        data: { url: '/alerts' },
-      });
-      setActionMessage('Test alert sent to this browser.');
+      await authFetchJson('/v1/alerts/test', { method: 'POST' });
+      setActionMessage('Test alert sent through the server. If no toast appears, check Windows and browser notification settings.');
     } catch (error) {
+      if (error.status === 404) {
+        try {
+          await showLocalBrowserTestAlert(prefs);
+          setActionMessage('Local test alert sent. The server test endpoint is still deploying.');
+          return;
+        } catch (localError) {
+          setActionMessage(localError.message || 'Could not send the local test alert.');
+          return;
+        }
+      }
+      if (error.status === 502) {
+        setActionMessage('Server tried to send the test alert but Firebase rejected it. Reactivate web alerts to refresh the browser token.');
+        return;
+      }
       setActionMessage(error.message || 'Could not send the test alert.');
     }
   };
@@ -6047,6 +6054,20 @@ async function deleteFirebaseWebMessagingToken() {
   } catch {
     // Server-side unsubscribe is the source of truth. Token deletion is best effort.
   }
+}
+
+async function showLocalBrowserTestAlert(prefs) {
+  if (getNotificationPermission() !== 'granted') {
+    throw new Error('Notification permission is not currently allowed.');
+  }
+  const registration = await navigator.serviceWorker.ready;
+  await registration.showNotification('Polywatch test alert', {
+    body: `You will be notified for whale trades over ${formatUsdFull(prefs.minUsd)}.`,
+    icon: '/assets/polywatch-icon.png',
+    badge: '/assets/polywatch-icon.png',
+    tag: 'polywatch-test-alert',
+    data: { url: '/alerts' },
+  });
 }
 
 function readWebAlertPrefs() {
