@@ -757,8 +757,7 @@ img {
   overflow: hidden;
   transition:
     border-color 180ms ease,
-    background 180ms ease,
-    transform 180ms ease;
+    background 180ms ease;
   cursor: pointer;
 }
 
@@ -771,7 +770,6 @@ img {
 }
 
 .trade-row:hover {
-  transform: translateY(-2px);
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.062);
 }

@@ -447,7 +447,6 @@ function WhaleFeedPage() {
         price: getPriceValue(trade),
         trader: {
           name: getTraderName(trade),
-          address: shortWallet(trade.trader?.proxyWallet),
           avatarColor: avatarGradient(trade.trader?.proxyWallet || trade.id),
           href: trade.trader?.proxyWallet
             ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
@@ -4216,9 +4215,6 @@ function MobileTradeCard({
           <div style={{ width: 22, height: 22, borderRadius: '50%', background: trader.avatarColor }} />
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>{trader.name}</div>
-            <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.4)', fontFamily: '"SFMono-Regular", Consolas, monospace' }}>
-              {trader.address}
-            </div>
           </div>
         </div>
       </div>
@@ -4417,7 +4413,6 @@ function TradeRow({ trade, index }) {
         <TraderAvatar trade={trade} />
         <div>
           <strong title={trade.trader?.proxyWallet}>{traderName}</strong>
-          <span>{formatTraderMeta(trade)}</span>
         </div>
       </a>
 
@@ -6975,15 +6970,6 @@ function formatTraderLabel(name, wallet) {
     return name.length > 42 ? `${name.slice(0, 30)}...${name.slice(-6)}` : name;
   }
   return shortWallet(name || wallet) || 'Unknown trader';
-}
-
-function formatTraderMeta(trade) {
-  const vol30d = trade.trader?.vol30d;
-  const tradeCount = trade.trader?.tradeCount;
-
-  if (vol30d) return `${formatUsdCompact(vol30d)} 30d`;
-  if (tradeCount) return `${formatNumber(tradeCount)} trades`;
-  return shortWallet(trade.trader?.proxyWallet) || 'Public wallet';
 }
 
 function normalizeTradeDetailPayload(payload) {
