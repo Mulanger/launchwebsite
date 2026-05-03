@@ -4732,6 +4732,97 @@ img {
   transform: none;
 }
 
+.web-alert-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  width: min(380px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(94, 231, 173, 0.24);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(34, 211, 165, 0.12), rgba(10, 10, 10, 0.98)),
+    #0a0a0a;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.46);
+  animation: web-alert-toast-in 220ms ease-out;
+}
+
+.web-alert-toast-body {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.web-alert-toast-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--accent);
+  background: rgba(94, 231, 173, 0.14);
+}
+
+.web-alert-toast strong,
+.web-alert-toast small {
+  display: block;
+  min-width: 0;
+}
+
+.web-alert-toast strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.web-alert-toast small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.web-alert-toast-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.web-alert-toast-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes web-alert-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 1180px) {
   .alerts-setup-grid {
     grid-template-columns: 1fr;
@@ -4784,6 +4875,12 @@ img {
   .alerts-reset-button,
   .alerts-primary-button {
     width: 100%;
+  }
+
+  .web-alert-toast {
+    right: 12px;
+    bottom: 86px;
+    width: calc(100vw - 24px);
   }
 }
 

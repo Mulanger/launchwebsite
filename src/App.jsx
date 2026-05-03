@@ -46,6 +46,7 @@ const followsStorageKey = 'polywatch:followedWallets';
 const followsChangedEvent = 'polywatch:follows-changed';
 const alertPrefsStorageKey = 'polywatch:webAlertPrefs';
 const webAlertsChangedEvent = 'polywatch:web-alerts-changed';
+const webAlertToastEvent = 'polywatch:web-alert-toast';
 const walletRegex = /^0x[0-9a-fA-F]{40}$/;
 const firebaseWebConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -105,6 +106,7 @@ function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const tradeMatch = path.match(/^\/trade\/([^/]+)$/);
   const traderMatch = path.match(/^\/trader\/([^/]+)$/);
+  const [webAlertToast, setWebAlertToast] = useState(null);
 
   useEffect(() => {
     let disposed = false;
@@ -138,17 +140,39 @@ function App() {
     };
   }, []);
 
-  if (path === '/privacy') return <PrivacyPage />;
-  if (path === '/terms') return <TermsPage />;
-  if (path === '/delete-data') return <DeleteDataPage />;
-  if (path === '/leaderboard') return <LeaderboardPage />;
-  if (path === '/profile/following') return <FollowingPage />;
-  if (path === '/profile') return <ProfilePage />;
-  if (path === '/alerts') return <AlertsPage />;
-  if (tradeMatch) return <TradeDetailPage tradeId={decodeURIComponent(tradeMatch[1])} />;
-  if (traderMatch) return <TraderProfilePage wallet={decodeURIComponent(traderMatch[1])} />;
+  useEffect(() => {
+    let timer = null;
+    const handleToast = (event) => {
+      window.clearTimeout(timer);
+      setWebAlertToast({ id: Date.now(), ...(event.detail || {}) });
+      timer = window.setTimeout(() => setWebAlertToast(null), 8000);
+    };
 
-  return <WhaleFeedPage />;
+    window.addEventListener(webAlertToastEvent, handleToast);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(webAlertToastEvent, handleToast);
+    };
+  }, []);
+
+  let page;
+  if (path === '/privacy') page = <PrivacyPage />;
+  else if (path === '/terms') page = <TermsPage />;
+  else if (path === '/delete-data') page = <DeleteDataPage />;
+  else if (path === '/leaderboard') page = <LeaderboardPage />;
+  else if (path === '/profile/following') page = <FollowingPage />;
+  else if (path === '/profile') page = <ProfilePage />;
+  else if (path === '/alerts') page = <AlertsPage />;
+  else if (tradeMatch) page = <TradeDetailPage tradeId={decodeURIComponent(tradeMatch[1])} />;
+  else if (traderMatch) page = <TraderProfilePage wallet={decodeURIComponent(traderMatch[1])} />;
+  else page = <WhaleFeedPage />;
+
+  return (
+    <>
+      {page}
+      <WebAlertToast toast={webAlertToast} onClose={() => setWebAlertToast(null)} />
+    </>
+  );
 }
 
 function WhaleFeedPage() {
@@ -2581,6 +2605,11 @@ function AlertsPage() {
         return;
       }
       await authFetchJson('/v1/alerts/test', { method: 'POST' });
+      showInAppWebAlertToast({
+        title: 'Polywatch test alert',
+        body: `Server accepted the test alert for trades over ${formatUsdFull(prefs.minUsd)}.`,
+        url: '/alerts',
+      });
       setActionMessage('Test alert sent through the server. If no toast appears, check Windows and browser notification settings.');
     } catch (error) {
       if (error.status === 404) {
@@ -2689,6 +2718,33 @@ function AlertsPage() {
           </section>
         </section>
       </main>
+    </div>
+  );
+}
+
+function WebAlertToast({ toast, onClose }) {
+  if (!toast) return null;
+
+  const openToast = () => {
+    if (toast.url) {
+      window.location.href = toast.url;
+    }
+  };
+
+  return (
+    <div className="web-alert-toast" role="status" aria-live="polite">
+      <button className="web-alert-toast-body" type="button" onClick={openToast}>
+        <span className="web-alert-toast-icon">
+          <Bell size={16} aria-hidden="true" />
+        </span>
+        <span>
+          <strong>{toast.title || 'Polywatch alert'}</strong>
+          <small>{toast.body || 'A tracked whale trade matched your alert settings.'}</small>
+        </span>
+      </button>
+      <button className="web-alert-toast-close" type="button" onClick={onClose} aria-label="Dismiss alert">
+        ×
+      </button>
     </div>
   );
 }
@@ -6113,6 +6169,8 @@ async function showFirebasePayloadNotification(payload) {
   const notification = payload?.notification || {};
   const title = notification.title || 'Polywatch whale alert';
   const body = notification.body || 'A tracked whale trade matched your alert settings.';
+  const url = data.url || (data.tradeId ? `/trade/${encodeURIComponent(data.tradeId)}` : '/alerts');
+  showInAppWebAlertToast({ title, body, url });
   const registration = await navigator.serviceWorker.ready;
   await registration.showNotification(title, {
     body,
@@ -6121,7 +6179,7 @@ async function showFirebasePayloadNotification(payload) {
     tag: data.tradeId ? `polywatch-whale-${data.tradeId}` : data.type === 'test' ? 'polywatch-test-alert' : 'polywatch-whale-alert',
     data: {
       ...data,
-      url: data.url || (data.tradeId ? `/trade/${encodeURIComponent(data.tradeId)}` : '/alerts'),
+      url,
     },
   });
 }
@@ -6137,6 +6195,11 @@ async function showLocalBrowserTestAlert(prefs) {
     badge: '/assets/polywatch-icon.png',
     tag: 'polywatch-test-alert',
     data: { url: '/alerts' },
+  });
+  showInAppWebAlertToast({
+    title: 'Polywatch test alert',
+    body: `You will be notified for whale trades over ${formatUsdFull(prefs.minUsd)}.`,
+    url: '/alerts',
   });
 }
 
@@ -6160,6 +6223,10 @@ function notifyFollowsChanged() {
 
 function notifyWebAlertsChanged() {
   window.dispatchEvent(new CustomEvent(webAlertsChangedEvent));
+}
+
+function showInAppWebAlertToast(detail) {
+  window.dispatchEvent(new CustomEvent(webAlertToastEvent, { detail }));
 }
 
 function readStoredJson(key) {
