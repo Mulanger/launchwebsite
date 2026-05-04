@@ -39,7 +39,7 @@ import {
 const supportEmail = 'support@whaletracker.com';
 const lastUpdated = 'May 1, 2026';
 const siteOrigin = 'https://www.polywhaletrades.com';
-const siteName = 'Polywatch';
+const siteName = 'Polywhale';
 const seoImage = `${siteOrigin}/assets/polywatch-icon.png`;
 const prodApiUrl = 'https://whaleserver-production.up.railway.app';
 const apiBaseUrl = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || '/api');
@@ -80,7 +80,7 @@ const feedSortOptions = [
 ];
 
 const leaderboardWindows = [
-  { id: '1d', label: '1D', caption: "Today's New York session" },
+  { id: '1d', label: '1D', caption: "today's New York session" },
   { id: '7d', label: '7D', caption: 'Last 7 New York days' },
   { id: '30d', label: '30D', caption: 'Last 30 days', locked: true },
   { id: '365d', label: '1Y', caption: 'Last 365 days', locked: true },
@@ -102,11 +102,11 @@ const legalLinks = [
 ];
 
 const seoDefaults = {
-  title: 'Polywatch | Live Polymarket Whale Trades, Top Whales & Whale Feed',
+  title: 'Polywhale | Live Polymarket Whale Trades, Top Whales & Whale Feed',
   description:
-    'Track live Polymarket whale trades, todayâ€™s whale volume, top whales, trader leaderboards, wallet profiles, and large trade alerts with Polywatch.',
+    "Track live Polymarket whale trades, today's whale volume, top whales, trader leaderboards, wallet profiles, and large trade alerts with Polywhale.",
   keywords:
-    'Polywatch, Polymarket whale trades, live whale feed, Polymarket whales, top whales today, whale leaderboard, whale alerts, Polymarket trader rankings, Polymarket wallet tracking',
+    'Polywhale, Polymarket whale trades, live whale feed, Polymarket whales, top whales today, whale leaderboard, whale alerts, Polymarket trader rankings, Polymarket wallet tracking',
   path: '/',
   robots: 'index,follow,max-image-preview:large',
 };
@@ -120,39 +120,39 @@ const seoByPath = {
     ],
   },
   '/about': {
-    title: 'About Polywatch | Live Polymarket Whale Feed & Top Whale Tracking',
+    title: 'About Polywhale | Live Polymarket Whale Feed & Top Whale Tracking',
     description:
-      'Learn how Polywatch tracks live Polymarket whale trades, top whales today, whale leaderboards, wallet profiles, market activity, and large trade alerts.',
+      'Learn how Polywhale tracks live Polymarket whale trades, top whales today, whale leaderboards, wallet profiles, market activity, and large trade alerts.',
     keywords:
-      'about Polywatch, Polymarket whale feed, Polymarket top whales, live whale trades, whale trade alerts, prediction market whales, Polymarket leaderboard',
+      'about Polywhale, Polymarket whale feed, Polymarket top whales, live whale trades, whale trade alerts, prediction market whales, Polymarket leaderboard',
     path: '/about',
     robots: 'index,follow,max-image-preview:large',
     structuredData: [buildAboutStructuredData(), buildFaqStructuredData()],
   },
   '/leaderboard': {
-    title: 'Polymarket Whale Leaderboard | Top Whales Today | Polywatch',
+    title: 'Polymarket Whale Leaderboard | Top Whales Today | Polywhale',
     description:
-      'See the top Polymarket whales ranked by whale volume, trades, average trade size, and wallet activity for todayâ€™s New York session.',
+      "See the top Polymarket whales ranked by whale volume, trades, average trade size, and wallet activity for today's New York session.",
     keywords:
       'Polymarket leaderboard, top Polymarket whales, top whales today, whale volume, wallet rankings, prediction market leaderboard',
     path: '/leaderboard',
     robots: 'index,follow,max-image-preview:large',
   },
   '/privacy': {
-    title: 'Privacy Policy | Polywatch',
-    description: 'Polywatch privacy policy for live Polymarket whale monitoring, alerts, follows, and anonymous app sessions.',
+    title: 'Privacy Policy | Polywhale',
+    description: 'Polywhale privacy policy for live Polymarket whale monitoring, alerts, follows, and anonymous app sessions.',
     path: '/privacy',
     robots: 'index,follow',
   },
   '/terms': {
-    title: 'Terms of Service | Polywatch',
-    description: 'Terms for using Polywatch, a read-only public Polymarket whale trade monitoring and alert service.',
+    title: 'Terms of Service | Polywhale',
+    description: 'Terms for using Polywhale, a read-only public Polymarket whale trade monitoring and alert service.',
     path: '/terms',
     robots: 'index,follow',
   },
   '/delete-data': {
-    title: 'Delete Data | Polywatch',
-    description: 'Request deletion of Polywatch alert, follow, notification, and anonymous session data.',
+    title: 'Delete Data | Polywhale',
+    description: 'Request deletion of Polywhale alert, follow, notification, and anonymous session data.',
     path: '/delete-data',
     robots: 'index,follow',
   },
@@ -206,7 +206,7 @@ function buildAboutStructuredData() {
   return {
     '@context': 'https://schema.org',
     '@type': 'AboutPage',
-    name: 'About Polywatch',
+    name: 'About Polywhale',
     url: `${siteOrigin}/about`,
     isPartOf: {
       '@type': 'WebSite',
@@ -214,7 +214,7 @@ function buildAboutStructuredData() {
       url: siteOrigin,
     },
     description:
-      'About Polywatch, an independent dashboard for live Polymarket whale trades, top whales, leaderboard rankings, wallet profiles, and whale alerts.',
+      'About Polywhale, an independent dashboard for live Polymarket whale trades, top whales, leaderboard rankings, wallet profiles, and whale alerts.',
   };
 }
 
@@ -228,20 +228,20 @@ function buildFaqStructuredData() {
         name: 'What is a Polymarket whale trade?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'A Polymarket whale trade is a large public trade made on a Polymarket market. Polywatch highlights these trades so users can monitor size, side, market, price, and wallet activity.',
+          text: 'A Polymarket whale trade is a large public trade made on a Polymarket market. Polywhale highlights these trades so users can monitor size, side, market, price, and wallet activity.',
         },
       },
       {
         '@type': 'Question',
-        name: 'Does Polywatch show a live Polymarket whale feed?',
+        name: 'Does Polywhale show a live Polymarket whale feed?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Yes. Polywatch provides a live whale feed for large public Polymarket trades, including todayâ€™s whale volume, active whales, mega trades, and the biggest trade for the current New York session.',
+          text: "Yes. Polywhale provides a live whale feed for large public Polymarket trades, including today's whale volume, active whales, mega trades, and the biggest trade for the current New York session.",
         },
       },
       {
         '@type': 'Question',
-        name: 'How does the Polywatch leaderboard rank top whales?',
+        name: 'How does the Polywhale leaderboard rank top whales?',
         acceptedAnswer: {
           '@type': 'Answer',
           text: 'The leaderboard ranks public wallets by whale volume and shows supporting signals such as trade count and average trade size for the selected timeframe.',
@@ -249,18 +249,18 @@ function buildFaqStructuredData() {
       },
       {
         '@type': 'Question',
-        name: 'Can Polywatch send alerts for large Polymarket trades?',
+        name: 'Can Polywhale send alerts for large Polymarket trades?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Polywatch supports browser alerts for large whale trades. Users can choose a minimum trade size threshold and activate web push notifications from the Alerts page.',
+          text: 'Polywhale supports browser alerts for large whale trades. Users can choose a minimum trade size threshold and activate web push notifications from the Alerts page.',
         },
       },
       {
         '@type': 'Question',
-        name: 'Is Polywatch affiliated with Polymarket?',
+        name: 'Is Polywhale affiliated with Polymarket?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'No. Polywatch is an independent monitoring tool for public Polymarket activity and is not affiliated with, endorsed by, or operated by Polymarket.',
+          text: 'No. Polywhale is an independent monitoring tool for public Polymarket activity and is not affiliated with, endorsed by, or operated by Polymarket.',
         },
       },
     ],
@@ -272,7 +272,7 @@ function getSeoForPath(path, tradeMatch, traderMatch) {
 
   if (tradeMatch) {
     return {
-      title: 'Polymarket Whale Trade Detail | Polywatch',
+      title: 'Polymarket Whale Trade Detail | Polywhale',
       description:
         'Inspect a public Polymarket whale trade, including size, price, trader profile, same-market whale trades, and on-chain context.',
       path,
@@ -282,7 +282,7 @@ function getSeoForPath(path, tradeMatch, traderMatch) {
 
   if (traderMatch) {
     return {
-      title: 'Polymarket Whale Wallet Profile | Polywatch',
+      title: 'Polymarket Whale Wallet Profile | Polywhale',
       description:
         'View a public Polymarket whale wallet profile, recent whale trades, wallet rank, volume mix, and large trade history.',
       path,
@@ -294,7 +294,7 @@ function getSeoForPath(path, tradeMatch, traderMatch) {
     ...seoDefaults,
     title: `${siteName} App`,
     description:
-      'Polywatch app page for monitoring public Polymarket whale trades, followed wallets, alerts, and trader activity.',
+      'Polywhale app page for monitoring public Polymarket whale trades, followed wallets, alerts, and trader activity.',
     path,
     robots: 'noindex,follow',
   };
@@ -4094,7 +4094,7 @@ function FeedStatCards({
   return (
     <div className="feed-stat-cards">
       <FeedStatCard
-        label="TODAY'S VOLUME"
+        label="today's VOLUME"
         value={todaysVolume}
         accent="green"
         rightSlot={
@@ -4137,7 +4137,7 @@ function FeedStatCards({
       />
 
       <FeedStatCard
-        label="TODAY'S BIGGEST TRADE"
+        label="today's BIGGEST TRADE"
         value={biggestTrade}
         valueClassName="accent"
         accent="green-border"
@@ -5835,7 +5835,7 @@ function AboutPage() {
         <p>
           Polywatch is a read-only market intelligence surface for public Polymarket activity.
           The app focuses on large trades, also called whale trades, so users can see which
-          wallets are moving size, what markets they are trading, and how todayâ€™s activity
+          wallets are moving size, what markets they are trading, and how today's activity
           compares across the live whale feed, top whales, leaderboard, and wallet profiles.
         </p>
       </LegalSection>
@@ -5877,7 +5877,7 @@ function AboutPage() {
         <p>
           Large public trades can show where attention and conviction are clustering across
           prediction markets. Polywatch helps users monitor whale volume, active whales,
-          mega trades, todayâ€™s biggest trade, same-market activity, and public wallet behavior
+          mega trades, today's biggest trade, same-market activity, and public wallet behavior
           without needing to manually scan every Polymarket market.
         </p>
       </LegalSection>
@@ -5885,7 +5885,7 @@ function AboutPage() {
       <LegalSection title="How today works">
         <p>
           The public feed, today stats, top whales, and leaderboard are designed around the
-          current New York session. â€œTodayâ€ resets at New York midnight so daily whale volume,
+          current New York session. "Today" resets at New York midnight so daily whale volume,
           active wallets, and largest trades stay aligned across the app.
         </p>
       </LegalSection>
@@ -5908,7 +5908,7 @@ function AboutPage() {
             </p>
           </article>
           <article>
-            <h3>Does Polywatch show live Polymarket whale trades?</h3>
+            <h3>Does Polywhale show live Polymarket whale trades?</h3>
             <p>
               Yes. The whale feed updates with large public trades and includes details such as
               market, side, price, size, trader name, and today-scoped stats.
