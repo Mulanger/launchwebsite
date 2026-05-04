@@ -7562,18 +7562,19 @@ function traderProfileFullName(profile) {
 }
 
 function isWalletLike(value) {
-  return /^0x[0-9a-fA-F]{40}/.test(String(value || ''));
+  return /^0x[0-9a-fA-F]{40}/i.test(String(value || '').trim());
 }
 
 function isWalletishLabel(value) {
-  return /^0x[0-9a-fA-F.]{4,}/.test(String(value || ''));
+  return /^0x[0-9a-fA-F.]{4,}/i.test(String(value || '').trim());
 }
 
 function formatTraderLabel(name, wallet) {
-  if (name && !isWalletLike(name)) {
-    return name.length > 42 ? `${name.slice(0, 30)}...${name.slice(-6)}` : name;
+  const normalizedName = String(name || '').trim();
+  if (normalizedName && !isWalletishLabel(normalizedName)) {
+    return normalizedName.length > 42 ? `${normalizedName.slice(0, 30)}...${normalizedName.slice(-6)}` : normalizedName;
   }
-  return shortWallet(name || wallet) || 'Unknown trader';
+  return shortWallet(wallet || normalizedName) || 'Unknown trader';
 }
 
 function normalizeTradeDetailPayload(payload) {
