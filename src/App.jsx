@@ -3680,6 +3680,8 @@ function FeedSidebar({ activePage, liveState }) {
       href: '/profile',
       icon: User,
       badge: 'Free',
+      disabled: true,
+      disabledMessage: 'Coming soon',
       active: activePage === 'profile',
     },
   ];
@@ -3721,9 +3723,18 @@ function FeedSidebar({ activePage, liveState }) {
   );
 }
 
-function NavItem({ label, href, icon: Icon, badge, badgeIcon: BadgeIcon, badgeLabel, active = false }) {
+function NavItem({ label, href, icon: Icon, badge, badgeIcon: BadgeIcon, badgeLabel, active = false, disabled = false, disabledMessage = '' }) {
   return (
-    <a className={`feed-nav-item ${active ? 'active' : ''}`} href={href}>
+    <a
+      className={`feed-nav-item ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+      href={disabled ? '#' : href}
+      title={disabled ? disabledMessage : undefined}
+      aria-disabled={disabled ? 'true' : undefined}
+      data-tooltip={disabled ? disabledMessage : undefined}
+      onClick={(event) => {
+        if (disabled) event.preventDefault();
+      }}
+    >
       <Icon size={17} aria-hidden="true" />
       <span>{label}</span>
       <small className={BadgeIcon ? 'icon-badge' : ''} aria-label={badgeLabel || badge}>
