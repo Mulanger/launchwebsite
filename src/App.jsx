@@ -2794,6 +2794,17 @@ function AlertsPage() {
   const [actionMessage, setActionMessage] = useState('');
   const [isWorking, setIsWorking] = useState(false);
   const [showWebPushHelp, setShowWebPushHelp] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 760px)').matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const sync = (event) => setIsMobileViewport(event.matches);
+    setIsMobileViewport(media.matches);
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2989,86 +3000,106 @@ function AlertsPage() {
     status === 'error' ||
     /notification permission|check windows|browser notification settings/i.test(actionMessage);
 
+  const alertsSetupContent = (
+    <section className="alerts-setup-page">
+      <header className="alerts-page-header">
+        <div className="alerts-kicker">
+          <Bell size={13} aria-hidden="true" />
+          Notifications - web
+        </div>
+        <h1>
+          Alerts <em>setup</em>
+        </h1>
+        <p>Get notified when whales make significant trades.</p>
+      </header>
+
+      <AlertsStatusHero
+        active={isActive}
+        minSize={formatUsdFull(prefs.minUsd)}
+        lastAlertTimeAgo={savedAt ? relativeClientTime(savedAt) : null}
+        onTestAlert={sendTestAlert}
+        testDisabled={!isActive || isWorking}
+      />
+
+      <AlertsChannelGrid
+        channels={[
+          {
+            icon: Radio,
+            label: 'Web push',
+            value: activeLabel,
+            active: isActive,
+          },
+          {
+            icon: Users,
+            label: 'Following mode',
+            value: prefs.followingOnly ? 'On' : 'Off',
+            active: prefs.followingOnly,
+          },
+          {
+            icon: DollarSign,
+            label: 'Minimum size',
+            value: formatUsdCompact(prefs.minUsd),
+            active: true,
+            accent: true,
+          },
+        ]}
+      />
+
+      <section className="alerts-setup-grid">
+        <WebPushStatusCard
+          active={isActive}
+          status={activeLabel}
+          permission={permissionLabel}
+          quietHours={prefs.quietHoursEnabled ? '10pm-7am local' : 'Off'}
+          serviceWorkerStatus={serviceWorkerStatus}
+          actionMessage={actionMessage}
+          isDenied={isDenied}
+          isMissingConfig={isMissingConfig}
+          showHelp={canShowWebPushHelp}
+          onNeedHelp={() => setShowWebPushHelp(true)}
+          onTurnOff={turnOffAlerts}
+          disabled={!isActive || isWorking}
+        />
+
+        <AlertPreferencesCard
+          prefs={prefs}
+          active={isActive}
+          hasUnsavedChanges={hasUnsavedChanges}
+          isWorking={isWorking}
+          primaryDisabled={primaryDisabled}
+          savedAt={savedAt}
+          onActivate={activateAlerts}
+          onSave={savePrefs}
+          onReset={resetPrefs}
+          onUpdate={updatePrefs}
+        />
+      </section>
+    </section>
+  );
+
+  if (isMobileViewport) {
+    return (
+      <div className="alerts-mobile-screen">
+        <main className="alerts-mobile-main">{alertsSetupContent}</main>
+        <MobileBottomNav
+          activeTab="alerts"
+          onTabChange={(tab) => {
+            if (tab === 'alerts') return;
+            if (tab === 'feed') window.location.href = '/';
+            if (tab === 'leaders') window.location.href = '/leaderboard';
+            if (tab === 'following') window.location.href = '/profile/following';
+          }}
+        />
+        {showWebPushHelp ? <AlertsNotificationHelpModal onClose={() => setShowWebPushHelp(false)} /> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="feed-shell detail-shell profile-shell no-rail-shell">
       <FeedSidebar activePage="alerts" liveState="live" />
 
-      <main className="feed-main detail-main profile-main alerts-main">
-        <section className="alerts-setup-page">
-          <header className="alerts-page-header">
-            <div className="alerts-kicker">
-              <Bell size={13} aria-hidden="true" />
-              Notifications - web
-            </div>
-            <h1>
-              Alerts <em>setup</em>
-            </h1>
-            <p>Get notified when whales make significant trades.</p>
-          </header>
-
-          <AlertsStatusHero
-            active={isActive}
-            minSize={formatUsdFull(prefs.minUsd)}
-            lastAlertTimeAgo={savedAt ? relativeClientTime(savedAt) : null}
-            onTestAlert={sendTestAlert}
-            testDisabled={!isActive || isWorking}
-          />
-
-          <AlertsChannelGrid
-            channels={[
-              {
-                icon: Radio,
-                label: 'Web push',
-                value: activeLabel,
-                active: isActive,
-              },
-              {
-                icon: Users,
-                label: 'Following mode',
-                value: prefs.followingOnly ? 'On' : 'Off',
-                active: prefs.followingOnly,
-              },
-              {
-                icon: DollarSign,
-                label: 'Minimum size',
-                value: formatUsdCompact(prefs.minUsd),
-                active: true,
-                accent: true,
-              },
-            ]}
-          />
-
-          <section className="alerts-setup-grid">
-            <WebPushStatusCard
-              active={isActive}
-              status={activeLabel}
-              permission={permissionLabel}
-              quietHours={prefs.quietHoursEnabled ? '10pm-7am local' : 'Off'}
-              serviceWorkerStatus={serviceWorkerStatus}
-              actionMessage={actionMessage}
-              isDenied={isDenied}
-              isMissingConfig={isMissingConfig}
-              showHelp={canShowWebPushHelp}
-              onNeedHelp={() => setShowWebPushHelp(true)}
-              onTurnOff={turnOffAlerts}
-              disabled={!isActive || isWorking}
-            />
-
-            <AlertPreferencesCard
-              prefs={prefs}
-              active={isActive}
-              hasUnsavedChanges={hasUnsavedChanges}
-              isWorking={isWorking}
-              primaryDisabled={primaryDisabled}
-              savedAt={savedAt}
-              onActivate={activateAlerts}
-              onSave={savePrefs}
-              onReset={resetPrefs}
-              onUpdate={updatePrefs}
-            />
-          </section>
-        </section>
-      </main>
+      <main className="feed-main detail-main profile-main alerts-main">{alertsSetupContent}</main>
 
       {showWebPushHelp ? <AlertsNotificationHelpModal onClose={() => setShowWebPushHelp(false)} /> : null}
     </div>
