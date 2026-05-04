@@ -166,6 +166,28 @@ img {
   font-size: 18px;
 }
 
+.feed-brand-text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1;
+}
+
+.feed-brand-text strong {
+  color: var(--text);
+  font-size: 33px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+.feed-brand-text small {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+
 .feed-brand img,
 .legal-brand img {
   width: 36px;
@@ -5776,7 +5798,7 @@ img {
 }
 
 @media (max-width: 680px) {
-  .feed-brand span {
+  .feed-brand-text {
     display: none;
   }
 

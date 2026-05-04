@@ -3686,9 +3686,12 @@ function FeedSidebar({ activePage, liveState }) {
 
   return (
     <aside className="feed-sidebar">
-      <a className="feed-brand" href="/" aria-label="Polywatch home">
+      <a className="feed-brand" href="/" aria-label="Polywhale home">
         <img src="/assets/polywatch-icon.png" alt="" />
-        <span>Polywatch</span>
+        <span className="feed-brand-text">
+          <strong>Polywhale</strong>
+          <small>trades</small>
+        </span>
       </a>
 
       <nav className="feed-nav" aria-label="Product navigation">
