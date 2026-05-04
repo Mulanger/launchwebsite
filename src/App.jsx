@@ -3708,16 +3708,6 @@ function FeedSidebar({ activePage, liveState }) {
         ))}
       </nav>
 
-      <div className="sidebar-panel">
-        <div className="sidebar-panel-icon">
-          <Radio size={17} aria-hidden="true" />
-        </div>
-        <div>
-          <strong>Public web beta</strong>
-          <span>Read-only feed. Trading stays outside Polywatch.</span>
-        </div>
-      </div>
-
       <div className="sidebar-links">
         <a href="/about">About</a>
         <a href="/privacy">Privacy</a>
