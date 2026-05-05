@@ -3577,17 +3577,28 @@ function ToggleRow({ title, subtitle, checked, onChange }) {
 function FollowedTraderRow({ item, compact = false }) {
   const href = `/trader/${encodeURIComponent(item.proxyWallet)}`;
   const name = followedTraderName(item);
+  const shouldIgnoreRowNavigation = (event) => {
+    const target = event.target;
+    return target instanceof Element && Boolean(
+      target.closest('button, a, input, select, textarea, [role="button"], [data-no-row-nav="true"]')
+    );
+  };
+  const openTrader = () => {
+    window.location.href = href;
+  };
 
   return (
     <article
       className={`followed-trader-row ${compact ? 'compact' : ''}`}
       role="link"
       tabIndex={0}
-      onClick={() => {
-        window.location.href = href;
+      onClick={(event) => {
+        if (shouldIgnoreRowNavigation(event)) return;
+        openTrader();
       }}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') window.location.href = href;
+        if (shouldIgnoreRowNavigation(event)) return;
+        if (event.key === 'Enter') openTrader();
       }}
     >
       <FollowedAvatar item={item} />
@@ -5769,6 +5780,7 @@ function FollowWalletButton({ wallet, variant = 'wide' }) {
     <button
       className={`follow-button ${compact ? 'compact' : 'wide'} ${isFollowing ? 'following' : ''}`}
       type="button"
+      data-no-row-nav="true"
       aria-label={`${label} ${shortWallet(normalizedWallet)}`}
       title={error || label}
       onPointerDown={(event) => event.stopPropagation()}
