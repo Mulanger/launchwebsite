@@ -3699,7 +3699,15 @@ function FeedSidebar({ activePage, liveState }) {
 
   return (
     <aside className="feed-sidebar">
-      <a className="feed-brand" href="/" aria-label="Polywhale home">
+      <a
+        className="feed-brand"
+        href="/"
+        aria-label="Polywhale home"
+        onClick={(event) => {
+          event.preventDefault();
+          window.location.href = '/';
+        }}
+      >
         <img src="/assets/polywatch-icon.png" alt="" />
         <span className="feed-brand-text">
           <strong>Polywhale</strong>
@@ -5803,7 +5811,15 @@ function LegalChrome({ children }) {
   return (
     <div className="legal-site">
       <header className="legal-topbar">
-        <a className="legal-brand" href="/" aria-label="Polywatch home">
+        <a
+          className="legal-brand"
+          href="/"
+          aria-label="Polywhale home"
+          onClick={(event) => {
+            event.preventDefault();
+            window.location.href = '/';
+          }}
+        >
           <img src="/assets/polywatch-icon.png" alt="" />
           <span>Polywatch</span>
         </a>
