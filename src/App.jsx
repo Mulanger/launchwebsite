@@ -3584,6 +3584,7 @@ function FollowedTraderRow({ item, compact = false }) {
     );
   };
   const openTrader = () => {
+    if (shouldSuppressFollowingRowNav()) return;
     window.location.href = href;
   };
 
@@ -5727,6 +5728,16 @@ function EmptyState({ title, body, actionLabel, onAction }) {
   );
 }
 
+let suppressFollowingRowNavUntilMs = 0;
+
+function suppressFollowingRowNav(durationMs = 700) {
+  suppressFollowingRowNavUntilMs = Date.now() + durationMs;
+}
+
+function shouldSuppressFollowingRowNav() {
+  return Date.now() < suppressFollowingRowNavUntilMs;
+}
+
 function FollowWalletButton({ wallet, variant = 'wide' }) {
   const normalizedWallet = wallet?.toLowerCase();
   const [isFollowing, setIsFollowing] = useState(() => isWalletFollowedLocally(normalizedWallet));
@@ -5754,6 +5765,10 @@ function FollowWalletButton({ wallet, variant = 'wide' }) {
   const toggleFollow = async (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (event.nativeEvent?.stopImmediatePropagation) {
+      event.nativeEvent.stopImmediatePropagation();
+    }
+    suppressFollowingRowNav();
     if (!normalizedWallet || pending) return;
 
     const next = !isFollowing;
