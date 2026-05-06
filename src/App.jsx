@@ -3568,6 +3568,7 @@ function FeedSidebar({ activePage, liveState }) {
       </nav>
 
       <div className="sidebar-links">
+        <a href="/qa">Q&A</a>
         <a href="/about">About</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>

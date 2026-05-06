@@ -220,6 +220,7 @@ function PublicSidebar({ activePage = 'feed' }) {
       </nav>
 
       <div className="next-app-sidebar-links">
+        <Link href="/qa">Q&A</Link>
         <Link href="/about">About</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/terms">Terms</Link>

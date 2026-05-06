@@ -31,3 +31,4 @@ Disallow: /profile
 Disallow: /alerts
 
 Sitemap: https://www.polywhaletrades.com/sitemap.xml
+Sitemap: https://www.polywhaletrades.com/sitemap-qa.xml

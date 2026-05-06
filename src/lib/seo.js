@@ -39,6 +39,15 @@ export const seoByPath = {
     path: '/leaderboard',
     robots: 'index,follow,max-image-preview:large',
   },
+  '/qa': {
+    title: 'Polymarket Questions & Answers | Polywhale Q&A Hub',
+    description:
+      'Plain-English answers to high-intent questions about Polymarket legality, taxes, odds, payouts, whale trades, wallets, and prediction market mechanics.',
+    keywords:
+      'Polymarket questions, Polymarket FAQ, Polymarket Q&A, is Polymarket legal, Polymarket taxes, Polymarket whale trades, Polymarket odds, Polymarket vs Kalshi',
+    path: '/qa',
+    robots: 'index,follow,max-image-preview:large',
+  },
   '/privacy': {
     title: 'Privacy Policy | Polywhale',
     description: 'Polywhale privacy policy for live Polymarket whale monitoring, alerts, follows, and anonymous app sessions.',
