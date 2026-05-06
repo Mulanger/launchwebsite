@@ -40,3 +40,19 @@ export async function fetchPublicLeaderboard(windowId = '1d', limit = 20) {
     next: { revalidate: 60 },
   });
 }
+
+export async function fetchPublicMarketPage(slug) {
+  return fetchServerJson(`/v1/market-pages/${encodeURIComponent(slug)}`, {
+    next: { revalidate: 300 },
+  });
+}
+
+export async function fetchPublicMarketPageIndex(limit = 250) {
+  const params = new URLSearchParams({
+    indexable: 'true',
+    limit: String(limit),
+  });
+  return fetchServerJson(`/v1/market-pages?${params.toString()}`, {
+    next: { revalidate: 300 },
+  });
+}

@@ -626,6 +626,15 @@ MVP implementation status:
 - Trade detail market identity links to the market page.
 - Current automation is feed-driven: pages and sitemap update from the latest whale feed scan through Next revalidation. Persistent historical slug retention, automatic old-page demotion/removal rules beyond the scan window, and richer Polymarket market metadata require the later server-side market snapshot/enrichment worker.
 
+Enriched pipeline implementation status:
+
+- `whale-watcher` now writes persistent `market_page_snapshots` documents.
+- The snapshot worker computes market stats, top wallets, related markets, indexability, `lastQualifiedAt`, stale state, and prune cleanup.
+- `api-server` exposes `/v1/market-pages?indexable=true&limit=250` for sitemap generation.
+- `api-server` exposes `/v1/market-pages/:slug` for server-rendered market pages.
+- The website now prefers the market-page API and falls back to whale-feed scanning while backend deployments roll out.
+- Deployment order should be watcher first, API server second, website last or already deployed.
+
 Enrichment is done when:
 
 - API/server stores market snapshots from Polymarket enrichment.
