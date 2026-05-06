@@ -1,0 +1,42 @@
+const defaultApiBase = 'https://whaleserver-production.up.railway.app';
+
+export function getServerApiBase() {
+  return (process.env.API_BASE_URL || defaultApiBase).replace(/\/$/, '');
+}
+
+export async function fetchServerJson(path, options = {}) {
+  const url = new URL(path, getServerApiBase());
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed with ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function fetchPublicWhales(limit = 12) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    minUsd: '10000',
+  });
+  return fetchServerJson(`/v1/whales?${params.toString()}`, {
+    next: { revalidate: 60 },
+  });
+}
+
+export async function fetchPublicLeaderboard(windowId = '1d', limit = 20) {
+  const params = new URLSearchParams({
+    window: windowId,
+    limit: String(limit),
+  });
+  return fetchServerJson(`/v1/leaderboard?${params.toString()}`, {
+    next: { revalidate: 60 },
+  });
+}
