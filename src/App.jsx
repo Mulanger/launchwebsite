@@ -799,12 +799,12 @@ function WhaleFeedPage() {
           const previous = isWalletFollowedLocally(wallet);
           const next = !previous;
           setWalletFollowedLocally(wallet, next);
-          notifyFollowsChanged();
+          notifyFollowsChanged({ wallet, isFollowing: next });
           try {
             await setWalletFollowedOnServer(wallet, next);
           } catch (err) {
             setWalletFollowedLocally(wallet, previous);
-            notifyFollowsChanged();
+            notifyFollowsChanged({ wallet, isFollowing: previous });
             setError(err.message || 'Follow update failed');
           }
         },
@@ -4058,10 +4058,10 @@ function LeaderboardDesktopRow({ wallet, maxVolume, isLast }) {
             const walletKey = wallet.walletFull.toLowerCase();
             const next = !isWalletFollowedLocally(walletKey);
             setWalletFollowedLocally(walletKey, next);
-            notifyFollowsChanged();
+            notifyFollowsChanged({ wallet: walletKey, isFollowing: next });
             setWalletFollowedOnServer(walletKey, next).catch(() => {
               setWalletFollowedLocally(walletKey, !next);
-              notifyFollowsChanged();
+              notifyFollowsChanged({ wallet: walletKey, isFollowing: !next });
             });
           }}
         >
@@ -5798,14 +5798,14 @@ function FollowWalletButton({ wallet, variant = 'wide' }) {
     setError('');
     setWalletFollowedLocally(normalizedWallet, next);
     setIsFollowing(next);
-    notifyFollowsChanged();
+    notifyFollowsChanged({ wallet: normalizedWallet, isFollowing: next });
 
     try {
       await setWalletFollowedOnServer(normalizedWallet, next);
     } catch (err) {
       setWalletFollowedLocally(normalizedWallet, previous);
       setIsFollowing(previous);
-      notifyFollowsChanged();
+      notifyFollowsChanged({ wallet: normalizedWallet, isFollowing: previous });
       setError(err.message || 'Follow update failed');
     } finally {
       setPending(false);
@@ -6263,7 +6263,10 @@ function useFollowedTraders() {
   }, []);
 
   useEffect(() => {
-    const onFollowsChanged = () => setRefreshNonce((value) => value + 1);
+    const onFollowsChanged = (event) => {
+      setItems((previous) => applyFollowSummaryChange(previous, event.detail));
+      setRefreshNonce((value) => value + 1);
+    };
     window.addEventListener(followsChangedEvent, onFollowsChanged);
     return () => window.removeEventListener(followsChangedEvent, onFollowsChanged);
   }, []);
@@ -6298,7 +6301,11 @@ function useFollowedTraders() {
         });
         if (!active) return;
 
-        const summaries = (data?.items || []).map(normalizeFollowSummary);
+        const serverSummaries = (data?.items || []).map(normalizeFollowSummary);
+        const localWallets = readFollowedWallets();
+        const summaries = hasLoadedFromServerRef.current
+          ? serverSummaries.filter((item) => localWallets.has(item.proxyWallet))
+          : serverSummaries;
         writeFollowedWallets(new Set(summaries.map((item) => item.proxyWallet)));
         setItems(summaries);
         hasLoadedFromServerRef.current = true;
@@ -6602,6 +6609,26 @@ function reconcileFollowSummaries(previous, localItems) {
   }
 
   return kept;
+}
+
+function applyFollowSummaryChange(previous, detail) {
+  if (!Array.isArray(previous) || !detail?.wallet) return previous;
+  const wallet = detail.wallet.toLowerCase();
+  if (!detail.isFollowing) {
+    return previous.filter((item) => item.proxyWallet !== wallet);
+  }
+
+  if (previous.some((item) => item.proxyWallet === wallet)) return previous;
+  return [
+    ...previous,
+    normalizeFollowSummary({
+      proxyWallet: wallet,
+      pseudonym: shortWallet(wallet),
+      profileImage: null,
+      vol7d: 0,
+      followedAt: null,
+    }),
+  ];
 }
 
 function normalizeFollowSummary(item) {
@@ -6954,8 +6981,8 @@ function readWebAlertPrefs() {
   };
 }
 
-function notifyFollowsChanged() {
-  window.dispatchEvent(new CustomEvent(followsChangedEvent));
+function notifyFollowsChanged(detail = {}) {
+  window.dispatchEvent(new CustomEvent(followsChangedEvent, { detail }));
 }
 
 function notifyWebAlertsChanged() {
