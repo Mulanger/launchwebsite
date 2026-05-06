@@ -31,16 +31,20 @@ The migration should not require watcher changes. API changes should be additive
 - 2026-05-06: Found that pure public `/` and `/leaderboard` pages would replace the existing interactive feed/leaderboard for users. Added `HybridPublicRoute` so those routes keep crawlable server HTML but hydrate into the legacy app UI in the browser.
 - 2026-05-06: Verified `/`, `/leaderboard`, `/alerts`, and `/profile/following` in the in-app browser at a mobile-sized viewport with no console errors. Also verified following-list navigation to `/leaderboard` and alerts bottom-nav navigation back to `/`.
 - 2026-05-06: Replaced the initial public `/` and `/leaderboard` SSR snapshots with app-aligned dashboard markup through `PublicAppSnapshot`. The snapshots now use the app-style feed, leaderboard, filters, stat panels, mobile bottom nav, and the same `1020px` mobile breakpoint before hydration.
+- 2026-05-06: Updated `railway.json` to run `npm run next:build` and `npm run next:start -- -H 0.0.0.0 -p $PORT`.
+- 2026-05-06: Verified production cutover on `https://www.polywhaletrades.com`: `/` and `/leaderboard` source contain `next-app-snapshot` and `/_next/static`, the old Vite `<div id="root"></div>` shell is gone, route metadata is server-generated, `/api/v1/leaderboard?window=1d&limit=1` works, and `robots.txt` plus `sitemap.xml` return 200.
 
-## Current Problem
+## Status
 
-The website is currently a Vite SPA. The production HTML contains a static head and an empty React root:
+The foundation migration is complete on the `codex/next-ssr-foundation` branch and production Railway deployment now runs Next.
+
+Before this work, the website was a Vite SPA. The production HTML contained a static head and an empty React root:
 
 ```html
 <div id="root"></div>
 ```
 
-Most meaningful page content is rendered after JavaScript loads. Google can often render JavaScript eventually, but the foundation is weak for SEO because crawlers, preview bots, and SEO tools may only see the shell. Route-specific metadata also runs in the browser today, which means the first response for routes like `/leaderboard` is not route-specific HTML.
+That blocker has been resolved for the public foundation routes. `/`, `/leaderboard`, `/about`, `/privacy`, `/terms`, and `/delete-data` now return route-specific Next HTML. `/` and `/leaderboard` include crawlable app-aligned snapshots before hydration.
 
 ## Target Architecture
 

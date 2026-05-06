@@ -1,6 +1,6 @@
 # Polywatch Website Agent Handoff
 
-This repo is the React/Vite web version of Polywatch. It is not the Flutter app and it is not the Railway API server. The website consumes the same whale-trade API used by the app and presents a public live feed, leaderboard, trader profiles, trade details, web alerts setup, and Google Play legal pages.
+This repo is the Polywhale web app. Production now runs the Next.js SSR/SSG foundation on Railway, while the older React/Vite build remains in the repo as a local fallback and comparison path. It is not the Flutter app and it is not the Railway API server. The website consumes the same whale-trade API used by the app and presents a public live feed, leaderboard, trader profiles, trade details, web alerts setup, and Google Play legal pages.
 
 ## Current Status
 
@@ -8,10 +8,10 @@ This repo is the React/Vite web version of Polywatch. It is not the Flutter app 
 - Git remote: `https://github.com/Mulanger/launchwebsite.git`
 - Production host: Railway
 - Production API default: `https://whaleserver-production.up.railway.app`
-- Local development typically runs through Vite or preview on `127.0.0.1`
+- Local development can run through Next or legacy Vite on `127.0.0.1`
 - Next SSR foundation branch: `codex/next-ssr-foundation`
-- Production is not cut over to Next yet. Railway still uses the Vite build/start path until explicitly approved.
-- Current Next foundation work is committed and pushed through `71de384 Validate hybrid Next route parity`.
+- Production is cut over to Next. Railway uses `npm run next:build` and `npm run next:start -- -H 0.0.0.0 -p $PORT`.
+- Current production cutover work is committed and pushed through `0cde8bb Switch Railway deployment to Next`.
 
 Recent important work:
 
@@ -36,6 +36,8 @@ Recent important work:
 - Public SEO routes now have Next App Router route shells under `app/`.
 - App-only routes are wired through a legacy client wrapper so existing interactive behavior stays owned by `src/App.jsx`.
 - `/` and `/leaderboard` use a hybrid route that serves crawlable HTML first, then hydrates into the existing app UI in browsers.
+- `/` and `/leaderboard` server snapshots were aligned with the existing app UI through `app/_components/PublicAppSnapshot.jsx`.
+- Railway production cutover to Next was completed and verified. Live source contains `next-app-snapshot` and `/_next/static`, not the old Vite `<div id="root"></div>` shell.
 
 ## Project Shape
 
@@ -90,9 +92,9 @@ npm run next:build
 npm run next:start
 ```
 
-Use `npm run build` before pushing UI or API changes. `npm start` serves the built `dist` folder with `server.js`.
+Use `npm run next:build` before pushing changes that affect production. `npm run next:start` serves the Next production build.
 
-While the Next migration branch is active, run both `npm run next:build` and `npm run build` before pushing changes that affect shared app code, routing, metadata, API helpers, or dependencies.
+Run `npm run build` as well when changes affect shared legacy Vite code, `src/App.jsx`, `src/styles.css`, dependencies, or anything that could break the fallback build. `npm start` serves the legacy Vite `dist` folder with `server.js`.
 
 ## Environment Variables
 
@@ -121,13 +123,15 @@ Production server:
 
 ## Runtime Data Flow
 
-1. Browser loads the SPA from Vite or `server.js`.
-2. REST calls go through `apiBaseUrl`, usually `/api`, which is proxied to the Railway API.
-3. Live whale updates connect directly to `/v1/whales/stream` using `VITE_WS_BASE_URL` or the production API default.
-4. The feed initial load fetches REST pages for today's New York session.
-5. Websocket trades are inserted at the top, filtered client-side, then hydrated/merged when image metadata is missing.
-6. Today-scoped feed stats, last-60-minute stats, feed top whales, and the leaderboard page are computed from the same current New York session key in the web client.
-7. Follow state is stored locally and synced to the API after anonymous auth.
+1. Browser loads Next-rendered HTML from Railway.
+2. Public `/` and `/leaderboard` receive crawlable app-aligned SSR snapshots, then hydrate into the existing React app UI.
+3. App-only routes are served by Next wrappers and hydrate the existing React app route.
+4. REST calls go through `apiBaseUrl`, usually `/api`, which is rewritten/proxied to the Railway API.
+5. Live whale updates connect directly to `/v1/whales/stream` using `VITE_WS_BASE_URL`, `NEXT_PUBLIC_WS_BASE_URL`, or the production API default.
+6. The feed initial load fetches REST pages for today's New York session.
+7. Websocket trades are inserted at the top, filtered client-side, then hydrated/merged when image metadata is missing.
+8. Today-scoped feed stats, last-60-minute stats, feed top whales, and the leaderboard page are computed from the same current New York session key in the web client.
+9. Follow state is stored locally and synced to the API after anonymous auth.
 
 ## API Endpoints Used
 
@@ -308,8 +312,8 @@ When the backend supports `window=today`, remove the frontend-derived leaderboar
 
 Before pushing:
 
-1. Run `npm run build`.
-2. On `codex/next-ssr-foundation`, also run `npm run next:build`.
+1. Run `npm run next:build`.
+2. Run `npm run build` when touching shared React/Vite code, shared styles, dependencies, or anything that should keep the legacy fallback working.
 3. Open `/` and verify feed rows render market images, filters work, and no console errors appear.
 4. Open `/leaderboard` and verify the table has no row-level `Whales` column and no `All markets` signal label.
 5. Open a trader profile and verify short wallet title, full address copy button, profile chart, follow button, and recent trades.
@@ -335,12 +339,18 @@ Do not add watcher schema writes for this unless the backend explicitly needs ri
 
 Railway uses `railway.json`:
 
-- build: `npm run build`
-- start: `npm start`
+- build: `npm run next:build`
+- start: `npm run next:start -- -H 0.0.0.0 -p $PORT`
 
-The production server defaults to the production API. Set `API_BASE_URL` in Railway only if changing the backend target.
+The production Next server rewrites `/api/*` to the production API by default. Set `API_BASE_URL` in Railway only if changing the backend target.
 
-Do not update Railway build/start commands for Next until the cutover phase is explicitly approved. Pending cutover work includes Railway command changes, branch/PR merge, production source HTML verification, production API and websocket checks, follow/alert checks, and mobile route checks.
+Cutover verification completed on 2026-05-06:
+
+- Live `/` and `/leaderboard` source contain `next-app-snapshot`.
+- Live pages load `/_next/static` assets.
+- Live pages no longer serve the old Vite `<div id="root"></div>` shell.
+- Live `/api/v1/leaderboard?window=1d&limit=1` returns data through the production domain.
+- `robots.txt` and `sitemap.xml` return 200.
 
 ## Related System Context
 
@@ -356,8 +366,8 @@ This repo only owns the web app and legal/static web pages.
 
 - Preserve existing user work. Check `git status` before edits.
 - Prefer small, scoped UI changes in `src/App.jsx` and `src/styles.css`.
-- Run the build before committing.
-- Do not merge or cut over the Next branch until explicitly approved.
+- Run the relevant build before committing.
+- The Next production cutover is already complete; do not revert Railway to Vite unless explicitly requested as a rollback.
 - Preserve watcher and API contracts. This repo consumes `/server` and `/watcher` behavior but should not silently change their assumptions.
 - If changing live feed behavior, test both REST-loaded rows and websocket/new rows.
 - If changing follow behavior, test logged-out local follows and anonymous-auth server sync.
