@@ -12,21 +12,30 @@ async function loadLeaderboard() {
     const data = await fetchPublicLeaderboard('1d', 50);
     return {
       items: Array.isArray(data?.items) ? data.items : [],
+      nextCursor: data?.nextCursor ?? null,
+      asOf: data?.asOf ?? null,
+      windowId: '1d',
       error: '',
     };
   } catch (error) {
     return {
       items: [],
+      nextCursor: null,
+      asOf: null,
+      windowId: '1d',
       error: error.message || 'Leaderboard unavailable',
     };
   }
 }
 
 export default async function LeaderboardPage() {
-  const { items, error } = await loadLeaderboard();
+  const { items, nextCursor, asOf, error } = await loadLeaderboard();
 
   return (
-    <HybridPublicRoute initialPath="/leaderboard">
+    <HybridPublicRoute
+      initialPath="/leaderboard"
+      initialData={{ leaderboard: { items, nextCursor, asOf, windowId: '1d', error } }}
+    >
       <PublicLeaderboardSnapshot items={items} error={error} />
     </HybridPublicRoute>
   );

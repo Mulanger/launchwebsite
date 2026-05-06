@@ -174,7 +174,7 @@ function setLinkTag(rel, href) {
   tag.setAttribute('href', href);
 }
 
-function App({ initialPath = null }) {
+function App({ initialPath = null, initialData = null }) {
   const { path, tradeMatch, traderMatch } = useMemo(
     () => matchAppRoute(initialPath ?? getBrowserPathname()),
     [initialPath]
@@ -241,7 +241,7 @@ function App({ initialPath = null }) {
   else if (path === '/privacy') page = <PrivacyPage />;
   else if (path === '/terms') page = <TermsPage />;
   else if (path === '/delete-data') page = <DeleteDataPage />;
-  else if (path === '/leaderboard') page = <LeaderboardPage />;
+  else if (path === '/leaderboard') page = <LeaderboardPage initialData={initialData?.leaderboard} />;
   else if (path === '/profile/following') page = <FollowingPage />;
   else if (path === '/profile') page = <ProfilePage />;
   else if (path === '/alerts') page = <AlertsPage />;
@@ -867,19 +867,23 @@ function WhaleFeedPage() {
   );
 }
 
-function LeaderboardPage() {
+function LeaderboardPage({ initialData = null }) {
+  const initialLeaderboardItems = Array.isArray(initialData?.items) ? initialData.items : [];
+  const hasInitialLeaderboardData = Boolean(initialData);
+  const initialLeaderboardWindow = initialData?.windowId || '1d';
+  const usedInitialLeaderboardRef = useRef(hasInitialLeaderboardData);
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     window.matchMedia('(max-width: 1020px)').matches
   );
-  const [windowId, setWindowId] = useState('1d');
+  const [windowId, setWindowId] = useState(initialLeaderboardWindow);
   const [sort, setSort] = useState('rank');
   const [search, setSearch] = useState('');
-  const [items, setItems] = useState([]);
-  const [cursor, setCursor] = useState(null);
-  const [asOf, setAsOf] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState(initialLeaderboardItems);
+  const [cursor, setCursor] = useState(initialData?.nextCursor ?? null);
+  const [asOf, setAsOf] = useState(initialData?.asOf ?? null);
+  const [loading, setLoading] = useState(!hasInitialLeaderboardData);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialData?.error || '');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [clock, setClock] = useState(() => Date.now());
   const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
@@ -907,6 +911,15 @@ function LeaderboardPage() {
   }, [todaySession.dateKey]);
 
   useEffect(() => {
+    if (
+      usedInitialLeaderboardRef.current &&
+      refreshNonce === 0 &&
+      windowId === initialLeaderboardWindow
+    ) {
+      usedInitialLeaderboardRef.current = false;
+      return undefined;
+    }
+
     const controller = new AbortController();
 
     async function loadLeaderboard() {
@@ -930,7 +943,7 @@ function LeaderboardPage() {
 
     loadLeaderboard();
     return () => controller.abort();
-  }, [windowId, refreshNonce, todaySession.dateKey]);
+  }, [windowId, refreshNonce, todaySession.dateKey, initialLeaderboardWindow]);
 
   useEffect(() => {
     let closed = false;
@@ -973,11 +986,6 @@ function LeaderboardPage() {
     };
   }, [windowId, todaySession.dateKey]);
 
-  const selectedWindow = useMemo(
-    () => leaderboardWindows.find((option) => option.id === windowId) ?? leaderboardWindows[0],
-    [windowId]
-  );
-
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = query
@@ -986,25 +994,6 @@ function LeaderboardPage() {
     return sortLeaderboardItems(filtered, sort);
   }, [items, search, sort]);
 
-  const stats = useMemo(() => buildLeaderboardStats(items), [items]);
-  const desktopWallets = useMemo(
-    () =>
-      visibleItems.map((trader, index) => ({
-        rank: Number(trader.rank) || index + 1,
-        name: leaderboardTraderName(trader),
-        address: shortWallet(trader.proxyWallet),
-        walletFull: trader.proxyWallet || '',
-        volume: formatUsdCompact(trader.volume),
-        volumeNumeric: Number(trader.volume || 0),
-        trades: formatNumber(trader.tradeCount),
-        avgTrade: formatUsdCompact(
-          Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0))
-        ),
-        avatarColor: avatarGradient(trader.proxyWallet || `${index}`),
-        href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
-      })),
-    [visibleItems]
-  );
   const mobileRows = useMemo(
     () =>
       visibleItems.map((trader, index) => ({
@@ -1072,63 +1061,27 @@ function LeaderboardPage() {
   }
 
   return (
-    <div className="feed-shell leaderboard-shell no-rail-shell">
+    <div className="feed-shell leaderboard-shell no-rail-shell leaderboard-classic-shell">
       <FeedSidebar activePage="leaderboard" liveState="live" />
 
-      <main className="feed-main leaderboard-main">
-        <section className="leaderboard-desktop-card" aria-live="polite">
-          <LeaderboardDesktopHeader
-            timeframe={selectedWindow.label}
-            caption={selectedWindow.caption}
-            onRefresh={() => setRefreshNonce((value) => value + 1)}
-          />
-          <LeaderboardSummaryCards stats={stats} />
-          <LeaderboardControlBar
-            windowId={windowId}
-            sort={sort}
-            search={search}
-            onWindowChange={handleWindowChange}
-            onSortChange={setSort}
-            onSearchChange={setSearch}
-            onFilter={() => setSearch('')}
-          />
-
-          {loading ? (
-            <section className="leaderboard-table" aria-label="Loading leaderboard">
-              <LeaderboardSkeleton />
-            </section>
-          ) : error && visibleItems.length === 0 ? (
-            <EmptyState
-              title="Leaderboard unavailable"
-              body={error}
-              actionLabel="Try again"
-              onAction={() => setRefreshNonce((value) => value + 1)}
-            />
-          ) : visibleItems.length === 0 ? (
-            <EmptyState
-              title="No ranked traders match this search"
-              body="Change the window or search term to widen the leaderboard."
-              actionLabel="Reset search"
-              onAction={() => setSearch('')}
-            />
-          ) : (
-            <LeaderboardDesktopTable wallets={desktopWallets} />
-          )}
-
-          <div className="feed-footer-action leaderboard-footer-action">
-            {error && visibleItems.length > 0 ? <span>{error}</span> : null}
-            <button
-              className="load-more-button"
-              type="button"
-              disabled={!cursor || loadingMore}
-              onClick={loadMore}
-            >
-              {loadingMore ? 'Loading...' : cursor ? 'Load more ranked traders' : 'End of leaderboard'}
-            </button>
-          </div>
-        </section>
+      <main className="feed-main leaderboard-main leaderboard-classic-main">
+        <MobileLeaderboardScreen
+          windowId={windowId}
+          sortValue={sort}
+          sortOptions={leaderboardSortOptions}
+          rows={mobileRows}
+          onWindowChange={handleWindowChange}
+          onSortChange={setSort}
+          loading={loading}
+          error={error}
+          onRefresh={() => setRefreshNonce((value) => value + 1)}
+          canLoadMore={Boolean(cursor)}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          showBottomNav={false}
+          className="leaderboard-desktop-surface"
+        />
       </main>
-
     </div>
   );
 }
@@ -1147,10 +1100,18 @@ function MobileLeaderboardScreen({
   loadingMore,
   onLoadMore,
   onTabChange,
+  showBottomNav = true,
+  className = '',
 }) {
+  const shellStyle = {
+    background: '#0a0a0a',
+    minHeight: showBottomNav ? '100vh' : 'auto',
+    paddingBottom: showBottomNav ? 92 : 0,
+  };
+
   return (
-    <div style={{ background: '#0a0a0a', minHeight: '100vh', paddingBottom: 92 }}>
-      <div style={{ padding: '6px 14px 0' }}>
+    <div className={`leaderboard-mobile-screen ${className}`.trim()} style={shellStyle}>
+      <div className="leaderboard-mobile-content" style={{ padding: '6px 14px 0' }}>
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22d3a5' }} />
@@ -1259,7 +1220,7 @@ function MobileLeaderboardScreen({
           </div>
         ) : null}
       </div>
-      <MobileBottomNav activeTab="leaders" onTabChange={onTabChange} />
+      {showBottomNav ? <MobileBottomNav activeTab="leaders" onTabChange={onTabChange} /> : null}
     </div>
   );
 }

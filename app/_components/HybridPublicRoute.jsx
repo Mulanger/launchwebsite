@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import LegacyAppRoute from './LegacyAppRoute.jsx';
 
-export default function HybridPublicRoute({ initialPath, children }) {
+export default function HybridPublicRoute({ initialPath, initialData = null, children }) {
   const [mounted, setMounted] = useState(false);
   const [legacyReady, setLegacyReady] = useState(false);
 
@@ -14,7 +14,13 @@ export default function HybridPublicRoute({ initialPath, children }) {
   return (
     <>
       {legacyReady ? null : children}
-      {mounted ? <LegacyAppRoute initialPath={initialPath} onReady={() => setLegacyReady(true)} /> : null}
+      {mounted ? (
+        <LegacyAppRoute
+          initialPath={initialPath}
+          initialData={initialData}
+          onReady={() => setLegacyReady(true)}
+        />
+      ) : null}
     </>
   );
 }

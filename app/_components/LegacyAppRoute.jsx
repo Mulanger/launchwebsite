@@ -7,6 +7,6 @@ const LegacyAppClient = dynamic(() => import('./LegacyAppRouteClient.jsx'), {
   loading: () => null,
 });
 
-export default function LegacyAppRoute({ initialPath, onReady }) {
-  return <LegacyAppClient initialPath={initialPath} onReady={onReady} />;
+export default function LegacyAppRoute({ initialPath, initialData, onReady }) {
+  return <LegacyAppClient initialPath={initialPath} initialData={initialData} onReady={onReady} />;
 }

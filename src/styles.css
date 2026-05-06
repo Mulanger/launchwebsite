@@ -241,6 +241,10 @@ img {
   background: linear-gradient(90deg, rgba(94, 231, 173, 0.14), rgba(94, 231, 173, 0.02));
 }
 
+.feed-nav-item.active:hover {
+  transform: none;
+}
+
 .feed-nav-item.active::before {
   content: "";
   position: absolute;
@@ -2321,6 +2325,24 @@ img {
 
 .no-rail-shell {
   grid-template-columns: 242px minmax(0, 1fr);
+}
+
+.leaderboard-classic-shell,
+.leaderboard-classic-main {
+  background: #0a0a0a;
+}
+
+.leaderboard-classic-main {
+  min-width: 0;
+  padding: 6px 8px 34px;
+}
+
+.leaderboard-desktop-surface {
+  width: 100%;
+}
+
+.leaderboard-desktop-surface .leaderboard-mobile-content {
+  padding: 6px 8px 0 !important;
 }
 
 .detail-main {

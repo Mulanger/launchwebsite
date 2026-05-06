@@ -332,14 +332,23 @@
 .next-app-nav-item {
   min-height: 42px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 10px 0 12px;
   border-radius: 8px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
+}
+
+.next-app-nav-item::before {
+  content: "";
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.16);
+  opacity: 0.7;
 }
 
 .next-app-nav-item.active {
@@ -1430,7 +1439,34 @@
 }
 
 .next-app-leader-main {
-  padding: 24px 28px;
+  padding: 6px 8px 34px;
+  background: #0a0a0a;
+}
+
+.next-app-leader-main.compact {
+  min-width: 0;
+}
+
+.next-app-leader-compact {
+  min-width: 0;
+}
+
+.next-app-leader-title {
+  margin-bottom: 14px;
+}
+
+.next-app-leader-windows.compact {
+  margin-bottom: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.next-app-leader-windows.compact::-webkit-scrollbar {
+  display: none;
+}
+
+.next-app-leader-list {
+  width: 100%;
 }
 
 .next-app-leader-card {

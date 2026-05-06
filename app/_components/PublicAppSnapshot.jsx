@@ -739,44 +739,24 @@ export function PublicLeaderboardSnapshot({ items = [], error = '' }) {
     <div className="next-app-snapshot">
       <div className="next-app-desktop leaderboard">
         <PublicSidebar activePage="leaderboard" />
-        <main className="next-app-main next-app-leader-main">
-          <section className="next-app-leader-card">
-            <header className="next-app-page-head compact">
-              <span className="next-app-live-kicker"><i /> Ranked wallets - Today</span>
-              <h1>Leaderboard <em>1D</em></h1>
+        <main className="next-app-main next-app-leader-main compact">
+          <section className="next-app-leader-compact">
+            <header className="next-app-mobile-title next-app-leader-title">
+              <span><i /> RANKED - POLYMARKET</span>
+              <h1>Whale <em>leaderboard</em></h1>
             </header>
-            <LeaderboardSummary leaders={leaders} />
-            <div className="next-app-leader-controls">
-              <div className="next-app-leader-windows">
-                {leaderboardWindows.map((window, index) => (
-                  <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
-                ))}
-              </div>
-              <b>Volume</b>
+            <div className="next-app-leader-windows compact">
+              {leaderboardWindows.map((window, index) => (
+                <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
+              ))}
+              <b>Sort: Volume</b>
             </div>
             {error ? <p className="next-app-error">{error}</p> : null}
-            <div className="next-app-leader-table">
-              <div className="next-app-leader-table-head">
-                <span>Rank</span>
-                <span>Wallet</span>
-                <span>Volume</span>
-                <span>Trades</span>
-                <span>Avg trade</span>
-              </div>
+            <section className="next-app-mobile-list next-app-leader-list" aria-label="Ranked whale wallets">
               {leaders.map((leader) => (
-                <Link className="next-app-leader-row" href={leader.href} key={leader.key}>
-                  <span className="rank">#{leader.rank}</span>
-                  <span className="wallet">
-                    <i style={{ background: leader.avatar }} />
-                    <strong>{leader.name}</strong>
-                    <small>{leader.shortWallet}</small>
-                  </span>
-                  <strong className="volume">{leader.volume}</strong>
-                  <span>{leader.trades}</span>
-                  <span>{leader.avgTrade}</span>
-                </Link>
+                <MobileLeaderboardRow leader={leader} key={leader.key} />
               ))}
-            </div>
+            </section>
           </section>
         </main>
       </div>
