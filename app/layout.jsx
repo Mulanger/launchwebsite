@@ -7,7 +7,7 @@ export const metadata = buildNextMetadata(seoDefaults);
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="next-public-body">{children}</body>
     </html>
   );
