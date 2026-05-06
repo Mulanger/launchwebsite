@@ -1,6 +1,6 @@
 # Polywatch Website Agent Handoff
 
-This repo is the React/Vite web version of Polywatch. It is not the Flutter app and it is not the Railway API server. The website consumes the same whale-trade API used by the app and presents a public live feed, leaderboard, trader profiles, trade details, alert/profile placeholders, and Google Play legal pages.
+This repo is the React/Vite web version of Polywatch. It is not the Flutter app and it is not the Railway API server. The website consumes the same whale-trade API used by the app and presents a public live feed, leaderboard, trader profiles, trade details, web alerts setup, and Google Play legal pages.
 
 ## Current Status
 
@@ -9,6 +9,9 @@ This repo is the React/Vite web version of Polywatch. It is not the Flutter app 
 - Production host: Railway
 - Production API default: `https://whaleserver-production.up.railway.app`
 - Local development typically runs through Vite or preview on `127.0.0.1`
+- Next SSR foundation branch: `codex/next-ssr-foundation`
+- Production is not cut over to Next yet. Railway still uses the Vite build/start path until explicitly approved.
+- Current Next foundation work is committed and pushed through `71de384 Validate hybrid Next route parity`.
 
 Recent important work:
 
@@ -20,6 +23,19 @@ Recent important work:
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
 - Trader profile headers show a short wallet title such as `0xa2cd..`, full address underneath, and a copy button.
 - Trader profile daily volume chart is a bar chart so one-day data does not render as an ugly triangle.
+- Alerts now have a dedicated mobile screen path with bottom nav parity (`Feed`, `Leaders`, `Following`, `Alerts`) instead of relying on desktop layout classes.
+- Alerts channel cards (`Web push`, `Following mode`, `Minimum size`) stay in one row on mobile instead of stacking.
+- Follow/unfollow buttons in the following list no longer trigger row navigation refresh; row navigation ignores nested interactive controls.
+- Sidebar "Public web beta" panel was removed.
+- Sidebar brand lockup now displays `Polywhale` with a small `trades` subtitle under it.
+- Sidebar `Profile` tab is intentionally disabled and shows a `Coming soon` hover tooltip.
+- GA4 is installed in `index.html` using tag id `G-TMS7KN5K7G`.
+- SEO title/metadata defaults now use `Polywhale | Live Polymarket Whale Trades, Top Whales & Whale Feed`.
+- Mojibake metadata strings were cleaned (for example broken `today...` characters in search snippets).
+- Next.js SSR/SSG foundation was added in parallel with Vite on `codex/next-ssr-foundation`.
+- Public SEO routes now have Next App Router route shells under `app/`.
+- App-only routes are wired through a legacy client wrapper so existing interactive behavior stays owned by `src/App.jsx`.
+- `/` and `/leaderboard` use a hybrid route that serves crawlable HTML first, then hydrates into the existing app UI in browsers.
 
 ## Project Shape
 
@@ -29,14 +45,19 @@ D:\polywatch-website
   README.md                Short public/developer overview.
   package.json             npm scripts and dependencies.
   package-lock.json        Locked dependency tree.
+  next.config.mjs          Next config and `/api` rewrite.
   vite.config.js           Vite React config and dev/preview `/api` proxy.
   server.js                Production static server plus `/api` proxy.
   railway.json             Railway build/start config.
   index.html               Vite HTML shell.
+  NEXT_SSR_MIGRATION_PLAN.md
+                           Phased Next SSR migration plan and implementation log.
+  app/                     Next App Router public routes and legacy app route wrappers.
   public/
     favicon.png
     site.webmanifest
     robots.txt
+    sitemap.xml
     assets/
       polywatch-icon.png
       screen-alerts.png
@@ -45,8 +66,15 @@ D:\polywatch-website
   src/
     main.jsx               React entrypoint.
     App.jsx                All routes, components, data fetching, state, and helpers.
+    lib/
+      env.js               Shared public env reader for Vite and Next browser bundles.
+      next-metadata.js     Next metadata helpers.
+      routes.js            Shared route matching helpers.
+      seo.js               Shared SEO metadata and JSON-LD helpers.
+      server-api.js        Next server fetch helpers.
     styles.css             Global app styling and responsive rules.
   dist/                    Build output from `npm run build`; do not edit manually.
+  .next/                   Next build output; do not edit manually.
 ```
 
 ## Commands
@@ -57,9 +85,14 @@ npm run dev
 npm run build
 npm run preview
 npm start
+npm run next:dev
+npm run next:build
+npm run next:start
 ```
 
 Use `npm run build` before pushing UI or API changes. `npm start` serves the built `dist` folder with `server.js`.
+
+While the Next migration branch is active, run both `npm run next:build` and `npm run build` before pushing changes that affect shared app code, routing, metadata, API helpers, or dependencies.
 
 ## Environment Variables
 
@@ -75,10 +108,16 @@ Frontend/Vite:
 - `VITE_FIREBASE_APP_ID`: Firebase Web app id.
 - `VITE_FIREBASE_VAPID_KEY`: Firebase Web Push certificate key used by `getToken()`.
 
+Next public env compatibility:
+
+- `NEXT_PUBLIC_API_BASE_URL`: browser REST base equivalent for Next bundles. `src/lib/env.js` prefers Vite values when present, then Next values, then fallback defaults.
+- `NEXT_PUBLIC_WS_BASE_URL`: browser websocket base equivalent for Next bundles.
+- `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`, `NEXT_PUBLIC_FIREBASE_VAPID_KEY`: Next equivalents for Firebase browser config.
+
 Production server:
 
 - `PORT`: server port. Defaults to `4173`.
-- `API_BASE_URL`: upstream target for `server.js` `/api` proxy. Defaults to production API.
+- `API_BASE_URL`: upstream target for `server.js` `/api` proxy, `next.config.mjs` `/api/:path*` rewrite, and Next server helpers. Defaults to production API.
 
 ## Runtime Data Flow
 
@@ -126,7 +165,7 @@ Important fallback behavior:
 
 ## Routes
 
-All route selection lives in `src/App.jsx` inside `App()`.
+Vite route selection still lives in `src/App.jsx` inside `App()`.
 
 - `/` -> `WhaleFeedPage`
 - `/about` -> `AboutPage`
@@ -140,6 +179,27 @@ All route selection lives in `src/App.jsx` inside `App()`.
 - `/terms` -> `TermsPage`
 - `/delete-data` -> `DeleteDataPage`
 
+Next route shells live under `app/`.
+
+Public SEO routes:
+
+- `/`
+- `/about`
+- `/leaderboard`
+- `/privacy`
+- `/terms`
+- `/delete-data`
+
+Next app-only legacy wrappers:
+
+- `/alerts`
+- `/profile`
+- `/profile/following`
+- `/trade/[tradeId]`
+- `/trader/[wallet]`
+
+In the hybrid routes, server-rendered/public HTML is for crawlers and first paint. Browser interaction remains handled by the existing React app after hydration.
+
 ## Important Code Areas
 
 `src/App.jsx`
@@ -152,9 +212,26 @@ All route selection lives in `src/App.jsx` inside `App()`.
 - `LeaderboardPage`, `LeaderboardRow`, `buildLeaderboardStats`: leaderboard UI and data summary.
 - `TraderProfilePage`, `WalletAddressLine`, `DailyVolumeChart`: trader profile header, copy action, and profile chart.
 - `FollowWalletButton`, follow helpers, auth helpers: follow/unfollow and anonymous auth.
+- `FeedSidebar` / `NavItem`: left navigation, disabled profile item (`Coming soon`) behavior, and brand lockup text.
+- `AlertsPage`: desktop + dedicated mobile render path with bottom nav support.
 - `fetchJson`, `authFetchJson`, `buildWhalesPath`, `buildLeaderboardPath`: API wrappers.
 - Legal page components near the bottom: privacy, terms, delete-data pages.
-- SEO support lives in `src/App.jsx` near the top: route metadata, canonical URLs, robots directives, and JSON-LD helpers. Static crawler defaults are in `index.html`, `public/robots.txt`, and `public/sitemap.xml`.
+- SEO support is shared through `src/lib/seo.js` and `src/lib/next-metadata.js`. Client head synchronization still happens from `src/App.jsx`. Static crawler defaults remain in `index.html`, `public/robots.txt`, and `public/sitemap.xml`.
+
+`app/`
+
+- Public route shells for crawlable pages.
+- `app/_components/HybridPublicRoute.jsx`: serves crawlable public HTML and hydrates into the legacy app for browser users.
+- `app/_components/LegacyAppRoute.jsx` and `LegacyAppRouteClient.jsx`: route wrappers for app-only pages.
+- `app/_components/PublicChrome.jsx`: reusable public SSR chrome.
+
+`src/lib/`
+
+- `seo.js`: canonical SEO route data and JSON-LD builders used by Vite and Next.
+- `routes.js`: route matching shared by `src/App.jsx` and Next wrappers.
+- `env.js`: public env lookup compatible with Vite and Next browser bundles.
+- `next-metadata.js`: Next metadata conversion helpers.
+- `server-api.js`: server-side API fetch helpers for Next routes.
 
 `src/styles.css`
 
@@ -179,12 +256,14 @@ All route selection lives in `src/App.jsx` inside `App()`.
 
 - The website is an actual app surface, not a marketing landing page.
 - Keep dashboard UI dense, calm, and scan-friendly.
+- Public-facing brand text is now `Polywhale` (while internal storage keys and some app constants still use `polywatch`).
 - Feed market rows should show real API images only; empty market squares are a bug unless the API truly has no image anywhere.
 - Feed visible data is today's New York session, not a rolling arbitrary list.
 - "Today" means the date in `America/New_York`, resetting at New York midnight. Use the shared helpers in `src/App.jsx` (`getCurrentNewYorkSession`, `filterNewYorkSession`, `buildTodayLeaderboardFromTrades`) rather than adding new date logic.
 - Keep trade intent wording as provided by the backend. Do not reinterpret BUY/SELL in the website; intent classification belongs upstream.
 - The public web leaderboard is presented as `1D` and is today-scoped in the frontend. Trader profile stats still use the API's `7d` stats until the backend exposes profile stats for today. 30D and 1Y are visible but treated as future/locked UI.
 - Do not add search bars back to the feed or leaderboard unless explicitly asked.
+- Keep sidebar `Profile` nav item disabled unless specifically requested to reopen it.
 
 ## Today Session Implementation
 
@@ -230,11 +309,14 @@ When the backend supports `window=today`, remove the frontend-derived leaderboar
 Before pushing:
 
 1. Run `npm run build`.
-2. Open `/` and verify feed rows render market images, filters work, and no console errors appear.
-3. Open `/leaderboard` and verify the table has no row-level `Whales` column and no `All markets` signal label.
-4. Open a trader profile and verify short wallet title, full address copy button, profile chart, follow button, and recent trades.
-5. Open a trade detail and verify market card, trader card, follow button, and back behavior.
-6. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
+2. On `codex/next-ssr-foundation`, also run `npm run next:build`.
+3. Open `/` and verify feed rows render market images, filters work, and no console errors appear.
+4. Open `/leaderboard` and verify the table has no row-level `Whales` column and no `All markets` signal label.
+5. Open a trader profile and verify short wallet title, full address copy button, profile chart, follow button, and recent trades.
+6. Open a trade detail and verify market card, trader card, follow button, and back behavior.
+7. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
+8. If changing metadata/SEO copy, verify `index.html`, `src/App.jsx`, `src/lib/seo.js`, and Next route metadata are aligned and contain no malformed encoding characters.
+9. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
 
 ## Trade Detail Endpoint
 
@@ -258,6 +340,8 @@ Railway uses `railway.json`:
 
 The production server defaults to the production API. Set `API_BASE_URL` in Railway only if changing the backend target.
 
+Do not update Railway build/start commands for Next until the cutover phase is explicitly approved. Pending cutover work includes Railway command changes, branch/PR merge, production source HTML verification, production API and websocket checks, follow/alert checks, and mobile route checks.
+
 ## Related System Context
 
 The broader Polywatch system has three pieces:
@@ -273,6 +357,8 @@ This repo only owns the web app and legal/static web pages.
 - Preserve existing user work. Check `git status` before edits.
 - Prefer small, scoped UI changes in `src/App.jsx` and `src/styles.css`.
 - Run the build before committing.
+- Do not merge or cut over the Next branch until explicitly approved.
+- Preserve watcher and API contracts. This repo consumes `/server` and `/watcher` behavior but should not silently change their assumptions.
 - If changing live feed behavior, test both REST-loaded rows and websocket/new rows.
 - If changing follow behavior, test logged-out local follows and anonymous-auth server sync.
 - Keep legal URLs stable: `/privacy`, `/terms`, `/delete-data`.
