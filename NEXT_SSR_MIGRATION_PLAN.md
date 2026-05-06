@@ -23,6 +23,10 @@ The migration should not require watcher changes. API changes should be additive
 - 2026-05-06: Added server-rendered public Next routes for `/`, `/about`, `/leaderboard`, `/privacy`, `/terms`, and `/delete-data`.
 - 2026-05-06: Added `src/lib/server-api.js` so Next server routes can fetch public whale and leaderboard data without coupling to browser code.
 - 2026-05-06: Verified `npm run next:build` and existing `npm run build` both pass. Next generated static/ISR HTML files for the public routes under `.next/server/app`.
+- 2026-05-06: Added app-only Next route files for `/alerts`, `/profile`, `/profile/following`, `/trade/[tradeId]`, and `/trader/[wallet]`.
+- 2026-05-06: Added `LegacyAppRoute` and `LegacyAppRouteClient` so app-only routes can keep using the existing hydrated React app without server-prerendering browser-only code.
+- 2026-05-06: Added `src/lib/env.js` to make shared code read Vite and Next public environment variables safely.
+- 2026-05-06: Verified the expanded route set with `npm run next:build`; Next now recognizes static app-only routes and dynamic trade/trader routes.
 
 ## Current Problem
 

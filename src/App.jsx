@@ -35,14 +35,15 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { readPublicEnv } from './lib/env.js';
 import { getBrowserPathname, matchAppRoute } from './lib/routes.js';
 import { getSeoForPath, seoDefaults, seoImage, siteName, siteOrigin } from './lib/seo.js';
 
 const supportEmail = 'support@whaletracker.com';
 const lastUpdated = 'May 1, 2026';
 const prodApiUrl = 'https://whaleserver-production.up.railway.app';
-const apiBaseUrl = normalizeApiBase(import.meta.env.VITE_API_BASE_URL || '/api');
-const wsBaseUrl = normalizeWsBase(import.meta.env.VITE_WS_BASE_URL || prodApiUrl);
+const apiBaseUrl = normalizeApiBase(readPublicEnv('VITE_API_BASE_URL', '/api'));
+const wsBaseUrl = normalizeWsBase(readPublicEnv('VITE_WS_BASE_URL', prodApiUrl));
 const authStorageKey = 'polywatch:webAuth';
 const deviceIdStorageKey = 'polywatch:webDeviceId';
 const followsStorageKey = 'polywatch:followedWallets';
@@ -52,13 +53,13 @@ const webAlertsChangedEvent = 'polywatch:web-alerts-changed';
 const webAlertToastEvent = 'polywatch:web-alert-toast';
 const walletRegex = /^0x[0-9a-fA-F]{40}$/;
 const firebaseWebConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: readPublicEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: readPublicEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: readPublicEnv('VITE_FIREBASE_PROJECT_ID'),
+  messagingSenderId: readPublicEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: readPublicEnv('VITE_FIREBASE_APP_ID'),
 };
-const firebaseVapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || '';
+const firebaseVapidKey = readPublicEnv('VITE_FIREBASE_VAPID_KEY');
 
 const rangeOptions = [
   { id: 'all', label: 'All', minUsd: 10000 },
