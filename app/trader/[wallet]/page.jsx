@@ -1,4 +1,5 @@
 import { notFound, permanentRedirect } from 'next/navigation';
+import HybridPublicRoute from '../../_components/HybridPublicRoute.jsx';
 import JsonLd from '../../_components/JsonLd.jsx';
 import TraderProfileSnapshot from '../../_components/TraderProfileSnapshot.jsx';
 import { buildNextMetadata } from '../../../src/lib/next-metadata.js';
@@ -107,9 +108,9 @@ export default async function TraderPage({ params }) {
   }
 
   return (
-    <>
+    <HybridPublicRoute initialPath={traderPathForWallet(profile.proxyWallet)}>
       <JsonLd data={buildTraderProfileStructuredData(profile)} />
       <TraderProfileSnapshot profile={profile} />
-    </>
+    </HybridPublicRoute>
   );
 }
