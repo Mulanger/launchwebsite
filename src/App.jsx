@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -6253,9 +6253,10 @@ function LegalFooter() {
 
 function useFollowedTraders() {
   const [items, setItems] = useState(() => buildLocalFollowSummaries());
-  const [loading, setLoading] = useState(() => hasStoredAuth());
+  const [loading, setLoading] = useState(() => hasStoredAuth() && buildLocalFollowSummaries().length === 0);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const hasLoadedFromServerRef = useRef(false);
 
   const refresh = useCallback(() => {
     setRefreshNonce((value) => value + 1);
@@ -6273,15 +6274,20 @@ function useFollowedTraders() {
 
     async function loadFollows() {
       const localItems = buildLocalFollowSummaries();
+      setItems(localItems);
 
       if (!hasStoredAuth()) {
-        setItems(localItems);
+        hasLoadedFromServerRef.current = true;
         setLoading(false);
         setError('');
         return;
       }
 
-      setLoading(true);
+      if (!hasLoadedFromServerRef.current && localItems.length === 0) {
+        setLoading(true);
+      } else {
+        setLoading(false);
+      }
       setError('');
 
       try {
@@ -6293,9 +6299,11 @@ function useFollowedTraders() {
         const summaries = (data?.items || []).map(normalizeFollowSummary);
         writeFollowedWallets(new Set(summaries.map((item) => item.proxyWallet)));
         setItems(summaries);
+        hasLoadedFromServerRef.current = true;
       } catch (err) {
         if (err.name === 'AbortError' || !active) return;
         setItems(localItems);
+        hasLoadedFromServerRef.current = true;
         setError(err.message || 'Could not load followed traders');
       } finally {
         if (active && !controller.signal.aborted) {
