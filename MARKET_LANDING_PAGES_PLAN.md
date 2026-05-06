@@ -616,12 +616,15 @@ MVP implementation status:
 
 - `/market/[slug]` is implemented as a native Next server page.
 - The page uses the same Polywhale dashboard frame and changes only the center market workspace plus a market snapshot card in the right rail.
+- The market page sidebar does not mark Whale Feed active; the page has a Back to whale feed action instead.
+- The market image is shown beside the H1 when available.
 - Unknown market slugs return 404.
 - Known weak markets render with `noindex,follow`.
 - Qualified markets require at least 3 tracked whale trades and at least $50K tracked whale volume.
 - The dynamic Next `/sitemap.xml` includes qualified market pages only.
 - Feed desktop rows and mobile cards link market title/icon to the market page while preserving row click to trade detail.
 - Trade detail market identity links to the market page.
+- Current automation is feed-driven: pages and sitemap update from the latest whale feed scan through Next revalidation. Persistent historical slug retention, automatic old-page demotion/removal rules beyond the scan window, and richer Polymarket market metadata require the later server-side market snapshot/enrichment worker.
 
 Enrichment is done when:
 

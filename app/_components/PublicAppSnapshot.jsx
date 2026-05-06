@@ -549,15 +549,26 @@ export function MarketDashboardSnapshot({ data }) {
   const marketWallets = data.topWallets.map(normalizeLeader);
   const topWhalesToday = data.topWhalesToday.map(normalizeLeader);
   const { market, stats } = data;
+  const marketImage = market.icon ? (
+    <img src={market.icon} alt="" loading="lazy" referrerPolicy="no-referrer" />
+  ) : (
+    <span>M</span>
+  );
 
   return (
     <div className="next-app-snapshot">
       <div className="next-app-desktop">
-        <PublicSidebar activePage="feed" />
+        <PublicSidebar activePage="market" />
         <main className="next-app-main next-app-market-main">
           <header className="next-app-page-head next-app-market-head">
+            <Link className="next-app-market-back" href="/">Back to whale feed</Link>
             <span className="next-app-live-kicker"><i /> Market - Polymarket</span>
-            <h1>{market.title}</h1>
+            <div className="next-app-market-title-row">
+              <h1>{market.title}</h1>
+              <div className="next-app-market-hero-image" aria-hidden="true">
+                {marketImage}
+              </div>
+            </div>
             <p>Market-specific whale trades, wallet concentration, and tracked Polywhale volume.</p>
           </header>
           <div className="next-app-stats-grid next-app-market-stats-grid">
@@ -579,8 +590,14 @@ export function MarketDashboardSnapshot({ data }) {
 
       <main className="next-app-mobile next-app-market-mobile">
         <header className="next-app-mobile-title">
+          <Link className="next-app-market-back mobile" href="/">Back to whale feed</Link>
           <span><i /> MARKET - POLYMARKET</span>
-          <h1>{market.title}</h1>
+          <div className="next-app-market-title-row mobile">
+            <h1>{market.title}</h1>
+            <div className="next-app-market-hero-image" aria-hidden="true">
+              {marketImage}
+            </div>
+          </div>
         </header>
         <div className="next-app-stats-grid next-app-market-stats-grid mobile">
           <MarketStatCard label="Whale volume" value={formatUsdCompact(stats.whaleVolume)} tone="primary" />
