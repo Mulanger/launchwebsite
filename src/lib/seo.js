@@ -187,7 +187,7 @@ export function getSeoForPath(path, tradeMatch, traderMatch, marketMatch) {
       description:
         'View a public Polymarket whale wallet profile, recent whale trades, wallet rank, volume mix, and large trade history.',
       path,
-      robots: 'noindex,follow',
+      robots: 'index,follow,max-image-preview:large',
     };
   }
 
