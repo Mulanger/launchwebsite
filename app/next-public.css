@@ -905,7 +905,7 @@
   min-height: 34px;
   display: inline-flex;
   align-items: center;
-  margin-bottom: 16px;
+  margin: 0 0 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   padding: 0 14px;
@@ -927,6 +927,11 @@
   border-color: rgba(94, 231, 173, 0.24);
   color: var(--accent);
   background: rgba(94, 231, 173, 0.08);
+}
+
+.next-app-market-head .next-app-live-kicker {
+  display: flex;
+  margin-bottom: 10px;
 }
 
 .next-app-market-title-row {

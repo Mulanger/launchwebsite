@@ -569,7 +569,7 @@ export function MarketDashboardSnapshot({ data }) {
                 {marketImage}
               </div>
             </div>
-            <p>Market-specific whale trades, wallet concentration, and tracked Polywhale volume.</p>
+            <p>This page shows how many millionaire whales have traded {market.title}, including tracked whale volume, recent large trades, and top wallets.</p>
           </header>
           <div className="next-app-stats-grid next-app-market-stats-grid">
             <MarketStatCard label="Whale volume" value={formatUsdFull(stats.whaleVolume)} tone="primary" />
