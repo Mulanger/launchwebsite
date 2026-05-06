@@ -1,0 +1,543 @@
+import Link from 'next/link';
+import { formatUsdCompact, shortWallet } from './format.js';
+
+const sizeFilters = ['All', '50k-100k', '100k-250k', '250k+', 'Following'];
+const sideFilters = ['All', 'Buy', 'Sell'];
+const leaderboardWindows = ['1D', '7D', '30D', '1Y'];
+
+function formatUsdFull(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '$0';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(number);
+}
+
+function formatPrice(trade) {
+  const raw = trade.price ?? trade.executionPrice ?? trade.outcomePrice;
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return '--';
+  const cents = number <= 1 ? number * 100 : number;
+  return `${Math.round(cents)}c`;
+}
+
+function relativeTimeAgo(timestamp) {
+  const seconds = Number(timestamp || 0);
+  if (!seconds) return 'Recent';
+  const diffMs = Math.max(0, Date.now() - seconds * 1000);
+  const minutes = Math.max(1, Math.floor(diffMs / 60000));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function inferCategory(trade) {
+  const raw = `${trade.market?.category || ''} ${trade.market?.title || ''} ${trade.market?.slug || ''}`.toLowerCase();
+  if (raw.includes('bitcoin') || raw.includes('crypto') || raw.includes('btc') || raw.includes('ethereum')) {
+    return { id: 'crypto', label: 'Crypto', short: 'B' };
+  }
+  if (raw.includes('election') || raw.includes('trump') || raw.includes('biden') || raw.includes('politic')) {
+    return { id: 'politics', label: 'Politics', short: 'P' };
+  }
+  if (raw.includes('nba') || raw.includes('nfl') || raw.includes('soccer') || raw.includes('tennis') || raw.includes('sports')) {
+    return { id: 'sports', label: 'Sports', short: 'S' };
+  }
+  if (raw.includes('fed') || raw.includes('inflation') || raw.includes('rate') || raw.includes('econom')) {
+    return { id: 'econ', label: 'Economy', short: 'E' };
+  }
+  return { id: 'general', label: 'Market', short: 'M' };
+}
+
+function marketImageUrl(trade) {
+  return [
+    trade.marketIcon,
+    trade.marketImage,
+    trade.marketImageUrl,
+    trade.icon,
+    trade.image,
+    trade.market?.icon,
+    trade.market?.image,
+    trade.market?.imageUrl,
+  ].find(Boolean);
+}
+
+function getTraderName(trade) {
+  return trade.trader?.displayName || trade.trader?.pseudonym || shortWallet(trade.trader?.proxyWallet);
+}
+
+function hashString(value) {
+  return String(value || 'polywhale').split('').reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
+}
+
+function avatarGradient(value) {
+  const hue = Math.abs(hashString(value)) % 360;
+  return `linear-gradient(135deg, hsl(${hue} 70% 58%), hsl(${(hue + 46) % 360} 62% 36%))`;
+}
+
+function sparkPath(values, width = 80, height = 28) {
+  const points = values.length ? values : [4, 8, 6, 12, 10, 16, 18];
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const range = Math.max(1, max - min);
+  return points
+    .map((value, index) => {
+      const x = (index / Math.max(1, points.length - 1)) * width;
+      const y = height - ((value - min) / range) * (height - 4) - 2;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+function normalizeTrade(trade, index) {
+  const category = inferCategory(trade);
+  const wallet = trade.trader?.proxyWallet || '';
+  const imageUrl = marketImageUrl(trade);
+  return {
+    id: trade.id || `${wallet}-${index}`,
+    href: trade.id ? `/trade/${encodeURIComponent(trade.id)}` : '/',
+    side: trade.side === 'SELL' ? 'SELL' : 'BUY',
+    timeAgo: relativeTimeAgo(trade.timestamp),
+    category,
+    imageUrl,
+    marketName: trade.market?.title || 'Unknown market',
+    marketMeta: `${category.label} - ${trade.outcome || 'Outcome'}`,
+    size: formatUsdFull(trade.usdSize),
+    compactSize: formatUsdCompact(trade.usdSize),
+    price: formatPrice(trade),
+    traderName: getTraderName(trade),
+    traderWallet: wallet,
+    traderHref: wallet ? `/trader/${encodeURIComponent(wallet)}` : null,
+    avatar: avatarGradient(wallet || trade.id || index),
+    isMega: Number(trade.usdSize || 0) >= 250000 || trade.tier === 'mega',
+  };
+}
+
+function normalizeLeader(wallet, index) {
+  const proxyWallet = wallet.proxyWallet || '';
+  const rank = wallet.rank || index + 1;
+  const trades = Number(wallet.tradeCount || 0);
+  const volume = Number(wallet.volume || 0);
+  return {
+    key: proxyWallet || `${rank}-${index}`,
+    rank,
+    name: wallet.displayName || wallet.pseudonym || shortWallet(proxyWallet),
+    wallet: proxyWallet,
+    shortWallet: shortWallet(proxyWallet),
+    href: proxyWallet ? `/trader/${encodeURIComponent(proxyWallet)}` : '/leaderboard',
+    volume: formatUsdCompact(volume),
+    fullVolume: formatUsdFull(volume),
+    trades,
+    avgTrade: formatUsdCompact(volume / Math.max(1, trades)),
+    avatar: avatarGradient(proxyWallet || rank),
+  };
+}
+
+function PublicSidebar({ activePage = 'feed' }) {
+  const links = [
+    { label: 'Whale Feed', href: '/', badge: 'Live', active: activePage === 'feed' },
+    { label: 'Leaderboard', href: '/leaderboard', badge: 'Rank', active: activePage === 'leaderboard' },
+    { label: 'Following', href: '/profile/following', badge: 'List', active: false },
+    { label: 'Alerts', href: '/alerts', badge: 'Web', active: false },
+    { label: 'Profile', href: '/profile', badge: 'Soon', active: false, disabled: true },
+  ];
+
+  return (
+    <aside className="next-app-sidebar" aria-label="Product navigation">
+      <Link className="next-app-brand" href="/">
+        <img src="/assets/polywatch-icon.png" alt="" />
+        <span>
+          <strong>Polywhale</strong>
+          <small>trades</small>
+        </span>
+      </Link>
+
+      <nav className="next-app-nav">
+        <span className="next-app-nav-label">Live</span>
+        {links.slice(0, 1).map((item) => (
+          <Link className={`next-app-nav-item ${item.active ? 'active' : ''}`} href={item.href} key={item.label}>
+            <span>{item.label}</span>
+            <small>{item.badge}</small>
+          </Link>
+        ))}
+        <span className="next-app-nav-label">Discover</span>
+        {links.slice(1, 3).map((item) => (
+          <Link className={`next-app-nav-item ${item.active ? 'active' : ''}`} href={item.href} key={item.label}>
+            <span>{item.label}</span>
+            <small>{item.badge}</small>
+          </Link>
+        ))}
+        <span className="next-app-nav-label">Account</span>
+        {links.slice(3).map((item) => (
+          <Link className={`next-app-nav-item ${item.disabled ? 'disabled' : ''}`} href={item.disabled ? '#' : item.href} key={item.label}>
+            <span>{item.label}</span>
+            <small>{item.badge}</small>
+          </Link>
+        ))}
+      </nav>
+
+      <div className="next-app-sidebar-links">
+        <Link href="/about">About</Link>
+        <Link href="/privacy">Privacy</Link>
+        <Link href="/terms">Terms</Link>
+        <Link href="/delete-data">Delete data</Link>
+      </div>
+    </aside>
+  );
+}
+
+function DesktopTradeRow({ trade }) {
+  return (
+    <Link className={`next-app-trade-row ${trade.isMega ? 'mega' : ''} ${trade.side === 'SELL' ? 'sell' : ''}`} href={trade.href}>
+      <div className="next-app-tag-stack">
+        {trade.isMega ? <span className="next-app-trade-tag mega">Mega</span> : null}
+        <span className={`next-app-trade-tag ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side === 'SELL' ? 'Sell' : 'Buy'}</span>
+        <span className="next-app-trade-tag time">{trade.timeAgo}</span>
+      </div>
+      <div className="next-app-market-cell">
+        <MarketThumb trade={trade} size="desktop" />
+        <span>
+          <strong>{trade.marketName}</strong>
+          <small>{trade.marketMeta}</small>
+        </span>
+      </div>
+      <div className="next-app-metric">
+        <strong>{trade.size}</strong>
+      </div>
+      <div className="next-app-metric">
+        <span>Price</span>
+        <strong>{trade.price}</strong>
+      </div>
+      <div className="next-app-trader-cell">
+        <i style={{ background: trade.avatar }} />
+        <strong>{trade.traderName}</strong>
+      </div>
+      <div className="next-app-row-actions">
+        <span>+</span>
+        <span>Go</span>
+      </div>
+    </Link>
+  );
+}
+
+function MobileTradeCard({ trade }) {
+  return (
+    <Link className="next-app-mobile-card" href={trade.href}>
+      <div className="next-app-mobile-card-top">
+        <span className={`next-app-side-badge ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side}</span>
+        <span>{trade.timeAgo}</span>
+        <div>
+          <small>+</small>
+          <small>Go</small>
+        </div>
+      </div>
+      <div className="next-app-mobile-market">
+        <MarketThumb trade={trade} size="mobile" />
+        <span>
+          <strong>{trade.marketName}</strong>
+          <small>{trade.marketMeta}</small>
+        </span>
+      </div>
+      <div className="next-app-mobile-metrics">
+        <span>
+          <small>SIZE</small>
+          <strong>{trade.size}</strong>
+        </span>
+        <span>
+          <small>PRICE</small>
+          <strong>{trade.price}</strong>
+        </span>
+        <span className="trader">
+          <i style={{ background: trade.avatar }} />
+          <strong>{trade.traderName}</strong>
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function MarketThumb({ trade, size }) {
+  if (trade.imageUrl) {
+    return <img className={`next-app-market-thumb ${size}`} src={trade.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />;
+  }
+  return <span className={`next-app-market-thumb fallback ${trade.category.id} ${size}`}>{trade.category.short}</span>;
+}
+
+function StatPanel({ volume, whales, biggest }) {
+  return (
+    <section className="next-app-stat-panel" aria-label="Today whale volume">
+      <div className="next-app-stat-panel-head">
+        <span>
+          <small>VOLUME TODAY</small>
+          <strong>{formatUsdCompact(volume)}</strong>
+        </span>
+        <svg width="70" height="26" viewBox="0 0 80 28" fill="none" aria-hidden="true">
+          <path d={sparkPath([4, 8, 6, 12, 10, 16, 18])} stroke="#22d3a5" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div className="next-app-stat-pills">
+        <span>
+          <small>Whales</small>
+          {whales}
+        </span>
+        <span>
+          <small>Mega</small>
+          {Math.max(0, Math.min(whales, Math.round(whales / 3)))}
+        </span>
+        <span className="accent">
+          <small>Biggest</small>
+          {formatUsdCompact(biggest)}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function FeedFilters() {
+  return (
+    <div className="next-app-filter-block">
+      <div className="next-app-size-filters">
+        {sizeFilters.map((label, index) => (
+          <span className={index === 0 ? 'active' : ''} key={label}>
+            {label}
+          </span>
+        ))}
+      </div>
+      <div className="next-app-side-filters">
+        {sideFilters.map((label, index) => (
+          <span className={index === 0 ? 'active' : ''} key={label}>
+            {label}
+          </span>
+        ))}
+        <b>Most recent</b>
+      </div>
+    </div>
+  );
+}
+
+function MobileBottomNav({ active = 'feed' }) {
+  const tabs = [
+    ['feed', 'Feed'],
+    ['leaders', 'Leaders'],
+    ['following', 'Following'],
+    ['alerts', 'Alerts'],
+  ];
+  return (
+    <nav className="next-app-mobile-bottom" aria-label="Mobile navigation">
+      {tabs.map(([id, label]) => (
+        <Link className={active === id ? 'active' : ''} href={id === 'feed' ? '/' : id === 'leaders' ? '/leaderboard' : id === 'following' ? '/profile/following' : '/alerts'} key={id}>
+          <i />
+          <span>{label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function FeedRail({ leaders }) {
+  return (
+    <aside className="next-app-rail" aria-label="Top whales today">
+      <section>
+        <span className="next-app-rail-kicker">Top whales today</span>
+        <div className="next-app-rail-list">
+          {leaders.slice(0, 6).map((leader) => (
+            <Link className="next-app-rail-row" href={leader.href} key={leader.key}>
+              <i style={{ background: leader.avatar }} />
+              <span>
+                <strong>{leader.name}</strong>
+                <small>{leader.shortWallet}</small>
+              </span>
+              <b>{leader.volume}</b>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function LeaderboardSummary({ leaders }) {
+  const topVolume = leaders[0]?.fullVolume || '$0';
+  const totalVolume = leaders.reduce((sum, leader) => sum + Number(String(leader.fullVolume).replace(/[^0-9.-]/g, '') || 0), 0);
+  return (
+    <div className="next-app-leader-summary">
+      <span className="primary">
+        <small>Top volume</small>
+        <strong>{topVolume}</strong>
+      </span>
+      <span>
+        <small>Ranked wallets</small>
+        <strong>{leaders.length}</strong>
+      </span>
+      <span>
+        <small>Total volume</small>
+        <strong>{formatUsdCompact(totalVolume)}</strong>
+      </span>
+      <span className="accent">
+        <small>Window</small>
+        <strong>1D</strong>
+      </span>
+    </div>
+  );
+}
+
+function MobileLeaderboardRow({ leader }) {
+  return (
+    <Link className={`next-app-mobile-leader ${leader.rank <= 3 ? `rank-${leader.rank}` : ''}`} href={leader.href}>
+      <span className="rank">{leader.rank}</span>
+      <div className="copy">
+        <i style={{ background: leader.avatar }} />
+        <span>
+          <strong>{leader.name}</strong>
+          <small>{leader.wallet || leader.shortWallet}</small>
+        </span>
+      </div>
+      <div className="value">
+        <strong>{leader.volume}</strong>
+        <small>VOLUME</small>
+      </div>
+      <div className="meta">
+        <span>Trades <b>{leader.trades}</b></span>
+        <span>Avg <b>{leader.avgTrade}</b></span>
+      </div>
+    </Link>
+  );
+}
+
+export function PublicFeedSnapshot({ whales = [], leaders = [], error = '' }) {
+  const trades = whales.map(normalizeTrade);
+  const normalizedLeaders = leaders.map(normalizeLeader);
+  const volume = whales.reduce((total, trade) => total + Number(trade.usdSize || 0), 0);
+  const biggest = whales.reduce((max, trade) => Math.max(max, Number(trade.usdSize || 0)), 0);
+
+  return (
+    <div className="next-app-snapshot">
+      <div className="next-app-desktop">
+        <PublicSidebar activePage="feed" />
+        <main className="next-app-main">
+          <header className="next-app-page-head">
+            <span className="next-app-live-kicker"><i /> Live - Polymarket</span>
+            <h1>Whale <em>trades</em></h1>
+          </header>
+          <div className="next-app-stats-grid">
+            <StatPanel volume={volume} whales={trades.length} biggest={biggest} />
+            <span>
+              <small>Recent whales</small>
+              <strong>{trades.length}</strong>
+            </span>
+            <span>
+              <small>Ranked wallets</small>
+              <strong>{normalizedLeaders.length}</strong>
+            </span>
+          </div>
+          <FeedFilters />
+          {error ? <p className="next-app-error">{error}</p> : null}
+          <section className="next-app-feed-list" aria-label="Recent whale trades">
+            <div className="next-app-feed-head">
+              <span>Signal</span>
+              <span>Market</span>
+              <span>Size</span>
+              <span>Price</span>
+              <span>Trader</span>
+              <span />
+            </div>
+            {trades.map((trade) => (
+              <DesktopTradeRow trade={trade} key={trade.id} />
+            ))}
+          </section>
+        </main>
+        <FeedRail leaders={normalizedLeaders} />
+      </div>
+
+      <main className="next-app-mobile">
+        <header className="next-app-mobile-title">
+          <span><i /> LIVE - POLYMARKET</span>
+          <h1>Whale <em>trades</em></h1>
+        </header>
+        <StatPanel volume={volume} whales={trades.length} biggest={biggest} />
+        <FeedFilters />
+        {error ? <p className="next-app-error">{error}</p> : null}
+        <section className="next-app-mobile-list" aria-label="Recent whale trades">
+          {trades.map((trade) => (
+            <MobileTradeCard trade={trade} key={trade.id} />
+          ))}
+        </section>
+        <MobileBottomNav active="feed" />
+      </main>
+    </div>
+  );
+}
+
+export function PublicLeaderboardSnapshot({ items = [], error = '' }) {
+  const leaders = items.map(normalizeLeader);
+
+  return (
+    <div className="next-app-snapshot">
+      <div className="next-app-desktop leaderboard">
+        <PublicSidebar activePage="leaderboard" />
+        <main className="next-app-main next-app-leader-main">
+          <section className="next-app-leader-card">
+            <header className="next-app-page-head compact">
+              <span className="next-app-live-kicker"><i /> Ranked wallets - Today</span>
+              <h1>Leaderboard <em>1D</em></h1>
+            </header>
+            <LeaderboardSummary leaders={leaders} />
+            <div className="next-app-leader-controls">
+              <div className="next-app-leader-windows">
+                {leaderboardWindows.map((window, index) => (
+                  <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
+                ))}
+              </div>
+              <b>Volume</b>
+            </div>
+            {error ? <p className="next-app-error">{error}</p> : null}
+            <div className="next-app-leader-table">
+              <div className="next-app-leader-table-head">
+                <span>Rank</span>
+                <span>Wallet</span>
+                <span>Volume</span>
+                <span>Trades</span>
+                <span>Avg trade</span>
+              </div>
+              {leaders.map((leader) => (
+                <Link className="next-app-leader-row" href={leader.href} key={leader.key}>
+                  <span className="rank">#{leader.rank}</span>
+                  <span className="wallet">
+                    <i style={{ background: leader.avatar }} />
+                    <strong>{leader.name}</strong>
+                    <small>{leader.shortWallet}</small>
+                  </span>
+                  <strong className="volume">{leader.volume}</strong>
+                  <span>{leader.trades}</span>
+                  <span>{leader.avgTrade}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <main className="next-app-mobile">
+        <header className="next-app-mobile-title">
+          <span><i /> RANKED - POLYMARKET</span>
+          <h1>Whale <em>leaderboard</em></h1>
+        </header>
+        <div className="next-app-leader-windows mobile">
+          {leaderboardWindows.map((window, index) => (
+            <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
+          ))}
+          <b>Sort: Volume</b>
+        </div>
+        {error ? <p className="next-app-error">{error}</p> : null}
+        <section className="next-app-mobile-list" aria-label="Ranked whale wallets">
+          {leaders.map((leader) => (
+            <MobileLeaderboardRow leader={leader} key={leader.key} />
+          ))}
+        </section>
+        <MobileBottomNav active="leaders" />
+      </main>
+    </div>
+  );
+}

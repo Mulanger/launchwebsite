@@ -30,6 +30,7 @@ The migration should not require watcher changes. API changes should be additive
 - 2026-05-06: Ran steps 1-4 validation before cutover: reviewed branch diff, started `next start` locally on port 3000, verified direct route HTTP 200s, verified `/api/*` proxy response, checked route refreshes in the browser, and confirmed the production websocket endpoint opens.
 - 2026-05-06: Found that pure public `/` and `/leaderboard` pages would replace the existing interactive feed/leaderboard for users. Added `HybridPublicRoute` so those routes keep crawlable server HTML but hydrate into the legacy app UI in the browser.
 - 2026-05-06: Verified `/`, `/leaderboard`, `/alerts`, and `/profile/following` in the in-app browser at a mobile-sized viewport with no console errors. Also verified following-list navigation to `/leaderboard` and alerts bottom-nav navigation back to `/`.
+- 2026-05-06: Replaced the initial public `/` and `/leaderboard` SSR snapshots with app-aligned dashboard markup through `PublicAppSnapshot`. The snapshots now use the app-style feed, leaderboard, filters, stat panels, mobile bottom nav, and the same `1020px` mobile breakpoint before hydration.
 
 ## Current Problem
 
