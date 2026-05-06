@@ -3992,6 +3992,13 @@ function getLeaderboardRankTheme(rank) {
   return leaderboardRankThemes[rank] || leaderboardRankThemes.default;
 }
 
+function shouldSkipRowNavigation(event) {
+  const target = event?.target;
+  if (event?.defaultPrevented) return true;
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('[data-no-row-nav="true"],button,a,input,select,textarea,label'));
+}
+
 function LeaderboardDesktopRow({ wallet, maxVolume, isLast }) {
   const theme = getLeaderboardRankTheme(wallet.rank);
   const barWidth = maxVolume > 0 ? Math.max(2, (wallet.volumeNumeric / maxVolume) * 100) : 0;
@@ -4005,7 +4012,10 @@ function LeaderboardDesktopRow({ wallet, maxVolume, isLast }) {
       style={{ background: theme.rowGradient }}
       role={wallet.href ? 'link' : undefined}
       tabIndex={wallet.href ? 0 : undefined}
-      onClick={openWallet}
+      onClick={(event) => {
+        if (shouldSkipRowNavigation(event)) return;
+        openWallet();
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Enter') openWallet();
       }}
@@ -4036,9 +4046,14 @@ function LeaderboardDesktopRow({ wallet, maxVolume, isLast }) {
       <div className="leaderboard-desktop-actions">
         <button
           type="button"
+          data-no-row-nav="true"
           aria-label={`Follow ${wallet.name}`}
           onClick={(event) => {
+            event.preventDefault();
             event.stopPropagation();
+            if (event.nativeEvent?.stopImmediatePropagation) {
+              event.nativeEvent.stopImmediatePropagation();
+            }
             if (!wallet.walletFull) return;
             const walletKey = wallet.walletFull.toLowerCase();
             const next = !isWalletFollowedLocally(walletKey);
@@ -4054,9 +4069,14 @@ function LeaderboardDesktopRow({ wallet, maxVolume, isLast }) {
         </button>
         <button
           type="button"
+          data-no-row-nav="true"
           aria-label={`Open ${wallet.name}`}
           onClick={(event) => {
+            event.preventDefault();
             event.stopPropagation();
+            if (event.nativeEvent?.stopImmediatePropagation) {
+              event.nativeEvent.stopImmediatePropagation();
+            }
             openWallet();
           }}
         >
