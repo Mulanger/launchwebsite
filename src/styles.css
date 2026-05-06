@@ -1067,6 +1067,120 @@ img {
   text-overflow: ellipsis;
 }
 
+.market-meta-row,
+.mobile-market-meta-row,
+.resolution-pill-row {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.market-meta-row,
+.mobile-market-meta-row {
+  width: 100%;
+  margin-top: 3px;
+}
+
+.market-meta-row > span:first-child,
+.mobile-market-meta-row > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-market-meta-row > span:first-child {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10.5px;
+}
+
+.resolution-pill-row {
+  flex-wrap: wrap;
+}
+
+.resolution-pill-row.compact {
+  gap: 5px;
+}
+
+.resolution-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.resolution-pill.compact {
+  min-height: 18px;
+  padding: 0 7px;
+  font-size: 9.5px;
+}
+
+.resolution-pill.open {
+  color: rgba(255, 255, 255, 0.58);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.resolution-pill.closed {
+  color: #79a8ff;
+  border-color: rgba(121, 168, 255, 0.2);
+  background: rgba(121, 168, 255, 0.1);
+}
+
+.resolution-pill.win {
+  color: var(--accent);
+  border-color: rgba(34, 211, 165, 0.24);
+  background: rgba(34, 211, 165, 0.12);
+}
+
+.resolution-pill.loss {
+  color: #f48ba0;
+  border-color: rgba(244, 139, 160, 0.24);
+  background: rgba(244, 139, 160, 0.11);
+}
+
+.resolution-pill.invalid,
+.resolution-pill.neutral {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.market-text .resolution-pill,
+.wallet-recent-market .resolution-pill,
+.trader-recent-list .resolution-pill,
+.related-trade-row .resolution-pill {
+  display: inline-flex;
+  margin-top: 0;
+}
+
+.wallet-recent-market .resolution-pill-row,
+.trader-recent-list .resolution-pill-row {
+  display: flex;
+  margin-top: 6px;
+}
+
+.related-trade-row small .resolution-pill-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 5px;
+}
+
 .metric-cell span {
   display: block;
   margin-bottom: 3px;
@@ -2428,6 +2542,7 @@ img {
 .trade-detail-meta-line {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   margin-bottom: 15px;
   color: rgba(255, 255, 255, 0.55);
@@ -2497,6 +2612,59 @@ img {
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 800;
+}
+
+.trade-resolution-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.trade-resolution-strip > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.trade-resolution-strip span,
+.trade-resolution-strip strong {
+  display: block;
+}
+
+.trade-resolution-strip span {
+  margin-bottom: 7px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trade-resolution-strip strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-resolution-strip strong.accent,
+.trade-resolution-strip strong.win {
+  color: var(--accent);
+}
+
+.trade-resolution-strip strong.loss {
+  color: #f48ba0;
+}
+
+.trade-resolution-strip strong.invalid,
+.trade-resolution-strip strong.neutral,
+.trade-resolution-strip strong.muted {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .trade-scenario-grid {
@@ -6495,6 +6663,25 @@ img {
 
   .trade-detail-mobile-screen .trade-detail-headline span {
     font-size: 14px;
+  }
+
+  .trade-resolution-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+  }
+
+  .trade-resolution-strip > div {
+    padding: 10px;
+    border-radius: 9px;
+  }
+
+  .trade-resolution-strip span {
+    font-size: 9px;
+  }
+
+  .trade-resolution-strip strong {
+    font-size: 13px;
   }
 
   .trade-detail-mobile-screen .trade-detail-subline {

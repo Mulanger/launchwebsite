@@ -730,6 +730,49 @@
   font-weight: 750;
 }
 
+.next-app-market-cell .next-app-market-meta-row,
+.next-app-mobile-market .next-app-market-meta-row {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+}
+
+.next-app-market-meta-row > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.next-app-resolution-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.next-app-resolution-pill.closed {
+  color: #79a8ff;
+  border-color: rgba(121, 168, 255, 0.2);
+  background: rgba(121, 168, 255, 0.1);
+}
+
+.next-app-resolution-pill.invalid {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .next-app-market-thumb {
   flex-shrink: 0;
   display: grid;

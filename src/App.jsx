@@ -516,6 +516,12 @@ function WhaleFeedPage() {
       socket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          if (message.type === 'resolution_update' && message.data) {
+            setItems((previous) => applyResolutionUpdateToTrades(previous, message.data));
+            setLastUpdatedAt(Date.now());
+            return;
+          }
+
           if (message.type !== 'whale' || !message.data) return;
 
           const whale = message.data;
@@ -595,6 +601,7 @@ function WhaleFeedPage() {
         marketHref: buildMarketHref(trade),
         marketName: trade.market?.title || 'Unknown market',
         marketMeta: `${inferCategory(trade).label} - ${trade.outcome || 'Outcome'}`,
+        marketStatus: getMarketStatusMeta(trade),
         size: formatUsdFull(trade.usdSize),
         price: getPriceValue(trade),
         trader: {
@@ -1586,6 +1593,8 @@ function TradeHeroDetailCard({ trade, scenario }) {
     <section className="trade-hero-card-redesign trade-detail-card-hero">
       <div className="trade-detail-meta-line">
         <span className={`trade-detail-side-pill ${isSell ? 'sell' : 'buy'}`}>{trade.side}</span>
+        <MarketStatusPill trade={trade} compact />
+        {isTradeMarketClosed(trade) ? <TradeOutcomePill trade={trade} compact /> : null}
         <span>{relativeTimeAgo(trade.timestamp)} - {formatDateTimeSeconds(trade.timestamp)}</span>
       </div>
 
@@ -1600,6 +1609,8 @@ function TradeHeroDetailCard({ trade, scenario }) {
         <strong>{formatShares(trade.shares)}</strong> shares
         <span>{formatTierLabel(trade.tier)}</span>
       </div>
+
+      <TradeResolutionDetailStrip trade={trade} />
 
       <div className="trade-scenario-grid">
         <ScenarioDetailCell
@@ -1635,6 +1646,37 @@ function ScenarioDetailCell({ label, value, delta, tone }) {
   );
 }
 
+function TradeResolutionDetailStrip({ trade }) {
+  const resolution = getTradeResolutionBlock(trade);
+  if (!isTradeMarketClosed(trade)) return null;
+
+  const outcome = getTraderOutcomeMeta(trade);
+  const pnl = Number(resolution?.pnlUsd);
+  const hasPnl = Number.isFinite(pnl);
+  const pnlTone = hasPnl ? (pnl >= 0 ? 'accent' : 'loss') : 'muted';
+
+  return (
+    <div className="trade-resolution-strip">
+      <div>
+        <span>Resolution</span>
+        <strong>{getMarketStatusMeta(trade).label}</strong>
+      </div>
+      <div>
+        <span>Trader result</span>
+        <strong className={outcome.tone}>{outcome.label}</strong>
+      </div>
+      <div>
+        <span>Winner</span>
+        <strong>{resolution?.winningOutcome || '--'}</strong>
+      </div>
+      <div>
+        <span>P/L</span>
+        <strong className={pnlTone}>{hasPnl ? formatSignedUsd(pnl) : '--'}</strong>
+      </div>
+    </div>
+  );
+}
+
 function TradeMarketDetailCard({ trade, market }) {
   const marketTrade = { ...trade, market: { ...(trade.market || {}), ...(market || {}) } };
   const executionPrice = getPriceValue(trade);
@@ -1651,6 +1693,10 @@ function TradeMarketDetailCard({ trade, market }) {
       <div>
         <strong>{market.title || trade.market?.title || 'Unknown market'}</strong>
         <span>{inferCategory(marketTrade).label} - {trade.outcome || 'Outcome'}</span>
+        <div className="resolution-pill-row compact">
+          <MarketStatusPill trade={trade} compact />
+          {isTradeMarketClosed(trade) ? <TradeOutcomePill trade={trade} compact /> : null}
+        </div>
       </div>
     </>
   );
@@ -1774,7 +1820,10 @@ function RelatedTradeDetailRow({ trade, isCurrent }) {
         {isCurrent ? <em>THIS</em> : null}
       </div>
       <b>{formatUsdFull(trade.usdSize)}</b>
-      <small>{formatPrice(trade)} {trade.outcome || ''}</small>
+      <small>
+        {formatPrice(trade)} {trade.outcome || ''}
+        <TradeResolutionPills trade={trade} compact />
+      </small>
       <time>{relativeTimeAgo(trade.timestamp)}</time>
     </div>
   );
@@ -1835,6 +1884,7 @@ function TraderRecentDetailCard({ trades = [] }) {
             <div>
               <strong>{trade.market?.title || 'Unknown market'}</strong>
               <span>{relativeTimeAgo(trade.timestamp)} - {trade.side} {trade.outcome || ''}</span>
+              <TradeResolutionPills trade={trade} compact />
             </div>
             <small>
               <b>{formatUsdCompact(trade.usdSize)}</b>
@@ -2290,6 +2340,7 @@ function WalletRecentTradeRow({ trade, isLast }) {
         <div>
           <strong title={trade.market?.title || 'Unknown market'}>{trade.market?.title || 'Unknown market'}</strong>
           <span>{category.label} - {trade.outcome || 'Outcome'}</span>
+          <TradeResolutionPills trade={trade} compact />
         </div>
       </div>
       <strong className="wallet-recent-size">{formatUsdFull(trade.usdSize)}</strong>
@@ -4414,6 +4465,7 @@ function MobileTradeCard({
   marketHref,
   marketName,
   marketMeta,
+  marketStatus,
   size,
   price,
   trader,
@@ -4428,8 +4480,9 @@ function MobileTradeCard({
       <MobileMarketIcon icon={marketIcon} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: '#fff', fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{marketName}</div>
-        <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={marketMeta}>
-          {marketMeta}
+        <div className="mobile-market-meta-row" title={marketMeta}>
+          <span>{marketMeta}</span>
+          <MarketStatusPill meta={marketStatus} compact />
         </div>
       </div>
     </>
@@ -4672,9 +4725,10 @@ function TradeRow({ trade, index }) {
       <MarketIcon trade={trade} category={category} />
       <div className="market-text">
         <strong title={marketTitle}>{marketTitle}</strong>
-        <span>
-          {category.label} - {trade.outcome || 'Outcome'}
-        </span>
+        <div className="market-meta-row">
+          <span>{category.label} - {trade.outcome || 'Outcome'}</span>
+          <MarketStatusPill trade={trade} compact />
+        </div>
       </div>
     </>
   );
@@ -4758,6 +4812,42 @@ function MetricCell({ label, value, strong = false, hideLabel = false, labelTitl
       {!hideLabel && label ? <span title={labelTitle || label}>{label}</span> : null}
       <strong className={strong ? 'mega-value' : ''}>{value}</strong>
     </div>
+  );
+}
+
+function MarketStatusPill({ trade = null, meta = null, compact = false }) {
+  const status = meta || getMarketStatusMeta(trade);
+  return (
+    <span
+      className={`resolution-pill market-status-pill ${status.tone} ${compact ? 'compact' : ''}`}
+      title={status.title}
+    >
+      {status.label}
+    </span>
+  );
+}
+
+function TradeOutcomePill({ trade = null, meta = null, compact = false }) {
+  const outcome = meta || getTraderOutcomeMeta(trade);
+  return (
+    <span
+      className={`resolution-pill trade-outcome-pill ${outcome.tone} ${compact ? 'compact' : ''}`}
+      title={outcome.title}
+    >
+      {outcome.label}
+    </span>
+  );
+}
+
+function TradeResolutionPills({ trade, compact = false }) {
+  const market = getMarketStatusMeta(trade);
+  const outcome = getTraderOutcomeMeta(trade);
+
+  return (
+    <span className={`resolution-pill-row ${compact ? 'compact' : ''}`}>
+      <MarketStatusPill meta={market} compact={compact} />
+      {market.closed ? <TradeOutcomePill meta={outcome} compact={compact} /> : null}
+    </span>
   );
 }
 
@@ -7621,6 +7711,12 @@ function formatUsdCompact(value) {
   return formatUsdFull(amount);
 }
 
+function formatSignedUsd(value) {
+  const amount = Number(value || 0);
+  const prefix = amount > 0 ? '+' : amount < 0 ? '-' : '';
+  return `${prefix}${formatUsdFull(Math.abs(amount))}`;
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat('en-US').format(Number(value || 0));
 }
@@ -7640,6 +7736,169 @@ function formatPrice(trade) {
 function getPriceValue(trade) {
   if (trade.priceMillicents != null) return Number(trade.priceMillicents) / 100;
   return Number(trade.priceCents || 0);
+}
+
+function getTradeResolutionBlock(trade) {
+  const outcomeObject = trade?.outcome && typeof trade.outcome === 'object' ? trade.outcome : null;
+  return (
+    trade?.resolution ||
+    trade?.tradeResolution ||
+    trade?.marketResolution ||
+    trade?.market?.resolution ||
+    outcomeObject ||
+    null
+  );
+}
+
+function normalizeResolutionStatus(resolution) {
+  return String(resolution?.status || resolution?.marketStatus || '').trim().toLowerCase();
+}
+
+function isClosedResolutionStatus(status) {
+  return ['closed', 'resolved', 'resolved_win', 'resolved_loss', 'invalid'].includes(status);
+}
+
+function isTradeMarketClosed(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  return Boolean(resolution?.closed || resolution?.resolvedAt || isClosedResolutionStatus(status));
+}
+
+function getMarketStatusMeta(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  const closed = isTradeMarketClosed(trade);
+
+  if (!closed) {
+    return {
+      label: 'Open',
+      tone: 'open',
+      closed: false,
+      title: 'Market is still open or no resolver outcome has been materialized yet.',
+    };
+  }
+
+  const detail =
+    status === 'closed'
+      ? 'Market is closed; final trade result is still pending.'
+      : status === 'invalid'
+        ? 'Market resolution was flagged invalid by the resolver.'
+        : 'Market has resolved.';
+
+  return {
+    label: 'Closed',
+    tone: status === 'invalid' ? 'invalid' : 'closed',
+    closed: true,
+    title: detail,
+  };
+}
+
+function getTraderOutcomeMeta(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  const side = trade?.side === 'SELL' ? 'SELL' : 'BUY';
+  const winningOutcome = resolution?.winningOutcome ? ` Winning outcome: ${resolution.winningOutcome}.` : '';
+
+  if (!isTradeMarketClosed(trade)) {
+    return {
+      label: side === 'SELL' ? 'Sold' : 'Open',
+      tone: 'open',
+      title: 'Trade result is not resolved yet.',
+    };
+  }
+
+  if (status === 'invalid') {
+    return {
+      label: 'Invalid',
+      tone: 'invalid',
+      title: `Resolution is invalid.${winningOutcome}`,
+    };
+  }
+
+  if (status === 'resolved_win') {
+    return side === 'SELL'
+      ? {
+          label: 'Good sell',
+          tone: 'neutral',
+          title: `Closed. Selling was favorable in hindsight.${winningOutcome}`,
+        }
+      : {
+          label: 'Win',
+          tone: 'win',
+          title: `Closed. Trader won this trade.${winningOutcome}`,
+        };
+  }
+
+  if (status === 'resolved_loss') {
+    return side === 'SELL'
+      ? {
+          label: 'Early sell',
+          tone: 'neutral',
+          title: `Closed. Holding would have done better in hindsight.${winningOutcome}`,
+        }
+      : {
+          label: 'Loss',
+          tone: 'loss',
+          title: `Closed. Trader lost this trade.${winningOutcome}`,
+        };
+  }
+
+  return {
+    label: 'Closed',
+    tone: 'closed',
+    title: `Market is closed; trade result is not materialized yet.${winningOutcome}`,
+  };
+}
+
+function applyResolutionUpdateToTrades(trades, payload) {
+  if (!Array.isArray(trades) || !payload) return trades;
+
+  let changed = false;
+  const updated = trades.map((trade) => {
+    if (!tradeMatchesResolutionEvent(trade, payload)) return trade;
+
+    changed = true;
+    const existing = getTradeResolutionBlock(trade) || {};
+    const existingStatus = normalizeResolutionStatus(existing);
+    const nextStatus = existingStatus && existingStatus !== 'open'
+      ? (existing.status || existing.marketStatus)
+      : payload.type === 'invalid'
+        ? 'invalid'
+        : 'closed';
+
+    return {
+      ...trade,
+      resolution: {
+        ...existing,
+        status: nextStatus,
+        winningOutcome: payload.winningOutcome ?? existing.winningOutcome ?? null,
+        payoutUsd: existing.payoutUsd ?? null,
+        pnlUsd: existing.pnlUsd ?? null,
+        resolvedAt: payload.resolvedAt ?? existing.resolvedAt ?? null,
+        closed: true,
+      },
+    };
+  });
+
+  return changed ? updated : trades;
+}
+
+function tradeMatchesResolutionEvent(trade, payload) {
+  const eventConditionId = String(payload.conditionId || '').trim().toLowerCase();
+  const eventSlug = String(payload.slug || '').trim().toLowerCase();
+  const tradeConditionId = String(
+    trade?.market?.conditionId ||
+    trade?.market?.conditionID ||
+    trade?.market?.condition_id ||
+    trade?.conditionId ||
+    ''
+  ).trim().toLowerCase();
+  const tradeSlug = String(trade?.market?.slug || trade?.slug || '').trim().toLowerCase();
+
+  return Boolean(
+    (eventConditionId && tradeConditionId && eventConditionId === tradeConditionId) ||
+    (eventSlug && tradeSlug && eventSlug === tradeSlug)
+  );
 }
 
 function trimNumber(value) {

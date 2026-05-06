@@ -93,6 +93,29 @@ function avatarGradient(value) {
   return `linear-gradient(135deg, hsl(${hue} 70% 58%), hsl(${(hue + 46) % 360} 62% 36%))`;
 }
 
+function getTradeResolutionBlock(trade) {
+  const outcomeObject = trade?.outcome && typeof trade.outcome === 'object' ? trade.outcome : null;
+  return trade?.resolution || trade?.tradeResolution || trade?.marketResolution || trade?.market?.resolution || outcomeObject || null;
+}
+
+function normalizeResolutionStatus(resolution) {
+  return String(resolution?.status || resolution?.marketStatus || '').trim().toLowerCase();
+}
+
+function getMarketStatusMeta(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  const closed = Boolean(
+    resolution?.closed ||
+    resolution?.resolvedAt ||
+    ['closed', 'resolved', 'resolved_win', 'resolved_loss', 'invalid'].includes(status)
+  );
+  return {
+    label: closed ? 'Closed' : 'Open',
+    tone: closed ? (status === 'invalid' ? 'invalid' : 'closed') : 'open',
+  };
+}
+
 function sparkPath(values, width = 80, height = 28) {
   const points = values.length ? values : [4, 8, 6, 12, 10, 16, 18];
   const max = Math.max(...points);
@@ -121,6 +144,7 @@ function normalizeTrade(trade, index) {
     imageUrl,
     marketName: trade.market?.title || 'Unknown market',
     marketMeta: `${category.label} - ${trade.outcome || 'Outcome'}`,
+    marketStatus: getMarketStatusMeta(trade),
     size: formatUsdFull(trade.usdSize),
     compactSize: formatUsdCompact(trade.usdSize),
     price: formatPrice(trade),
@@ -211,7 +235,10 @@ function DesktopTradeRow({ trade }) {
       <MarketThumb trade={trade} size="desktop" />
       <span>
         <strong>{trade.marketName}</strong>
-        <small>{trade.marketMeta}</small>
+        <small className="next-app-market-meta-row">
+          <span>{trade.marketMeta}</span>
+          <MarketStatusPill status={trade.marketStatus} />
+        </small>
       </span>
     </>
   );
@@ -255,7 +282,10 @@ function MobileTradeCard({ trade }) {
       <MarketThumb trade={trade} size="mobile" />
       <span>
         <strong>{trade.marketName}</strong>
-        <small>{trade.marketMeta}</small>
+        <small className="next-app-market-meta-row">
+          <span>{trade.marketMeta}</span>
+          <MarketStatusPill status={trade.marketStatus} />
+        </small>
       </span>
     </>
   );
@@ -293,6 +323,11 @@ function MobileTradeCard({ trade }) {
       </div>
     </article>
   );
+}
+
+function MarketStatusPill({ status }) {
+  const meta = status || { label: 'Open', tone: 'open' };
+  return <b className={`next-app-resolution-pill ${meta.tone}`}>{meta.label}</b>;
 }
 
 function MarketThumb({ trade, size }) {
