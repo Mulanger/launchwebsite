@@ -14,6 +14,11 @@ export function buildNextMetadata(seo) {
     alternates: {
       canonical,
     },
+    manifest: '/site.webmanifest',
+    icons: {
+      icon: [{ url: '/favicon.png', type: 'image/png' }],
+      apple: [{ url: '/assets/polywatch-icon.png', type: 'image/png' }],
+    },
     robots: {
       index: !robots.includes('noindex'),
       follow: !robots.includes('nofollow'),

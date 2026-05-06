@@ -1,7 +1,7 @@
 {
-  "name": "Polywatch",
-  "short_name": "Polywatch",
-  "description": "Whale alerts and trader intelligence for Polymarket.",
+  "name": "Polywhale",
+  "short_name": "Polywhale",
+  "description": "Live Polymarket whale trades, alerts, and trader intelligence.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07100d",

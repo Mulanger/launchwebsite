@@ -3113,7 +3113,7 @@ function WebPushStatusCard({
       {isDenied ? <BlockedNotificationHelp /> : null}
       {isMissingConfig ? (
         <p className="alert-warning-note">
-          Firebase web config is missing. Add the Vite Firebase web environment variables before activating.
+          Firebase web config is missing. Add the public Firebase web environment variables before activating.
         </p>
       ) : null}
 
