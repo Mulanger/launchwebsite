@@ -6274,14 +6274,16 @@ function useFollowedTraders() {
 
     async function loadFollows() {
       const localItems = buildLocalFollowSummaries();
-      setItems(localItems);
 
       if (!hasStoredAuth()) {
+        setItems(localItems);
         hasLoadedFromServerRef.current = true;
         setLoading(false);
         setError('');
         return;
       }
+
+      setItems((previous) => reconcileFollowSummaries(previous, localItems));
 
       if (!hasLoadedFromServerRef.current && localItems.length === 0) {
         setLoading(true);
@@ -6302,7 +6304,7 @@ function useFollowedTraders() {
         hasLoadedFromServerRef.current = true;
       } catch (err) {
         if (err.name === 'AbortError' || !active) return;
-        setItems(localItems);
+        setItems((previous) => reconcileFollowSummaries(previous, localItems));
         hasLoadedFromServerRef.current = true;
         setError(err.message || 'Could not load followed traders');
       } finally {
@@ -6587,6 +6589,19 @@ function buildLocalFollowSummaries() {
       followedAt: null,
     })
   );
+}
+
+function reconcileFollowSummaries(previous, localItems) {
+  if (!Array.isArray(previous) || !previous.length) return localItems;
+  const localWallets = new Set(localItems.map((item) => item.proxyWallet).filter(Boolean));
+  const kept = previous.filter((item) => localWallets.has(item.proxyWallet));
+  const seen = new Set(kept.map((item) => item.proxyWallet));
+
+  for (const item of localItems) {
+    if (!seen.has(item.proxyWallet)) kept.push(item);
+  }
+
+  return kept;
 }
 
 function normalizeFollowSummary(item) {
