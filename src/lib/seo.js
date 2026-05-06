@@ -159,7 +159,7 @@ export function buildFaqStructuredData() {
   };
 }
 
-export function getSeoForPath(path, tradeMatch, traderMatch) {
+export function getSeoForPath(path, tradeMatch, traderMatch, marketMatch) {
   if (seoByPath[path]) return seoByPath[path];
 
   if (tradeMatch) {
@@ -177,6 +177,16 @@ export function getSeoForPath(path, tradeMatch, traderMatch) {
       title: 'Polymarket Whale Wallet Profile | Polywhale',
       description:
         'View a public Polymarket whale wallet profile, recent whale trades, wallet rank, volume mix, and large trade history.',
+      path,
+      robots: 'noindex,follow',
+    };
+  }
+
+  if (marketMatch) {
+    return {
+      title: 'Polymarket Market Whale Trades | Polywhale',
+      description:
+        'Track large Polymarket whale trades, market-specific whale volume, top whale wallets, and recent activity for a single market on Polywhale.',
       path,
       robots: 'noindex,follow',
     };

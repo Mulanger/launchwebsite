@@ -592,6 +592,7 @@ function WhaleFeedPage() {
         side: trade.side === 'SELL' ? 'SELL' : 'BUY',
         timeAgo: relativeTimeAgo(trade.timestamp),
         marketIcon: buildMobileMarketIcon(trade),
+        marketHref: buildMarketHref(trade),
         marketName: trade.market?.title || 'Unknown market',
         marketMeta: `${inferCategory(trade).label} - ${trade.outcome || 'Outcome'}`,
         size: formatUsdFull(trade.usdSize),
@@ -1682,6 +1683,16 @@ function TradeMarketDetailCard({ trade, market }) {
   const yesPrice = Number(market.yesPriceCents ?? trade.market?.yesPriceCents ?? fallbackYesPrice);
   const noPrice = Number(market.noPriceCents ?? trade.market?.noPriceCents ?? fallbackNoPrice);
   const polymarketUrl = market.polymarketUrl || trade.polymarketUrl || trade.market?.polymarketUrl || '#';
+  const marketHref = buildMarketHref(marketTrade);
+  const marketIdentity = (
+    <>
+      <MarketIcon trade={marketTrade} category={inferCategory(marketTrade)} />
+      <div>
+        <strong>{market.title || trade.market?.title || 'Unknown market'}</strong>
+        <span>{inferCategory(marketTrade).label} - {trade.outcome || 'Outcome'}</span>
+      </div>
+    </>
+  );
 
   return (
     <section className="trade-detail-panel-card trade-detail-card-market">
@@ -1693,13 +1704,13 @@ function TradeMarketDetailCard({ trade, market }) {
         </a>
       </div>
 
-      <div className="trade-market-identity">
-        <MarketIcon trade={marketTrade} category={inferCategory(marketTrade)} />
-        <div>
-          <strong>{market.title || trade.market?.title || 'Unknown market'}</strong>
-          <span>{inferCategory(marketTrade).label} - {trade.outcome || 'Outcome'}</span>
-        </div>
-      </div>
+      {marketHref ? (
+        <a className="trade-market-identity trade-market-identity-link" href={marketHref}>
+          {marketIdentity}
+        </a>
+      ) : (
+        <div className="trade-market-identity">{marketIdentity}</div>
+      )}
 
       <div className="trade-outcome-grid">
         <OutcomeDetailCard
@@ -4439,6 +4450,7 @@ function MobileTradeCard({
   side = 'BUY',
   timeAgo,
   marketIcon,
+  marketHref,
   marketName,
   marketMeta,
   size,
@@ -4450,6 +4462,17 @@ function MobileTradeCard({
 }) {
   const isBuy = side !== 'SELL';
   const hasTraderRoute = Boolean(trader?.href || onTraderOpen);
+  const marketContent = (
+    <>
+      <MobileMarketIcon icon={marketIcon} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: '#fff', fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{marketName}</div>
+        <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={marketMeta}>
+          {marketMeta}
+        </div>
+      </div>
+    </>
+  );
   const openTrader = (event) => {
     event.stopPropagation();
     if (onTraderOpen) {
@@ -4499,15 +4522,17 @@ function MobileTradeCard({
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <MobileMarketIcon icon={marketIcon} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#fff', fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{marketName}</div>
-          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={marketMeta}>
-            {marketMeta}
-          </div>
-        </div>
-      </div>
+      {marketHref ? (
+        <a
+          className="mobile-market-link"
+          href={marketHref}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {marketContent}
+        </a>
+      ) : (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>{marketContent}</div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div>
@@ -4680,6 +4705,18 @@ function TradeRow({ trade, index }) {
     ? `/trader/${encodeURIComponent(trade.trader.proxyWallet)}`
     : null;
   const tradeHref = `/trade/${encodeURIComponent(trade.id)}`;
+  const marketHref = buildMarketHref(trade);
+  const marketContent = (
+    <>
+      <MarketIcon trade={trade} category={category} />
+      <div className="market-text">
+        <strong title={marketTitle}>{marketTitle}</strong>
+        <span>
+          {category.label} - {trade.outcome || 'Outcome'}
+        </span>
+      </div>
+    </>
+  );
   const openTrade = () => {
     cacheTrade(trade);
     window.location.href = tradeHref;
@@ -4706,15 +4743,17 @@ function TradeRow({ trade, index }) {
         <span className="trade-tag time-tag">{relativeTimeAgo(trade.timestamp)}</span>
       </div>
 
-      <div className="market-cell">
-        <MarketIcon trade={trade} category={category} />
-        <div className="market-text">
-          <strong title={marketTitle}>{marketTitle}</strong>
-          <span>
-            {category.label} - {trade.outcome || 'Outcome'}
-          </span>
-        </div>
-      </div>
+      {marketHref ? (
+        <a
+          className="market-cell market-cell-link"
+          href={marketHref}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {marketContent}
+        </a>
+      ) : (
+        <div className="market-cell">{marketContent}</div>
+      )}
 
       <MetricCell label="Size" value={formatUsdFull(trade.usdSize)} strong={isMega} hideLabel />
       <MetricCell
@@ -7419,6 +7458,11 @@ function buildMobileMarketIcon(trade) {
     value: category.label.slice(0, 3).toUpperCase(),
     bg: categoryTone || '#3b3b3b',
   };
+}
+
+function buildMarketHref(trade) {
+  const slug = trade?.market?.slug;
+  return slug ? `/market/${encodeURIComponent(slug)}` : null;
 }
 
 function inferCategory(trade) {

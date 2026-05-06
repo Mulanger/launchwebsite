@@ -612,6 +612,17 @@ MVP is done when:
 - Production build passes.
 - Existing feed, leaderboard, trade, trader, follows, alerts, API, and websocket behavior still works.
 
+MVP implementation status:
+
+- `/market/[slug]` is implemented as a native Next server page.
+- The page uses the same Polywhale dashboard frame and changes only the center market workspace plus a market snapshot card in the right rail.
+- Unknown market slugs return 404.
+- Known weak markets render with `noindex,follow`.
+- Qualified markets require at least 3 tracked whale trades and at least $50K tracked whale volume.
+- The dynamic Next `/sitemap.xml` includes qualified market pages only.
+- Feed desktop rows and mobile cards link market title/icon to the market page while preserving row click to trade detail.
+- Trade detail market identity links to the market page.
+
 Enrichment is done when:
 
 - API/server stores market snapshots from Polymarket enrichment.

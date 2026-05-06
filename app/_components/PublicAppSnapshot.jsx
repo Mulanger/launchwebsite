@@ -16,8 +16,20 @@ function formatUsdFull(value) {
 }
 
 function formatPrice(trade) {
-  const raw = trade.price ?? trade.executionPrice ?? trade.outcomePrice;
+  const raw =
+    trade.price ??
+    trade.executionPrice ??
+    trade.outcomePrice ??
+    trade.priceCents ??
+    (trade.priceMillicents ? Number(trade.priceMillicents) / 100 : undefined);
   const number = Number(raw);
+  if (!Number.isFinite(number)) return '--';
+  const cents = number <= 1 ? number * 100 : number;
+  return `${Math.round(cents)}c`;
+}
+
+function formatPlainPrice(value) {
+  const number = Number(value);
   if (!Number.isFinite(number)) return '--';
   const cents = number <= 1 ? number * 100 : number;
   return `${Math.round(cents)}c`;
@@ -64,6 +76,10 @@ function marketImageUrl(trade) {
   ].find(Boolean);
 }
 
+function marketHrefForSlug(slug) {
+  return slug ? `/market/${encodeURIComponent(slug)}` : null;
+}
+
 function getTraderName(trade) {
   return trade.trader?.displayName || trade.trader?.pseudonym || shortWallet(trade.trader?.proxyWallet);
 }
@@ -98,6 +114,7 @@ function normalizeTrade(trade, index) {
   return {
     id: trade.id || `${wallet}-${index}`,
     href: trade.id ? `/trade/${encodeURIComponent(trade.id)}` : '/',
+    marketHref: marketHrefForSlug(trade.market?.slug),
     side: trade.side === 'SELL' ? 'SELL' : 'BUY',
     timeAgo: relativeTimeAgo(trade.timestamp),
     category,
@@ -189,20 +206,30 @@ function PublicSidebar({ activePage = 'feed' }) {
 }
 
 function DesktopTradeRow({ trade }) {
+  const marketContent = (
+    <>
+      <MarketThumb trade={trade} size="desktop" />
+      <span>
+        <strong>{trade.marketName}</strong>
+        <small>{trade.marketMeta}</small>
+      </span>
+    </>
+  );
+
   return (
-    <Link className={`next-app-trade-row ${trade.isMega ? 'mega' : ''} ${trade.side === 'SELL' ? 'sell' : ''}`} href={trade.href}>
+    <article className={`next-app-trade-row ${trade.isMega ? 'mega' : ''} ${trade.side === 'SELL' ? 'sell' : ''}`}>
       <div className="next-app-tag-stack">
         {trade.isMega ? <span className="next-app-trade-tag mega">Mega</span> : null}
         <span className={`next-app-trade-tag ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side === 'SELL' ? 'Sell' : 'Buy'}</span>
         <span className="next-app-trade-tag time">{trade.timeAgo}</span>
       </div>
-      <div className="next-app-market-cell">
-        <MarketThumb trade={trade} size="desktop" />
-        <span>
-          <strong>{trade.marketName}</strong>
-          <small>{trade.marketMeta}</small>
-        </span>
-      </div>
+      {trade.marketHref ? (
+        <Link className="next-app-market-cell next-app-market-cell-link" href={trade.marketHref}>
+          {marketContent}
+        </Link>
+      ) : (
+        <div className="next-app-market-cell">{marketContent}</div>
+      )}
       <div className="next-app-metric">
         <strong>{trade.size}</strong>
       </div>
@@ -216,30 +243,40 @@ function DesktopTradeRow({ trade }) {
       </div>
       <div className="next-app-row-actions">
         <span>+</span>
-        <span>Go</span>
+        <Link href={trade.href}>Go</Link>
       </div>
-    </Link>
+    </article>
   );
 }
 
 function MobileTradeCard({ trade }) {
+  const marketContent = (
+    <>
+      <MarketThumb trade={trade} size="mobile" />
+      <span>
+        <strong>{trade.marketName}</strong>
+        <small>{trade.marketMeta}</small>
+      </span>
+    </>
+  );
+
   return (
-    <Link className="next-app-mobile-card" href={trade.href}>
+    <article className="next-app-mobile-card">
       <div className="next-app-mobile-card-top">
         <span className={`next-app-side-badge ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side}</span>
         <span>{trade.timeAgo}</span>
         <div>
           <small>+</small>
-          <small>Go</small>
+          <Link href={trade.href}>Go</Link>
         </div>
       </div>
-      <div className="next-app-mobile-market">
-        <MarketThumb trade={trade} size="mobile" />
-        <span>
-          <strong>{trade.marketName}</strong>
-          <small>{trade.marketMeta}</small>
-        </span>
-      </div>
+      {trade.marketHref ? (
+        <Link className="next-app-mobile-market next-app-market-cell-link" href={trade.marketHref}>
+          {marketContent}
+        </Link>
+      ) : (
+        <div className="next-app-mobile-market">{marketContent}</div>
+      )}
       <div className="next-app-mobile-metrics">
         <span>
           <small>SIZE</small>
@@ -254,7 +291,7 @@ function MobileTradeCard({ trade }) {
           <strong>{trade.traderName}</strong>
         </span>
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -355,6 +392,214 @@ function FeedRail({ leaders }) {
         </div>
       </section>
     </aside>
+  );
+}
+
+function normalizeMarketTrade(trade, index) {
+  return normalizeTrade(trade, index);
+}
+
+function MarketStatCard({ label, value, tone = '' }) {
+  return (
+    <span className={tone}>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </span>
+  );
+}
+
+function MarketRail({ data, leaders }) {
+  const { market, stats, relatedMarkets } = data;
+  return (
+    <aside className="next-app-rail next-app-market-rail" aria-label="Market context">
+      <section className="next-app-market-rail-card">
+        <span className="next-app-rail-kicker">Market snapshot</span>
+        <div className="next-app-market-rail-market">
+          {market.icon ? <img src={market.icon} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span>M</span>}
+          <strong>{market.title}</strong>
+        </div>
+        <div className="next-app-market-outcome-pair">
+          <span>
+            <small>YES</small>
+            <strong>{formatPlainPrice(market.yesPriceCents)}</strong>
+          </span>
+          <span>
+            <small>NO</small>
+            <strong>{formatPlainPrice(market.noPriceCents)}</strong>
+          </span>
+        </div>
+        <div className="next-app-market-rail-stats">
+          <span>
+            <small>Whale volume</small>
+            <strong>{formatUsdCompact(stats.whaleVolume)}</strong>
+          </span>
+          <span>
+            <small>Latest trade</small>
+            <strong>{relativeTimeAgo(stats.latestTradeTs)}</strong>
+          </span>
+        </div>
+        <p>{data.seo.reason}. Data refreshes through the public whale feed snapshot.</p>
+        {market.polymarketUrl ? (
+          <a className="next-app-market-external" href={market.polymarketUrl} target="_blank" rel="noreferrer">
+            View on Polymarket
+          </a>
+        ) : null}
+      </section>
+
+      {relatedMarkets.length ? (
+        <section className="next-app-market-rail-card">
+          <span className="next-app-rail-kicker">Related markets</span>
+          <div className="next-app-related-list">
+            {relatedMarkets.map((item) => (
+              <Link href={marketHrefForSlug(item.slug)} key={item.slug}>
+                <span>{item.title}</span>
+                <b>{formatUsdCompact(item.whaleVolume)}</b>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section>
+        <span className="next-app-rail-kicker">Top whales today</span>
+        <div className="next-app-rail-list">
+          {leaders.slice(0, 6).map((leader) => (
+            <Link className="next-app-rail-row" href={leader.href} key={leader.key}>
+              <i style={{ background: leader.avatar }} />
+              <span>
+                <strong>{leader.name}</strong>
+                <small>{leader.shortWallet}</small>
+              </span>
+              <b>{leader.volume}</b>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function MarketTradesTable({ trades }) {
+  return (
+    <section className="next-app-feed-list next-app-market-table" aria-label="Recent whale trades for this market">
+      <div className="next-app-feed-head">
+        <span>Signal</span>
+        <span>Outcome</span>
+        <span>Size</span>
+        <span>Price</span>
+        <span>Trader</span>
+        <span />
+      </div>
+      {trades.map((trade) => (
+        <article className={`next-app-trade-row ${trade.isMega ? 'mega' : ''} ${trade.side === 'SELL' ? 'sell' : ''}`} key={trade.id}>
+          <div className="next-app-tag-stack">
+            {trade.isMega ? <span className="next-app-trade-tag mega">Mega</span> : null}
+            <span className={`next-app-trade-tag ${trade.side === 'SELL' ? 'sell' : 'buy'}`}>{trade.side === 'SELL' ? 'Sell' : 'Buy'}</span>
+            <span className="next-app-trade-tag time">{trade.timeAgo}</span>
+          </div>
+          <div className="next-app-market-outcome-cell">
+            <strong>{trade.marketMeta.split(' - ').pop() || 'Outcome'}</strong>
+            <small>{trade.marketName}</small>
+          </div>
+          <div className="next-app-metric">
+            <strong>{trade.size}</strong>
+          </div>
+          <div className="next-app-metric">
+            <span>Price</span>
+            <strong>{trade.price}</strong>
+          </div>
+          <Link className="next-app-trader-cell" href={trade.traderHref || trade.href}>
+            <i style={{ background: trade.avatar }} />
+            <strong>{trade.traderName}</strong>
+          </Link>
+          <div className="next-app-row-actions">
+            <span>+</span>
+            <Link href={trade.href}>Go</Link>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function MarketWalletList({ wallets }) {
+  return (
+    <section className="next-app-market-wallet-section" aria-label="Top whale wallets for this market">
+      <div className="next-app-market-section-head">
+        <span>Top market wallets</span>
+        <small>Ranked by tracked whale volume on this market</small>
+      </div>
+      <div className="next-app-market-wallet-list">
+        {wallets.map((wallet) => (
+          <Link className="next-app-market-wallet-row" href={wallet.href} key={wallet.key}>
+            <span className="rank">#{wallet.rank}</span>
+            <i style={{ background: wallet.avatar }} />
+            <strong>{wallet.name}</strong>
+            <small>{wallet.trades} trades</small>
+            <b>{wallet.volume}</b>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function MarketDashboardSnapshot({ data }) {
+  const trades = data.recentTrades.map(normalizeMarketTrade);
+  const marketWallets = data.topWallets.map(normalizeLeader);
+  const topWhalesToday = data.topWhalesToday.map(normalizeLeader);
+  const { market, stats } = data;
+
+  return (
+    <div className="next-app-snapshot">
+      <div className="next-app-desktop">
+        <PublicSidebar activePage="feed" />
+        <main className="next-app-main next-app-market-main">
+          <header className="next-app-page-head next-app-market-head">
+            <span className="next-app-live-kicker"><i /> Market - Polymarket</span>
+            <h1>{market.title}</h1>
+            <p>Market-specific whale trades, wallet concentration, and tracked Polywhale volume.</p>
+          </header>
+          <div className="next-app-stats-grid next-app-market-stats-grid">
+            <MarketStatCard label="Whale volume" value={formatUsdFull(stats.whaleVolume)} tone="primary" />
+            <MarketStatCard label="Whale trades" value={stats.whaleTradeCount} />
+            <MarketStatCard label="Unique whales" value={stats.uniqueWhales} />
+            <MarketStatCard label="Biggest trade" value={formatUsdFull(stats.biggestTradeUsd)} tone="accent" />
+          </div>
+          <div className="next-app-market-control-row">
+            <span className={data.seo.indexable ? 'indexable' : 'weak'}>{data.seo.indexable ? 'Indexable market' : 'Noindex until stronger'}</span>
+            <span>YES {formatPlainPrice(market.yesPriceCents)}</span>
+            <span>NO {formatPlainPrice(market.noPriceCents)}</span>
+          </div>
+          <MarketTradesTable trades={trades} />
+          <MarketWalletList wallets={marketWallets} />
+        </main>
+        <MarketRail data={data} leaders={topWhalesToday} />
+      </div>
+
+      <main className="next-app-mobile next-app-market-mobile">
+        <header className="next-app-mobile-title">
+          <span><i /> MARKET - POLYMARKET</span>
+          <h1>{market.title}</h1>
+        </header>
+        <div className="next-app-stats-grid next-app-market-stats-grid mobile">
+          <MarketStatCard label="Whale volume" value={formatUsdCompact(stats.whaleVolume)} tone="primary" />
+          <MarketStatCard label="Whale trades" value={stats.whaleTradeCount} />
+          <MarketStatCard label="Unique whales" value={stats.uniqueWhales} />
+        </div>
+        <div className="next-app-market-control-row mobile">
+          <span>YES {formatPlainPrice(market.yesPriceCents)}</span>
+          <span>NO {formatPlainPrice(market.noPriceCents)}</span>
+        </div>
+        <section className="next-app-mobile-list" aria-label="Recent whale trades for this market">
+          {trades.map((trade) => (
+            <MobileTradeCard trade={trade} key={trade.id} />
+          ))}
+        </section>
+        <MarketWalletList wallets={marketWallets.slice(0, 6)} />
+        <MobileBottomNav active="feed" />
+      </main>
+    </div>
   );
 }
 

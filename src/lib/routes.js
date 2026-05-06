@@ -10,6 +10,7 @@ export function matchAppRoute(pathname = '/') {
     path,
     tradeMatch: path.match(/^\/trade\/([^/]+)$/),
     traderMatch: path.match(/^\/trader\/([^/]+)$/),
+    marketMatch: path.match(/^\/market\/([^/]+)$/),
   };
 }
 

@@ -968,6 +968,25 @@ img {
   gap: 12px;
 }
 
+.market-cell-link,
+.mobile-market-link,
+.trade-market-identity-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.market-cell-link:hover .market-text strong,
+.mobile-market-link:hover strong,
+.trade-market-identity-link:hover strong {
+  color: var(--accent);
+}
+
+.mobile-market-link {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .market-icon {
   width: 42px;
   height: 42px;
