@@ -15,6 +15,7 @@ import {
   DollarSign,
   ExternalLink,
   FileText,
+  Flame,
   Hash,
   Layers,
   LockKeyhole,
@@ -1932,6 +1933,8 @@ function TraderProfilePage({ wallet }) {
     window.matchMedia('(max-width: 1020px)').matches
   );
   const [profile, setProfile] = useState(null);
+  const [historyTrades, setHistoryTrades] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [windowId, setWindowId] = useState(() => {
     const queryWindow = new URLSearchParams(window.location.search).get('window');
     return leaderboardWindows.some((option) => option.id === queryWindow) ? queryWindow : '7d';
@@ -1974,6 +1977,30 @@ function TraderProfilePage({ wallet }) {
     return () => controller.abort();
   }, [normalizedWallet, refreshNonce]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadTraderHistory() {
+      setHistoryLoading(true);
+      setHistoryTrades([]);
+      try {
+        const trades = await fetchTraderHistory(normalizedWallet, { signal: controller.signal });
+        setHistoryTrades(trades);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setHistoryTrades([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    loadTraderHistory();
+    return () => controller.abort();
+  }, [normalizedWallet, refreshNonce]);
+
   const stats = profile ? getProfileStats(profile, windowId) : emptyProfileStats();
   const profileWallet = profile?.proxyWallet || normalizedWallet;
   const retry = () => setRefreshNonce((value) => value + 1);
@@ -1984,6 +2011,8 @@ function TraderProfilePage({ wallet }) {
         profile={profile}
         wallet={profileWallet}
         stats={stats}
+        historyTrades={historyTrades}
+        historyLoading={historyLoading}
         windowId={windowId}
         onWindowChange={setWindowId}
         loading={loading}
@@ -2012,6 +2041,8 @@ function TraderProfilePage({ wallet }) {
             profile={profile}
             wallet={profileWallet}
             stats={stats}
+            historyTrades={historyTrades}
+            historyLoading={historyLoading}
             windowId={windowId}
             onWindowChange={setWindowId}
             onRefresh={retry}
@@ -2026,6 +2057,8 @@ function MobileWalletProfileScreen({
   profile,
   wallet,
   stats,
+  historyTrades,
+  historyLoading,
   windowId,
   onWindowChange,
   loading,
@@ -2056,6 +2089,8 @@ function MobileWalletProfileScreen({
             profile={profile}
             wallet={wallet}
             stats={stats}
+            historyTrades={historyTrades}
+            historyLoading={historyLoading}
             windowId={windowId}
             onWindowChange={onWindowChange}
             onRefresh={onRetry}
@@ -2068,10 +2103,23 @@ function MobileWalletProfileScreen({
   );
 }
 
-function WalletProfileRedesign({ profile, wallet, stats, windowId, onWindowChange, onRefresh, mobile = false }) {
+function WalletProfileRedesign({
+  profile,
+  wallet,
+  stats,
+  historyTrades = [],
+  historyLoading = false,
+  windowId,
+  onWindowChange,
+  onRefresh,
+  mobile = false,
+}) {
   const dailyVolume = buildWalletDailyVolume(profile.dailyVolume || []);
   const volumeMix = buildWalletVolumeMix(stats);
-  const recentTrades = Array.isArray(profile.recentWhales) ? profile.recentWhales : [];
+  const profileTrades = buildWalletProfileTrades(profile, historyTrades);
+  const performance = buildWalletPerformance(profile, profileTrades, windowId, stats);
+  const profileRecent = Array.isArray(profile.recentWhales) ? profile.recentWhales : [];
+  const recentTrades = profileRecent.length ? profileRecent : profileTrades.slice(0, 10);
 
   return (
     <section className={`wallet-profile-page ${mobile ? 'mobile' : ''}`}>
@@ -2081,10 +2129,11 @@ function WalletProfileRedesign({ profile, wallet, stats, windowId, onWindowChang
       </a>
 
       <WalletProfileHero profile={profile} wallet={wallet} windowId={windowId} />
-      <WalletProfileControlBar
+      <WalletProfilePerformanceBlock
+        performance={performance}
         windowId={windowId}
-        firstSeen={profile.firstSeen}
         onWindowChange={onWindowChange}
+        historyLoading={historyLoading}
       />
       <WalletProfileStatCards stats={stats} />
       <div className="wallet-profile-charts">
@@ -2111,6 +2160,10 @@ function WalletProfileHero({ profile, wallet, windowId }) {
         <div className="wallet-profile-title-row">
           <h1 title={wallet}>{shortWallet(wallet)}</h1>
           <WalletAddressCopyButton address={wallet} />
+        </div>
+        <div className="wallet-profile-address-line" title={wallet}>{wallet}</div>
+        <div className="wallet-profile-first-seen">
+          First seen <span>{profile.firstSeen ? formatDateShort(profile.firstSeen) : 'Unknown'}</span>
         </div>
       </div>
       <div className="wallet-profile-actions">
@@ -2146,30 +2199,8 @@ function WalletAddressCopyButton({ address }) {
       title={copied ? 'Copied' : address}
     >
       {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
-      {copied ? 'Copied' : 'Copy full address'}
+      {copied ? 'Copied' : 'Copy'}
     </button>
-  );
-}
-
-function WalletProfileControlBar({ windowId, firstSeen, onWindowChange }) {
-  return (
-    <section className="wallet-profile-control" aria-label="Trader stat window">
-      <div className="wallet-window-toggle">
-        {leaderboardWindows.map((option) => (
-          <button
-            type="button"
-            key={option.id}
-            className={windowId === option.id ? 'active' : ''}
-            onClick={() => onWindowChange(option.id)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-      <div className="wallet-first-seen">
-        First seen <span>{firstSeen ? formatDateShort(firstSeen) : 'Unknown'}</span>
-      </div>
-    </section>
   );
 }
 
@@ -4804,6 +4835,107 @@ function MetricCell({ label, value, strong = false, hideLabel = false, labelTitl
   );
 }
 
+function WalletProfilePerformanceBlock({ performance, windowId, onWindowChange, historyLoading }) {
+  const windowLabel = (leaderboardWindows.find((option) => option.id === windowId)?.label || windowId).toUpperCase();
+
+  return (
+    <section className="wallet-performance-grid">
+      <section className="wallet-panel wallet-performance-panel">
+        <div className="wallet-performance-header">
+          <div>
+            <div className="wallet-panel-eyebrow">
+              Performance - last {windowLabel}
+              {historyLoading && !performance.historyCount ? ' - syncing' : ''}
+            </div>
+            <div className="wallet-performance-rate">
+              <strong className={performance.winRatePct == null ? 'muted' : ''}>{performance.winRateLabel}</strong>
+              <span>win rate</span>
+            </div>
+          </div>
+          <WalletWindowToggle windowId={windowId} onWindowChange={onWindowChange} />
+        </div>
+
+        <div className="wallet-results-section">
+          <div className="wallet-panel-eyebrow small">
+            Recent results - last {performance.recentResults.length || 0}
+          </div>
+          <WalletResultCells results={performance.recentResults} />
+          {performance.recentResults.length ? (
+            <div className="wallet-result-axis">
+              <span>oldest</span>
+              <span>most recent -&gt;</span>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="wallet-performance-tiles" aria-label="Trader performance summary">
+        <WalletPerformanceTile label="Trades" value={formatNumber(performance.tradeCount)} />
+        <WalletPerformanceTile
+          label="Longest streak"
+          value={formatNumber(performance.longestStreak)}
+          tone={performance.longestStreak ? 'win' : ''}
+          icon={performance.longestStreak ? Flame : null}
+        />
+        <WalletPerformanceTile label="Win rate" value={performance.winRateLabel} tone={performance.winRatePct == null ? '' : 'win'} />
+        <div className="wallet-performance-tile">
+          <span>Recent</span>
+          <WalletResultCells results={performance.recentMini} mini />
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function WalletWindowToggle({ windowId, onWindowChange }) {
+  return (
+    <div className="wallet-window-toggle">
+      {leaderboardWindows.map((option) => (
+        <button
+          type="button"
+          key={option.id}
+          className={windowId === option.id ? 'active' : ''}
+          onClick={() => onWindowChange(option.id)}
+          title={option.caption}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function WalletPerformanceTile({ label, value, tone = '', icon: Icon = null }) {
+  return (
+    <div className="wallet-performance-tile">
+      <span>{label}</span>
+      <strong className={tone}>
+        {value}
+        {Icon ? <Icon size={15} aria-hidden="true" /> : null}
+      </strong>
+    </div>
+  );
+}
+
+function WalletResultCells({ results, mini = false }) {
+  if (!results.length) {
+    return <div className={`wallet-result-empty ${mini ? 'mini' : ''}`}>No resolved trades</div>;
+  }
+
+  return (
+    <div className={`wallet-result-row ${mini ? 'mini' : ''}`}>
+      {results.map((result, index) => (
+        <span
+          key={`${result}-${index}`}
+          className={`wallet-result-cell ${result === 'W' ? 'win' : 'loss'} ${mini ? 'mini' : ''}`}
+        >
+          {result}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MarketStatusPill({ trade = null, meta = null, compact = false }) {
   const status = meta || getMarketStatusMeta(trade);
   return (
@@ -6292,6 +6424,26 @@ async function fetchLeaderboardPage(windowId, cursor = null, options = {}) {
   return fetchJson(buildLeaderboardPath(windowId, cursor, limit), requestOptions);
 }
 
+async function fetchTraderHistory(wallet, options = {}) {
+  const { signal, limit = 100, maxPages = 8 } = options;
+  const normalizedWallet = wallet.toLowerCase();
+  let cursor = null;
+  let items = [];
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const data = await fetchJson(buildTraderWhalesPath(wallet, cursor, limit), { signal });
+    const incoming = Array.isArray(data?.items)
+      ? data.items.filter((item) => item.trader?.proxyWallet?.toLowerCase() === normalizedWallet)
+      : [];
+    items = mergeWhales(items, incoming);
+
+    if (!data?.nextCursor || !incoming.length) break;
+    cursor = data.nextCursor;
+  }
+
+  return sortWhales(items, 'recent');
+}
+
 async function fetchJson(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -6963,6 +7115,15 @@ function buildWhalesPath(filter, cursor = null) {
   return `/v1/whales?${params.toString()}`;
 }
 
+function buildTraderWhalesPath(wallet, cursor = null, limit = 100) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit || 100));
+  params.set('minUsd', '10000');
+  params.set('traderWallet', wallet.toLowerCase());
+  if (cursor) params.set('cursor', cursor);
+  return `/v1/whales?${params.toString()}`;
+}
+
 function buildLeaderboardPath(windowId, cursor = null, limit = 50) {
   const params = new URLSearchParams();
   params.set('window', windowId);
@@ -7256,6 +7417,141 @@ function emptyProfileStats() {
 
 function getProfileStats(profile, windowId) {
   return profile?.stats?.[windowId] || emptyProfileStats();
+}
+
+function buildWalletProfileTrades(profile, historyTrades) {
+  const recentTrades = Array.isArray(profile?.recentWhales) ? profile.recentWhales : [];
+  const fetchedTrades = Array.isArray(historyTrades) ? historyTrades : [];
+  return sortWhales(mergeWhales([], [...fetchedTrades, ...recentTrades]), 'recent');
+}
+
+function buildWalletPerformance(profile, trades, windowId, stats) {
+  const sourceTrades = Array.isArray(trades) ? trades : [];
+  const fullResults = buildWalletResultEntries(sourceTrades);
+  const windowResults = fullResults.filter((entry) => isWalletTradeInWindow(entry.trade, windowId));
+  const windowTrades = sourceTrades.filter((trade) => isWalletTradeInWindow(trade, windowId));
+  const statTradeCount = firstFiniteNumber(stats?.tradeCount, stats?.whaleCount);
+  const tradeCount = statTradeCount ?? windowTrades.length;
+  const suppliedWinRate = normalizeWinRatePercent(firstFiniteNumber(
+    stats?.winRate,
+    stats?.winRatePct,
+    stats?.winRatePercent,
+    profile?.performance?.[windowId]?.winRate,
+    profile?.performance?.[windowId]?.winRatePct
+  ));
+  const suppliedWins = firstFiniteNumber(stats?.wins, stats?.winCount, stats?.resolvedWins);
+  const suppliedLosses = firstFiniteNumber(stats?.losses, stats?.lossCount, stats?.resolvedLosses);
+  const computedWins = windowResults.filter((entry) => entry.result === 'W').length;
+  const computedLosses = windowResults.filter((entry) => entry.result === 'L').length;
+  const resolvedWindowCount = computedWins + computedLosses;
+  let winRatePct = suppliedWinRate;
+
+  if (winRatePct == null && suppliedWins != null && suppliedLosses != null && suppliedWins + suppliedLosses > 0) {
+    winRatePct = (suppliedWins / (suppliedWins + suppliedLosses)) * 100;
+  }
+
+  if (winRatePct == null && resolvedWindowCount > 0) {
+    winRatePct = (computedWins / resolvedWindowCount) * 100;
+  }
+
+  const recentResults = fullResults.slice(-15).map((entry) => entry.result);
+
+  return {
+    tradeCount,
+    winRatePct,
+    winRateLabel: winRatePct == null ? '--' : `${trimNumber(winRatePct)}%`,
+    longestStreak: longestWinningStreak(fullResults),
+    recentResults,
+    recentMini: recentResults.slice(-5),
+    historyCount: sourceTrades.length,
+    resolvedCount: fullResults.length,
+  };
+}
+
+function buildWalletResultEntries(trades) {
+  return (Array.isArray(trades) ? trades : [])
+    .map((trade) => {
+      const result = getWalletTradeResult(trade);
+      if (!result) return null;
+      const resolution = getTradeResolutionBlock(trade);
+      return {
+        trade,
+        result,
+        timestamp: Number(trade?.timestamp || resolution?.resolvedAt || 0),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function getWalletTradeResult(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+
+  if (['resolved_win', 'win', 'won'].includes(status)) return 'W';
+  if (['resolved_loss', 'loss', 'lost'].includes(status)) return 'L';
+
+  const pnl = firstFiniteNumber(resolution?.pnlUsd, trade?.pnlUsd, trade?.profitUsd);
+  if (pnl > 0) return 'W';
+  if (pnl < 0) return 'L';
+
+  return null;
+}
+
+function isWalletTradeInWindow(trade, windowId) {
+  const timestamp = Number(trade?.timestamp || 0);
+  if (!timestamp) return false;
+  if (windowId === '1d') return isInCurrentNewYorkSession(timestamp);
+
+  const days = {
+    '7d': 7,
+    '30d': 30,
+    '365d': 365,
+  }[windowId];
+
+  if (!days) return true;
+  const tradeDateKey = newYorkDateKeyFromSeconds(timestamp);
+  const currentDateKey = newYorkDateKeyFromMs(Date.now());
+  return tradeDateKey >= getNewYorkWindowStartDateKey(days, currentDateKey) && tradeDateKey <= currentDateKey;
+}
+
+function getNewYorkWindowStartDateKey(days, currentDateKey) {
+  const [year, month, day] = String(currentDateKey || '').split('-').map(Number);
+  if (!year || !month || !day) return currentDateKey;
+  const start = new Date(Date.UTC(year, month - 1, day - (days - 1)));
+  return start.toISOString().slice(0, 10);
+}
+
+function longestWinningStreak(results) {
+  let current = 0;
+  let longest = 0;
+
+  for (const entry of results) {
+    if (entry.result === 'W') {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 0;
+    }
+  }
+
+  return longest;
+}
+
+function normalizeWinRatePercent(value) {
+  if (value == null) return null;
+  const rate = Number(value);
+  if (!Number.isFinite(rate)) return null;
+  return rate <= 1 ? rate * 100 : rate;
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
 }
 
 function buildVolumeMix(stats) {
@@ -7785,6 +8081,7 @@ function getMarketStatusMeta(trade) {
 function getTraderOutcomeMeta(trade) {
   const resolution = getTradeResolutionBlock(trade);
   const status = normalizeResolutionStatus(resolution);
+  const side = trade?.side === 'SELL' ? 'SELL' : 'BUY';
   const winningOutcome = resolution?.winningOutcome ? ` Winning outcome: ${resolution.winningOutcome}.` : '';
 
   if (!isTradeMarketClosed(trade)) {
