@@ -84,6 +84,92 @@ function avatarGradient(value) {
   return `linear-gradient(135deg, hsl(${hue} 70% 58%), hsl(${(hue + 46) % 360} 62% 36%))`;
 }
 
+function getTradeResolutionBlock(trade) {
+  const outcomeObject = trade?.outcome && typeof trade.outcome === 'object' ? trade.outcome : null;
+  return trade?.resolution || trade?.tradeResolution || trade?.marketResolution || trade?.market?.resolution || outcomeObject || null;
+}
+
+function normalizeResolutionStatus(resolution) {
+  return String(resolution?.status || resolution?.marketStatus || '').trim().toLowerCase();
+}
+
+function isTradeMarketClosed(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  return Boolean(
+    resolution?.closed ||
+      resolution?.resolvedAt ||
+      ['closed', 'resolved', 'resolved_win', 'resolved_loss', 'invalid'].includes(status)
+  );
+}
+
+function getMarketStatusMeta(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  const closed = isTradeMarketClosed(trade);
+
+  return {
+    label: closed ? 'Closed' : 'Open',
+    tone: closed ? (status === 'invalid' ? 'invalid' : 'closed') : 'open',
+    closed,
+    title: closed ? 'Market has closed or resolved.' : 'Market is still open.',
+  };
+}
+
+function getTraderOutcomeMeta(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const status = normalizeResolutionStatus(resolution);
+  const winningOutcome = resolution?.winningOutcome ? ` Winning outcome: ${resolution.winningOutcome}.` : '';
+
+  if (status === 'invalid') {
+    return {
+      label: 'Invalid',
+      tone: 'invalid',
+      title: `Resolution is invalid.${winningOutcome}`,
+    };
+  }
+
+  if (status === 'resolved_win') {
+    return {
+      label: 'Win',
+      tone: 'win',
+      title: `Closed. Trader won this trade.${winningOutcome}`,
+    };
+  }
+
+  if (status === 'resolved_loss') {
+    return {
+      label: 'Loss',
+      tone: 'loss',
+      title: `Closed. Trader lost this trade.${winningOutcome}`,
+    };
+  }
+
+  return {
+    label: 'Closed',
+    tone: 'closed',
+    title: `Market is closed; trade result is not materialized yet.${winningOutcome}`,
+  };
+}
+
+function TraderResolutionPills({ trade }) {
+  const market = getMarketStatusMeta(trade);
+  const outcome = getTraderOutcomeMeta(trade);
+
+  return (
+    <span className="resolution-pill-row compact trader-seo-resolution-row">
+      <span className={`resolution-pill market-status-pill ${market.tone} compact`} title={market.title}>
+        {market.label}
+      </span>
+      {market.closed ? (
+        <span className={`resolution-pill trade-outcome-pill ${outcome.tone} compact`} title={outcome.title}>
+          {outcome.label}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function TraderNavItem({ href, icon: Icon, label, badge }) {
   return (
     <Link className="feed-nav-item" href={href}>
@@ -169,6 +255,7 @@ function RecentTradeRow({ trade }) {
         {imageUrl ? <img src={imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <i>{marketFallback(trade)}</i>}
         <span>
           <strong>{trade.market?.title || 'Unknown market'}</strong>
+          <TraderResolutionPills trade={trade} />
           <small>{trade.outcome || 'Outcome'} · {relativeTimeAgo(trade.timestamp)}</small>
         </span>
       </span>

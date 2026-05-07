@@ -601,7 +601,6 @@ function WhaleFeedPage() {
         marketHref: buildMarketHref(trade),
         marketName: trade.market?.title || 'Unknown market',
         marketMeta: `${inferCategory(trade).label} - ${trade.outcome || 'Outcome'}`,
-        marketStatus: getMarketStatusMeta(trade),
         size: formatUsdFull(trade.usdSize),
         price: getPriceValue(trade),
         trader: {
@@ -1593,8 +1592,6 @@ function TradeHeroDetailCard({ trade, scenario }) {
     <section className="trade-hero-card-redesign trade-detail-card-hero">
       <div className="trade-detail-meta-line">
         <span className={`trade-detail-side-pill ${isSell ? 'sell' : 'buy'}`}>{trade.side}</span>
-        <MarketStatusPill trade={trade} compact />
-        {isTradeMarketClosed(trade) ? <TradeOutcomePill trade={trade} compact /> : null}
         <span>{relativeTimeAgo(trade.timestamp)} - {formatDateTimeSeconds(trade.timestamp)}</span>
       </div>
 
@@ -1693,10 +1690,6 @@ function TradeMarketDetailCard({ trade, market }) {
       <div>
         <strong>{market.title || trade.market?.title || 'Unknown market'}</strong>
         <span>{inferCategory(marketTrade).label} - {trade.outcome || 'Outcome'}</span>
-        <div className="resolution-pill-row compact">
-          <MarketStatusPill trade={trade} compact />
-          {isTradeMarketClosed(trade) ? <TradeOutcomePill trade={trade} compact /> : null}
-        </div>
       </div>
     </>
   );
@@ -1822,7 +1815,6 @@ function RelatedTradeDetailRow({ trade, isCurrent }) {
       <b>{formatUsdFull(trade.usdSize)}</b>
       <small>
         {formatPrice(trade)} {trade.outcome || ''}
-        <TradeResolutionPills trade={trade} compact />
       </small>
       <time>{relativeTimeAgo(trade.timestamp)}</time>
     </div>
@@ -1884,7 +1876,6 @@ function TraderRecentDetailCard({ trades = [] }) {
             <div>
               <strong>{trade.market?.title || 'Unknown market'}</strong>
               <span>{relativeTimeAgo(trade.timestamp)} - {trade.side} {trade.outcome || ''}</span>
-              <TradeResolutionPills trade={trade} compact />
             </div>
             <small>
               <b>{formatUsdCompact(trade.usdSize)}</b>
@@ -4466,7 +4457,6 @@ function MobileTradeCard({
   marketHref,
   marketName,
   marketMeta,
-  marketStatus,
   size,
   price,
   trader,
@@ -4483,7 +4473,6 @@ function MobileTradeCard({
         <div style={{ fontSize: 13, color: '#fff', fontWeight: 500, lineHeight: 1.3, marginBottom: 2 }}>{marketName}</div>
         <div className="mobile-market-meta-row" title={marketMeta}>
           <span>{marketMeta}</span>
-          <MarketStatusPill meta={marketStatus} compact />
         </div>
       </div>
     </>
@@ -4728,7 +4717,6 @@ function TradeRow({ trade, index }) {
         <strong title={marketTitle}>{marketTitle}</strong>
         <div className="market-meta-row">
           <span>{category.label} - {trade.outcome || 'Outcome'}</span>
-          <MarketStatusPill trade={trade} compact />
         </div>
       </div>
     </>
@@ -7797,7 +7785,6 @@ function getMarketStatusMeta(trade) {
 function getTraderOutcomeMeta(trade) {
   const resolution = getTradeResolutionBlock(trade);
   const status = normalizeResolutionStatus(resolution);
-  const side = trade?.side === 'SELL' ? 'SELL' : 'BUY';
   const winningOutcome = resolution?.winningOutcome ? ` Winning outcome: ${resolution.winningOutcome}.` : '';
 
   if (!isTradeMarketClosed(trade)) {
@@ -7817,31 +7804,19 @@ function getTraderOutcomeMeta(trade) {
   }
 
   if (status === 'resolved_win') {
-    return side === 'SELL'
-      ? {
-          label: 'Good sell',
-          tone: 'neutral',
-          title: `Closed. Selling was favorable in hindsight.${winningOutcome}`,
-        }
-      : {
-          label: 'Win',
-          tone: 'win',
-          title: `Closed. Trader won this trade.${winningOutcome}`,
-        };
+    return {
+      label: 'Win',
+      tone: 'win',
+      title: `Closed. Trader won this trade.${winningOutcome}`,
+    };
   }
 
   if (status === 'resolved_loss') {
-    return side === 'SELL'
-      ? {
-          label: 'Early sell',
-          tone: 'neutral',
-          title: `Closed. Holding would have done better in hindsight.${winningOutcome}`,
-        }
-      : {
-          label: 'Loss',
-          tone: 'loss',
-          title: `Closed. Trader lost this trade.${winningOutcome}`,
-        };
+    return {
+      label: 'Loss',
+      tone: 'loss',
+      title: `Closed. Trader lost this trade.${winningOutcome}`,
+    };
   }
 
   return {

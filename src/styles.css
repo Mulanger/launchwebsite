@@ -1131,15 +1131,15 @@ img {
 }
 
 .resolution-pill.open {
-  color: rgba(255, 255, 255, 0.58);
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  color: #79a8ff;
+  border-color: rgba(121, 168, 255, 0.22);
+  background: rgba(121, 168, 255, 0.1);
 }
 
 .resolution-pill.closed {
-  color: #79a8ff;
-  border-color: rgba(121, 168, 255, 0.2);
-  background: rgba(121, 168, 255, 0.1);
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.26);
+  background: rgba(251, 113, 133, 0.11);
 }
 
 .resolution-pill.win {
@@ -1149,9 +1149,9 @@ img {
 }
 
 .resolution-pill.loss {
-  color: #f48ba0;
-  border-color: rgba(244, 139, 160, 0.24);
-  background: rgba(244, 139, 160, 0.11);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(127, 29, 29, 0.24);
 }
 
 .resolution-pill.invalid,
@@ -2658,7 +2658,7 @@ img {
 }
 
 .trade-resolution-strip strong.loss {
-  color: #f48ba0;
+  color: #ef4444;
 }
 
 .trade-resolution-strip strong.invalid,

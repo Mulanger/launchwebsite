@@ -752,19 +752,31 @@
   align-items: center;
   min-height: 18px;
   padding: 0 7px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(121, 168, 255, 0.22);
   border-radius: 999px;
-  color: rgba(255, 255, 255, 0.58);
-  background: rgba(255, 255, 255, 0.03);
+  color: #79a8ff;
+  background: rgba(121, 168, 255, 0.1);
   font-size: 9.5px;
   font-weight: 900;
   line-height: 1;
 }
 
 .next-app-resolution-pill.closed {
-  color: #79a8ff;
-  border-color: rgba(121, 168, 255, 0.2);
-  background: rgba(121, 168, 255, 0.1);
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.26);
+  background: rgba(251, 113, 133, 0.11);
+}
+
+.next-app-resolution-pill.win {
+  color: #22d3a5;
+  border-color: rgba(34, 211, 165, 0.24);
+  background: rgba(34, 211, 165, 0.12);
+}
+
+.next-app-resolution-pill.loss {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(127, 29, 29, 0.24);
 }
 
 .next-app-resolution-pill.invalid {
@@ -3004,6 +3016,20 @@
   color: var(--soft);
   font-size: 11px;
   font-weight: 750;
+}
+
+.trader-seo-market .trader-seo-resolution-row {
+  display: flex;
+  width: fit-content;
+  margin-top: 5px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.trader-seo-market .resolution-pill {
+  display: inline-flex;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .trader-seo-size {
