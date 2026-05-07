@@ -9,6 +9,7 @@ import {
   BellOff,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Copy,
@@ -86,6 +87,7 @@ const leaderboardWindows = [
   { id: '30d', label: '30D', caption: 'Last 30 days', locked: true },
   { id: '365d', label: '1Y', caption: 'Last 365 days', locked: true },
 ];
+const walletRecentTradesPageSize = 10;
 const lockedLeaderboardWindowIds = new Set(
   leaderboardWindows.filter((option) => option.locked).map((option) => option.id)
 );
@@ -2248,8 +2250,6 @@ function WalletProfileRedesign({
   const volumeMix = buildWalletVolumeMix(stats);
   const profileTrades = buildWalletProfileTrades(profile, historyTrades);
   const performance = buildWalletPerformance(profile, profileTrades, windowId, stats);
-  const profileRecent = Array.isArray(profile.recentWhales) ? profile.recentWhales : [];
-  const recentTrades = profileRecent.length ? profileRecent : profileTrades.slice(0, 10);
 
   return (
     <section className={`wallet-profile-page ${mobile ? 'mobile' : ''}`}>
@@ -2270,7 +2270,7 @@ function WalletProfileRedesign({
         <WalletDailyVolumeCard dailyVolume={dailyVolume} />
         <WalletVolumeMixCard mix={volumeMix} />
       </div>
-      <WalletRecentTradesTable trades={recentTrades} onRefresh={onRefresh} />
+      <WalletRecentTradesTable key={wallet} trades={profileTrades} onRefresh={onRefresh} />
     </section>
   );
 }
@@ -2432,7 +2432,21 @@ function WalletBreakdownRow({ label, value, tone = '', muted = false }) {
   );
 }
 
-function WalletRecentTradesTable({ trades, onRefresh }) {
+function WalletRecentTradesTable({ trades = [], onRefresh }) {
+  const tradeItems = Array.isArray(trades) ? trades : [];
+  const totalTrades = tradeItems.length;
+  const pageCount = Math.max(1, Math.ceil(totalTrades / walletRecentTradesPageSize));
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(Math.max(page, 1), pageCount));
+  }, [pageCount]);
+
+  const pageStart = (currentPage - 1) * walletRecentTradesPageSize;
+  const visibleTrades = tradeItems.slice(pageStart, pageStart + walletRecentTradesPageSize);
+  const pageEnd = Math.min(pageStart + visibleTrades.length, totalTrades);
+  const hasPagination = totalTrades > walletRecentTradesPageSize;
+
   return (
     <section className="wallet-recent-table">
       <div className="wallet-recent-heading">
@@ -2440,9 +2454,9 @@ function WalletRecentTradesTable({ trades, onRefresh }) {
           <h2>Recent whale trades</h2>
           <p>Latest feed-visible trades from this wallet</p>
         </div>
-        <span>{formatNumber(trades.length)} trades</span>
+        <span>{formatNumber(totalTrades)} trades</span>
       </div>
-      {trades.length ? (
+      {totalTrades ? (
         <>
           <div className="wallet-recent-header">
             <span>Side</span>
@@ -2451,9 +2465,23 @@ function WalletRecentTradesTable({ trades, onRefresh }) {
             <span>Price</span>
             <span>When</span>
           </div>
-          {trades.map((trade, index) => (
-            <WalletRecentTradeRow key={trade.id || index} trade={trade} isLast={index === trades.length - 1} />
+          {visibleTrades.map((trade, index) => (
+            <WalletRecentTradeRow
+              key={trade.id || `${currentPage}-${index}`}
+              trade={trade}
+              isLast={index === visibleTrades.length - 1}
+            />
           ))}
+          {hasPagination ? (
+            <WalletRecentTradesPagination
+              currentPage={currentPage}
+              pageCount={pageCount}
+              firstItem={pageStart + 1}
+              lastItem={pageEnd}
+              totalItems={totalTrades}
+              onPageChange={setCurrentPage}
+            />
+          ) : null}
         </>
       ) : (
         <EmptyState
@@ -2464,6 +2492,63 @@ function WalletRecentTradesTable({ trades, onRefresh }) {
         />
       )}
     </section>
+  );
+}
+
+function WalletRecentTradesPagination({
+  currentPage,
+  pageCount,
+  firstItem,
+  lastItem,
+  totalItems,
+  onPageChange,
+}) {
+  const pages = buildCompactPagination(currentPage, pageCount);
+  const goToPage = (page) => {
+    onPageChange(Math.min(Math.max(page, 1), pageCount));
+  };
+
+  return (
+    <nav className="wallet-recent-pagination" aria-label="Recent whale trades pages">
+      <span className="wallet-recent-page-range">
+        Showing {formatNumber(firstItem)}-{formatNumber(lastItem)} of {formatNumber(totalItems)}
+      </span>
+      <div className="wallet-recent-page-controls">
+        <button
+          type="button"
+          className="wallet-page-button icon"
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage <= 1}
+          aria-label="Previous recent trades page"
+        >
+          <ChevronLeft size={14} aria-hidden="true" />
+        </button>
+        {pages.map((page) => (
+          typeof page === 'number' ? (
+            <button
+              key={page}
+              type="button"
+              className={`wallet-page-button ${page === currentPage ? 'active' : ''}`}
+              onClick={() => goToPage(page)}
+              aria-current={page === currentPage ? 'page' : undefined}
+            >
+              {page}
+            </button>
+          ) : (
+            <span key={page} className="wallet-page-ellipsis" aria-hidden="true">...</span>
+          )
+        ))}
+        <button
+          type="button"
+          className="wallet-page-button icon"
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage >= pageCount}
+          aria-label="Next recent trades page"
+        >
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -7553,6 +7638,32 @@ function buildWalletProfileTrades(profile, historyTrades) {
   const recentTrades = Array.isArray(profile?.recentWhales) ? profile.recentWhales : [];
   const fetchedTrades = Array.isArray(historyTrades) ? historyTrades : [];
   return sortWhales(mergeWhales([], [...fetchedTrades, ...recentTrades]), 'recent');
+}
+
+function buildCompactPagination(currentPage, pageCount) {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
+  }
+
+  let start = Math.max(2, currentPage - 1);
+  let end = Math.min(pageCount - 1, currentPage + 1);
+
+  if (currentPage <= 3) {
+    end = 4;
+  } else if (currentPage >= pageCount - 2) {
+    start = pageCount - 3;
+  }
+
+  const pages = [1];
+  if (start > 2) pages.push('gap-start');
+
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page);
+  }
+
+  if (end < pageCount - 1) pages.push('gap-end');
+  pages.push(pageCount);
+  return pages;
 }
 
 function buildWalletPerformance(profile, trades, windowId, stats) {
