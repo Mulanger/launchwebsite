@@ -2118,7 +2118,7 @@ function MobileWalletProfileView({
   const volumeMix = buildWalletVolumeMix(stats);
   const profileTrades = buildWalletProfileTrades(profile, historyTrades);
   const performance = buildWalletPerformance(profile, profileTrades, windowId, stats);
-  const recentResults = performance.recentResults.slice(-10);
+  const recentResults = performance.recentResults.slice(0, 10);
   const rank = profile.rankBadge?.rank;
 
   return (
@@ -5077,8 +5077,8 @@ function WalletProfilePerformanceBlock({ performance, windowId, onWindowChange, 
           <WalletResultCells results={performance.recentResults} />
           {performance.recentResults.length ? (
             <div className="wallet-result-axis">
-              <span>oldest</span>
-              <span>most recent -&gt;</span>
+              <span>most recent</span>
+              <span>older -&gt;</span>
             </div>
           ) : null}
         </div>
@@ -7695,7 +7695,10 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     winRatePct = (computedWins / resolvedWindowCount) * 100;
   }
 
-  const recentResults = fullResults.slice(-15).map((entry) => entry.result);
+  const recentResults = fullResults
+    .slice(-15)
+    .reverse()
+    .map((entry) => entry.result);
 
   return {
     tradeCount,
@@ -7703,7 +7706,7 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     winRateLabel: winRatePct == null ? '--' : `${trimNumber(winRatePct)}%`,
     longestStreak: longestWinningStreak(fullResults),
     recentResults,
-    recentMini: recentResults.slice(-5),
+    recentMini: recentResults.slice(0, 5),
     historyCount: sourceTrades.length,
     resolvedCount: fullResults.length,
   };
