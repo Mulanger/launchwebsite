@@ -3943,7 +3943,7 @@ img {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.wallet-performance-tile span {
+.wallet-performance-tile > span {
   display: block;
   margin-bottom: 9px;
   color: rgba(255, 255, 255, 0.5);
