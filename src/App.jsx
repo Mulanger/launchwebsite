@@ -2085,7 +2085,7 @@ function MobileWalletProfileScreen({
             onAction={onRetry}
           />
         ) : (
-          <WalletProfileRedesign
+          <MobileWalletProfileView
             profile={profile}
             wallet={wallet}
             stats={stats}
@@ -2098,7 +2098,137 @@ function MobileWalletProfileScreen({
           />
         )}
       </div>
-      <MobileBottomNav activeTab="leaders" onTabChange={handleTabChange} />
+      <MobileBottomNav activeTab="feed" onTabChange={handleTabChange} />
+    </div>
+  );
+}
+
+function MobileWalletProfileView({
+  profile,
+  wallet,
+  stats,
+  historyTrades = [],
+  historyLoading = false,
+  windowId,
+  onWindowChange,
+}) {
+  const dailyVolume = buildWalletDailyVolume(profile.dailyVolume || []);
+  const volumeMix = buildWalletVolumeMix(stats);
+  const profileTrades = buildWalletProfileTrades(profile, historyTrades);
+  const performance = buildWalletPerformance(profile, profileTrades, windowId, stats);
+  const recentResults = performance.recentResults.slice(-10);
+  const rank = profile.rankBadge?.rank;
+
+  return (
+    <section className="wallet-mobile-profile-page">
+      <header className="wallet-mobile-header">
+        <a className="wallet-mobile-back" href="/leaderboard">
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back
+        </a>
+        <span>Trader profile</span>
+      </header>
+
+      <section className="wallet-mobile-hero">
+        <div className="wallet-mobile-identity-row">
+          <ProfileAvatar profile={profile} />
+          <div className="wallet-mobile-identity-copy">
+            <span>Public wallet</span>
+            <strong title={wallet}>{shortWallet(wallet)}</strong>
+          </div>
+          <div className="wallet-mobile-rank">
+            <span>Rank</span>
+            <strong>{rank ? `#${rank}` : '--'}</strong>
+          </div>
+        </div>
+
+        <div className="wallet-mobile-actions">
+          <FollowWalletButton wallet={wallet} variant="wide" />
+          <MobileWalletCopyButton address={wallet} />
+        </div>
+      </section>
+
+      <WalletWindowToggle
+        windowId={windowId}
+        onWindowChange={onWindowChange}
+        className="wallet-mobile-window-toggle"
+      />
+
+      <section className="wallet-mobile-performance-card">
+        <div className="wallet-mobile-performance-head">
+          <div>
+            <span>Previous win rate</span>
+            <div className="wallet-mobile-win-rate">
+              <strong className={performance.winRatePct == null ? 'muted' : ''}>{performance.winRateLabel}</strong>
+              <small>{formatNumber(performance.tradeCount)} trades</small>
+            </div>
+          </div>
+          <div className="wallet-mobile-streak">
+            <span>Streak</span>
+            <strong>
+              {formatNumber(performance.longestStreak)}
+              <Flame size={12} aria-hidden="true" />
+            </strong>
+          </div>
+        </div>
+
+        <div className="wallet-mobile-result-label">
+          Recent results{historyLoading && !performance.historyCount ? ' - syncing' : ''}
+        </div>
+        <MobileWalletResultCells results={recentResults} />
+      </section>
+
+      <WalletProfileStatCards stats={stats} />
+      <div className="wallet-mobile-charts">
+        <WalletDailyVolumeCard dailyVolume={dailyVolume} />
+        <WalletVolumeMixCard mix={volumeMix} />
+      </div>
+    </section>
+  );
+}
+
+function MobileWalletCopyButton({ address }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = async () => {
+    if (!address || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="wallet-mobile-copy-button"
+      onClick={copyAddress}
+      aria-label={copied ? 'Wallet address copied' : 'Copy wallet address'}
+      title={copied ? 'Copied' : address}
+    >
+      {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+    </button>
+  );
+}
+
+function MobileWalletResultCells({ results }) {
+  if (!results.length) {
+    return <div className="wallet-mobile-result-empty">No resolved trades</div>;
+  }
+
+  return (
+    <div className="wallet-mobile-result-row">
+      {results.map((result, index) => (
+        <span
+          key={`${result}-${index}`}
+          className={`wallet-mobile-result-cell ${result === 'W' ? 'win' : 'loss'}`}
+        >
+          {result}
+        </span>
+      ))}
     </div>
   );
 }
@@ -4887,9 +5017,9 @@ function WalletProfilePerformanceBlock({ performance, windowId, onWindowChange, 
   );
 }
 
-function WalletWindowToggle({ windowId, onWindowChange }) {
+function WalletWindowToggle({ windowId, onWindowChange, className = '' }) {
   return (
-    <div className="wallet-window-toggle">
+    <div className={`wallet-window-toggle ${className}`.trim()}>
       {leaderboardWindows.map((option) => (
         <button
           type="button"
