@@ -419,13 +419,16 @@ SEO route verification on 2026-05-08:
 
 ## Related System Context
 
-The broader Polywatch system has three pieces:
+The Railway-backed Polywhale system is split across four local project directories:
 
-- watcher service on Railway: watches Polymarket activity and publishes whale events upstream.
-- API/server on Railway: exposes REST and websocket endpoints consumed here.
-- Flutter app on the local PC: mobile app that shares the same product language and follow/alert concepts.
+1. `D:\polywatch-website`: this repo. Owns the public web app, Next SEO routes, legal/static pages, browser follows/alerts UI, and the frontend consumption of the whale API. Production deploys from this repo through Railway's Next build/start commands.
+2. `D:\whaleserver\api-server`: whale server/API. Owns REST and websocket contracts such as `/v1/whales`, `/v1/traders/:wallet`, `/v1/leaderboard`, follows/auth, alerts, trade detail composition, and the public SEO snapshot endpoints such as `/v1/market-pages` and `/v1/trader-pages` when available.
+3. `D:\whalebackend\whale-watcher`: whale watcher. Watches Polymarket activity, normalizes whale trades, publishes/stores trade events for the API, and populates enriched market-page snapshot data used by the website's `/market/[slug]` routes.
+4. `D:\Resolution-tracker`: market resolution service. Tracks market outcomes/resolution state and writes or publishes resolution fields consumed by the API and website, including statuses such as `resolved_win`/`resolved_loss`, `winningOutcome`, `payoutUsd`, `pnlUsd`, `resolvedAt`, and `closed`.
 
-This repo only owns the web app and legal/static web pages.
+The Flutter/mobile app is separate local client work under `D:\whaletracker`. It shares product language and API concepts, but it is not one of the four Railway service directories above.
+
+This repo only owns the web app and legal/static web pages. Do not silently change server, watcher, or resolution-service behavior from here; coordinate contract changes in the owning directory and keep this website tolerant of rollout order.
 
 ## Caution For Future Agents
 
@@ -433,7 +436,7 @@ This repo only owns the web app and legal/static web pages.
 - Prefer small, scoped UI changes in `src/App.jsx` and `src/styles.css`.
 - Run the relevant build before committing.
 - The Next production cutover is already complete; do not revert Railway to Vite unless explicitly requested as a rollback.
-- Preserve watcher and API contracts. This repo consumes `/server` and `/watcher` behavior but should not silently change their assumptions.
+- Preserve watcher, API, and market-resolution contracts. This repo consumes behavior from `D:\whaleserver\api-server`, `D:\whalebackend\whale-watcher`, and `D:\Resolution-tracker`; do not silently change their assumptions from the website.
 - If changing live feed behavior, test both REST-loaded rows and websocket/new rows.
 - If changing follow behavior, test logged-out local follows and anonymous-auth server sync.
 - Keep legal URLs stable: `/privacy`, `/terms`, `/delete-data`.
