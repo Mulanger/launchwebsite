@@ -46,10 +46,10 @@ export default async function sitemap() {
   }
 
   try {
-    const traders = await fetchTraderPageIndex(100);
+    const traders = await fetchTraderPageIndex(500);
     entries.push(...traders.map((trader) => ({
       url: `${siteOrigin}${traderPathForWallet(trader.proxyWallet)}`,
-      lastModified: now,
+      lastModified: trader.refreshedAt ? new Date(trader.refreshedAt) : now,
       changeFrequency: 'hourly',
       priority: trader.bestRank && trader.bestRank <= 25 ? 0.72 : 0.58,
     })));

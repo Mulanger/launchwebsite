@@ -1,4 +1,4 @@
-import { fetchServerJson } from './server-api.js';
+import { fetchPublicTraderPageIndex, fetchServerJson } from './server-api.js';
 import { seoImage, siteName, siteOrigin } from './seo.js';
 
 export const traderSitemapWindows = ['1d', '7d', '30d', '365d'];
@@ -85,7 +85,35 @@ async function fetchLeaderboardWindow(windowId, limit) {
   }
 }
 
-export async function fetchTraderPageIndex(limitPerWindow = 100) {
+export async function fetchTraderPageIndex(limit = 500) {
+  const byWallet = new Map();
+
+  try {
+    const data = await fetchPublicTraderPageIndex(limit);
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (items.length) {
+      items
+        .map(normalizeTraderPageIndexItem)
+        .filter((item) => isWalletAddress(item.proxyWallet))
+        .forEach((item) => byWallet.set(item.proxyWallet, item));
+    }
+  } catch {
+    // Fall back to live leaderboard windows while the API endpoint rolls out.
+  }
+
+  if (byWallet.size < limit) {
+    const fallback = await fetchLeaderboardTraderPageIndex(Math.min(limit, 100));
+    fallback.forEach((item) => {
+      if (!byWallet.has(item.proxyWallet)) {
+        byWallet.set(item.proxyWallet, item);
+      }
+    });
+  }
+
+  return Array.from(byWallet.values()).sort(compareTraderIndexItems).slice(0, limit);
+}
+
+async function fetchLeaderboardTraderPageIndex(limitPerWindow = 100) {
   const windows = await Promise.all(
     traderSitemapWindows.map(async (windowId) => ({
       windowId,
@@ -128,6 +156,28 @@ export async function fetchTraderPageIndex(limitPerWindow = 100) {
   );
 }
 
+function normalizeTraderPageIndexItem(item) {
+  const bestRank = Number(item.bestRank || 0) || null;
+  return {
+    proxyWallet: normalizeWallet(item.proxyWallet),
+    displayName: item.displayName || null,
+    pseudonym: item.pseudonym || null,
+    profileImage: item.profileImage || null,
+    windows: item.bestRankWindow ? [item.bestRankWindow] : [],
+    bestRank,
+    volume: Number(item.bestVolume || item.volume || 0),
+    tradeCount: Number(item.tradeCount || item.whaleCount || 0),
+    lastSeenTs: Number(item.lastSeenTs || 0),
+    refreshedAt: item.refreshedAt || null,
+  };
+}
+
+function compareTraderIndexItems(left, right) {
+  return Number(left.bestRank || 999999) - Number(right.bestRank || 999999) ||
+    Number(right.volume || 0) - Number(left.volume || 0) ||
+    String(left.proxyWallet).localeCompare(String(right.proxyWallet));
+}
+
 export async function resolveTraderAlias(alias) {
   const aliasSlug = slugifyTraderAlias(alias);
   if (!aliasSlug) return null;
@@ -150,7 +200,7 @@ export function buildTraderDescription(profile, stats = getTraderStats(profile))
   const rank = profile?.rankBadge?.rank;
   const rankCopy = rank ? ` Ranked #${rank} on the ${String(profile.rankBadge.window || 'current').toUpperCase()} leaderboard.` : '';
 
-  return `${name} is a public Polymarket whale wallet on Polywhale. Track recent large trades, whale volume, trade count, market activity, and wallet address ${shortWallet(wallet)}.${rankCopy} Current tracked volume is ${Math.round(volume).toLocaleString('en-US')} across ${trades.toLocaleString('en-US')} whale trades.`;
+  return `${name} is a public Polymarket whale wallet on Polywhale. Track recent large trades, whale volume, trade count, market activity, and wallet address ${wallet}.${rankCopy} Current tracked volume is ${Math.round(volume).toLocaleString('en-US')} across ${trades.toLocaleString('en-US')} whale trades.`;
 }
 
 export function buildTraderProfileStructuredData(profile) {

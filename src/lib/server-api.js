@@ -56,3 +56,13 @@ export async function fetchPublicMarketPageIndex(limit = 250) {
     next: { revalidate: 300 },
   });
 }
+
+export async function fetchPublicTraderPageIndex(limit = 500) {
+  const params = new URLSearchParams({
+    indexable: 'true',
+    limit: String(limit),
+  });
+  return fetchServerJson(`/v1/trader-pages?${params.toString()}`, {
+    next: { revalidate: 300 },
+  });
+}

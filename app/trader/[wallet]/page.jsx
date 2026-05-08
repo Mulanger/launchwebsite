@@ -68,13 +68,14 @@ export async function generateMetadata({ params }) {
 
   const stats = getTraderStats(profile, '30d');
   const name = getTraderDisplayName(profile);
+  const wallet = normalizeWallet(profile.proxyWallet);
 
   return buildNextMetadata({
-    title: `${name} Polymarket Trader Profile | Polywhale`,
+    title: `${wallet} Polymarket Whale Wallet | Polywhale`,
     description: buildTraderDescription(profile, stats),
     keywords: [
+      wallet,
       name,
-      profile.proxyWallet,
       profile.pseudonym,
       profile.displayName,
       'Polymarket trader profile',
@@ -84,7 +85,7 @@ export async function generateMetadata({ params }) {
     ]
       .filter(Boolean)
       .join(', '),
-    path: traderPathForWallet(profile.proxyWallet),
+    path: traderPathForWallet(wallet),
     robots: 'index,follow,max-image-preview:large',
   });
 }

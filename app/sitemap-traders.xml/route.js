@@ -13,17 +13,22 @@ function escapeXml(value) {
 }
 
 export async function GET() {
-  const traders = await fetchTraderPageIndex(100);
-  const lastmod = new Date().toISOString().slice(0, 10);
+  const traders = await fetchTraderPageIndex(500);
+  const fallbackLastmod = new Date().toISOString().slice(0, 10);
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${traders
   .map(
-    (trader) => `  <url>
+    (trader) => {
+      const lastmod = trader.refreshedAt
+        ? new Date(trader.refreshedAt).toISOString().slice(0, 10)
+        : fallbackLastmod;
+      return `  <url>
     <loc>${escapeXml(`${siteOrigin}${traderPathForWallet(trader.proxyWallet)}`)}</loc>
     <lastmod>${lastmod}</lastmod>
-  </url>`,
+  </url>`;
+    },
   )
   .join('\n')}
 </urlset>
