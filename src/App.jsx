@@ -2114,11 +2114,13 @@ function MobileWalletProfileView({
   historyLoading = false,
   windowId,
   onWindowChange,
+  onRefresh,
 }) {
   const dailyVolume = buildWalletDailyVolume(profile.dailyVolume || []);
   const volumeMix = buildWalletVolumeMix(stats);
   const profileTrades = buildWalletProfileTrades(profile, historyTrades);
   const performance = buildWalletPerformance(profile, profileTrades, windowId, stats);
+  const profitSummary = buildWalletProfitSummary(profile, profileTrades);
   const recentResults = performance.recentResults.slice(0, 10);
   const rank = profile.rankBadge?.rank;
 
@@ -2146,6 +2148,7 @@ function MobileWalletProfileView({
         </div>
 
         <div className="wallet-mobile-actions">
+          <WalletProfitBadge summary={profitSummary} compact />
           <FollowWalletButton wallet={wallet} variant="wide" />
           <MobileWalletCopyButton address={wallet} />
         </div>
@@ -2167,9 +2170,9 @@ function MobileWalletProfileView({
             </div>
           </div>
           <div className="wallet-mobile-streak">
-            <span>Streak</span>
+            <span>Longest win streak</span>
             <strong>
-              {formatNumber(performance.longestStreak)}
+              {formatNumber(performance.longestWinStreak)}
               <Flame size={12} aria-hidden="true" />
             </strong>
           </div>
@@ -2186,6 +2189,7 @@ function MobileWalletProfileView({
         <WalletDailyVolumeCard dailyVolume={dailyVolume} />
         <WalletVolumeMixCard mix={volumeMix} />
       </div>
+      <WalletRecentTradesTable key={`${wallet}-mobile-recent`} trades={profileTrades} onRefresh={onRefresh} />
     </section>
   );
 }
@@ -2251,6 +2255,7 @@ function WalletProfileRedesign({
   const volumeMix = buildWalletVolumeMix(stats);
   const profileTrades = buildWalletProfileTrades(profile, historyTrades);
   const performance = buildWalletPerformance(profile, profileTrades, windowId, stats);
+  const profitSummary = buildWalletProfitSummary(profile, profileTrades);
 
   return (
     <section className={`wallet-profile-page ${mobile ? 'mobile' : ''}`}>
@@ -2259,7 +2264,7 @@ function WalletProfileRedesign({
         {mobile ? 'Back' : 'Back to leaderboard'}
       </a>
 
-      <WalletProfileHero profile={profile} wallet={wallet} windowId={windowId} />
+      <WalletProfileHero profile={profile} wallet={wallet} windowId={windowId} profitSummary={profitSummary} />
       <WalletProfilePerformanceBlock
         performance={performance}
         windowId={windowId}
@@ -2276,7 +2281,7 @@ function WalletProfileRedesign({
   );
 }
 
-function WalletProfileHero({ profile, wallet, windowId }) {
+function WalletProfileHero({ profile, wallet, windowId, profitSummary }) {
   const rank = profile.rankBadge?.rank;
   const rankWindow = String(profile.rankBadge?.window || windowId).toUpperCase();
 
@@ -2302,9 +2307,27 @@ function WalletProfileHero({ profile, wallet, windowId }) {
           <span>Rank {rankWindow}</span>
           <strong>{rank ? `#${rank}` : '--'}</strong>
         </div>
+        <WalletProfitBadge summary={profitSummary} />
         <FollowWalletButton wallet={wallet} variant="wide" />
       </div>
     </section>
+  );
+}
+
+function WalletProfitBadge({ summary, compact = false }) {
+  const value = Number(summary?.value || 0);
+  const hasValue = Boolean(summary?.hasValue);
+  const tone = !hasValue ? 'muted' : value < 0 ? 'loss' : 'profit';
+  const firstTradeLabel = summary?.firstTradeAt ? formatDateShort(summary.firstTradeAt) : 'first tracked trade';
+
+  return (
+    <div
+      className={`wallet-profit-badge ${tone} ${compact ? 'compact' : ''}`}
+      title={`Realized P/L since ${firstTradeLabel}`}
+    >
+      <span>Profit</span>
+      <strong>{hasValue ? formatSignedUsdCompact(value) : '--'}</strong>
+    </div>
   );
 }
 
@@ -5096,10 +5119,10 @@ function WalletProfilePerformanceBlock({ performance, windowId, onWindowChange, 
       <section className="wallet-performance-tiles" aria-label="Trader performance summary">
         <WalletPerformanceTile label="Trades" value={formatNumber(performance.tradeCount)} />
         <WalletPerformanceTile
-          label="Longest streak"
-          value={formatNumber(performance.longestStreak)}
-          tone={performance.longestStreak ? 'win' : ''}
-          icon={performance.longestStreak ? Flame : null}
+          label="Longest win streak"
+          value={formatNumber(performance.longestWinStreak)}
+          tone={performance.longestWinStreak ? 'win' : ''}
+          icon={performance.longestWinStreak ? Flame : null}
         />
         <WalletPerformanceTile label="Win rate" value={performance.winRateLabel} tone={performance.winRatePct == null ? '' : 'win'} />
         <div className="wallet-performance-tile">
@@ -7713,7 +7736,7 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     tradeCount,
     winRatePct,
     winRateLabel: winRatePct == null ? '--' : `${trimNumber(winRatePct)}%`,
-    longestStreak: longestWinningStreak(fullResults),
+    longestWinStreak: longestWinningStreak(fullResults),
     recentResults,
     recentMini: recentResults.slice(0, 5),
     historyCount: sourceTrades.length,
@@ -7739,16 +7762,95 @@ function buildWalletResultEntries(trades) {
 
 function getWalletTradeResult(trade) {
   const resolution = getTradeResolutionBlock(trade);
-  const status = normalizeResolutionStatus(resolution);
+  const explicitResult = normalizeWalletResult(
+    resolution?.traderResult,
+    resolution?.result,
+    resolution?.outcomeResult,
+    trade?.traderResult,
+    trade?.result,
+    trade?.outcomeResult,
+    resolution?.status,
+    resolution?.marketStatus
+  );
+  if (explicitResult) return explicitResult;
 
-  if (['resolved_win', 'win', 'won'].includes(status)) return 'W';
-  if (['resolved_loss', 'loss', 'lost'].includes(status)) return 'L';
-
-  const pnl = firstFiniteNumber(resolution?.pnlUsd, trade?.pnlUsd, trade?.profitUsd);
+  const pnl = getWalletTradePnl(trade);
   if (pnl > 0) return 'W';
   if (pnl < 0) return 'L';
 
+  return inferBuyTradeResultFromWinningOutcome(trade, resolution);
+}
+
+function normalizeWalletResult(...values) {
+  for (const value of values) {
+    const token = normalizeStatusToken(value);
+    if (!token) continue;
+    if (['w', 'win', 'won', 'profit', 'profitable', 'resolved_win'].includes(token)) return 'W';
+    if (['l', 'loss', 'lost', 'unprofitable', 'resolved_loss'].includes(token)) return 'L';
+  }
   return null;
+}
+
+function getWalletTradePnl(trade) {
+  const resolution = getTradeResolutionBlock(trade);
+  const explicitPnl = firstFiniteNumber(
+    resolution?.pnlUsd,
+    resolution?.profitUsd,
+    resolution?.netProfitUsd,
+    resolution?.profit,
+    trade?.pnlUsd,
+    trade?.profitUsd,
+    trade?.netProfitUsd,
+    trade?.profit
+  );
+  if (explicitPnl != null) return explicitPnl;
+
+  const payout = firstFiniteNumber(resolution?.payoutUsd, trade?.payoutUsd);
+  const cost = firstFiniteNumber(trade?.usdSize, trade?.sizeUsd);
+  if (trade?.side !== 'SELL' && payout != null && cost != null && isTradeMarketClosed(trade)) {
+    return payout - cost;
+  }
+
+  return null;
+}
+
+function inferBuyTradeResultFromWinningOutcome(trade, resolution) {
+  if (!isTradeMarketClosed(trade) || trade?.side === 'SELL') return null;
+  const winningOutcome = normalizeOutcomeValue(
+    resolution?.winningOutcome ||
+    resolution?.winner ||
+    resolution?.resolvedOutcome ||
+    resolution?.winningToken
+  );
+  const tradeOutcome = normalizeOutcomeValue(trade?.outcome || trade?.outcomeLabel || trade?.tokenOutcome);
+
+  if (!winningOutcome || !tradeOutcome) return null;
+  return winningOutcome === tradeOutcome ? 'W' : 'L';
+}
+
+function normalizeOutcomeValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildWalletProfitSummary(profile, trades) {
+  const sourceTrades = Array.isArray(trades) ? trades : [];
+  const pnlValues = sourceTrades
+    .map((trade) => getWalletTradePnl(trade))
+    .filter((value) => Number.isFinite(value));
+  const value = pnlValues.reduce((total, pnl) => total + pnl, 0);
+  const tradeTimestamps = sourceTrades
+    .map((trade) => Number(trade?.timestamp || 0))
+    .filter((timestamp) => timestamp > 0);
+  const firstTradeAt = tradeTimestamps.length
+    ? Math.min(...tradeTimestamps)
+    : Number(profile?.firstSeen || 0);
+
+  return {
+    value,
+    hasValue: pnlValues.length > 0,
+    pnlTradeCount: pnlValues.length,
+    firstTradeAt,
+  };
 }
 
 function isWalletTradeInWindow(trade, windowId) {
@@ -8249,6 +8351,12 @@ function formatUsdCompact(value) {
   return formatUsdFull(amount);
 }
 
+function formatSignedUsdCompact(value) {
+  const amount = Number(value || 0);
+  const prefix = amount >= 0 ? '+' : '-';
+  return `${prefix}${formatUsdCompact(Math.abs(amount))}`;
+}
+
 function formatSignedUsd(value) {
   const amount = Number(value || 0);
   const prefix = amount > 0 ? '+' : amount < 0 ? '-' : '';
@@ -8289,7 +8397,11 @@ function getTradeResolutionBlock(trade) {
 }
 
 function normalizeResolutionStatus(resolution) {
-  return String(resolution?.status || resolution?.marketStatus || '').trim().toLowerCase();
+  return normalizeStatusToken(resolution?.status || resolution?.marketStatus || '');
+}
+
+function normalizeStatusToken(value) {
+  return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
 }
 
 function isClosedResolutionStatus(status) {

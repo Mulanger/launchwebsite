@@ -3499,8 +3499,14 @@ img {
   gap: 8px;
 }
 
+.wallet-mobile-actions .wallet-profit-badge {
+  flex: 0 1 86px;
+  min-height: 39px;
+}
+
 .wallet-mobile-actions .follow-button.wide {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 39px;
   border-radius: 8px;
   padding: 0 10px;
@@ -3640,6 +3646,7 @@ img {
 .wallet-mobile-charts {
   display: grid;
   gap: 12px;
+  margin-bottom: 12px;
 }
 
 .wallet-profile-back {
@@ -3780,6 +3787,66 @@ img {
 .wallet-rank-badge strong {
   font-size: 18px;
   line-height: 1;
+}
+
+.wallet-profit-badge {
+  min-width: 102px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 9px 12px;
+  border: 1px solid rgba(34, 211, 165, 0.24);
+  border-radius: 8px;
+  color: var(--accent);
+  background: rgba(34, 211, 165, 0.1);
+}
+
+.wallet-profit-badge.loss {
+  border-color: rgba(244, 139, 160, 0.22);
+  color: #f48ba0;
+  background: rgba(244, 139, 160, 0.08);
+}
+
+.wallet-profit-badge.muted {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wallet-profit-badge span,
+.wallet-profit-badge strong {
+  display: block;
+}
+
+.wallet-profit-badge span {
+  margin-bottom: 4px;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+.wallet-profit-badge strong {
+  font-size: 18px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wallet-profit-badge.compact {
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.wallet-profit-badge.compact span {
+  margin-bottom: 3px;
+  font-size: 8px;
+}
+
+.wallet-profit-badge.compact strong {
+  font-size: 13px;
 }
 
 .wallet-window-toggle {
