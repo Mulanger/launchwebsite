@@ -1033,6 +1033,8 @@ function LeaderboardPage({ initialData = null }) {
                   status: 'unavailable',
                   value: null,
                   hasValue: false,
+                  pnlTradeCount: null,
+                  historyTradeCount: null,
                   recentResults: [],
                   recentWinRatePct: null,
                 },
@@ -1070,7 +1072,10 @@ function LeaderboardPage({ initialData = null }) {
         wallet: shortWallet(trader.proxyWallet),
         walletFull: trader.proxyWallet || '',
         volume: formatUsdCompact(trader.volume),
-        trades: formatNumber(trader.tradeCount),
+        trades: sort === 'profit'
+          ? formatLeaderboardProfitTradeCount(trader, profitLoading)
+          : formatNumber(trader.tradeCount),
+        tradesLabel: sort === 'profit' ? 'P/L trades' : 'Trades',
         avgTrade: formatUsdCompact(
           Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0))
         ),
@@ -1488,7 +1493,7 @@ function MobileLeaderboardRow({ row }) {
           }}
         >
           <div style={{ minWidth: 0 }}>
-            <span style={{ color: 'rgba(255,255,255,0.45)' }}>Trades </span>
+            <span style={{ color: 'rgba(255,255,255,0.45)' }}>{row.tradesLabel} </span>
             <span style={{ color: '#fff', fontWeight: 600 }}>{row.trades}</span>
           </div>
           {row.showRecentForm ? (
@@ -6857,6 +6862,7 @@ async function fetchLeaderboardProfitSummaries(wallets, options = {}) {
           value: summary.hasValue ? summary.value : null,
           hasValue: summary.hasValue,
           pnlTradeCount: summary.pnlTradeCount,
+          historyTradeCount: trades.length,
           recentResults: recentForm.results,
           recentWinRatePct: recentForm.winRatePct,
         };
@@ -6866,6 +6872,8 @@ async function fetchLeaderboardProfitSummaries(wallets, options = {}) {
           status: 'unavailable',
           value: null,
           hasValue: false,
+          pnlTradeCount: null,
+          historyTradeCount: null,
           recentResults: [],
           recentWinRatePct: null,
         };
@@ -7766,6 +7774,8 @@ function hydrateLeaderboardProfit(item, profitEntries) {
       allTimeProfitUsd: null,
       allTimeProfitKnown: false,
       allTimeProfitStatus: entry?.status || 'pending',
+      allTimePnlTradeCount: Number.isFinite(entry?.pnlTradeCount) ? entry.pnlTradeCount : null,
+      allTimeHistoryTradeCount: Number.isFinite(entry?.historyTradeCount) ? entry.historyTradeCount : null,
       recentFormResults: Array.isArray(entry?.recentResults) ? entry.recentResults : [],
       recentFormWinRatePct: Number.isFinite(entry?.recentWinRatePct) ? entry.recentWinRatePct : null,
     };
@@ -7776,6 +7786,8 @@ function hydrateLeaderboardProfit(item, profitEntries) {
     allTimeProfitUsd: entry.value,
     allTimeProfitKnown: true,
     allTimeProfitStatus: entry.status || 'ready',
+    allTimePnlTradeCount: Number.isFinite(entry.pnlTradeCount) ? entry.pnlTradeCount : null,
+    allTimeHistoryTradeCount: Number.isFinite(entry.historyTradeCount) ? entry.historyTradeCount : null,
     recentFormResults: Array.isArray(entry.recentResults) ? entry.recentResults : [],
     recentFormWinRatePct: Number.isFinite(entry.recentWinRatePct) ? entry.recentWinRatePct : null,
   };
@@ -8671,6 +8683,12 @@ function getLeaderboardProfitTone(trader) {
 
 function formatLeaderboardRecentWinRate(trader) {
   return Number.isFinite(trader?.recentFormWinRatePct) ? `${trimNumber(trader.recentFormWinRatePct)}%` : '--';
+}
+
+function formatLeaderboardProfitTradeCount(trader, loading = false) {
+  if (Number.isFinite(trader?.allTimePnlTradeCount)) return formatNumber(trader.allTimePnlTradeCount);
+  if (Number.isFinite(trader?.allTimeHistoryTradeCount)) return formatNumber(trader.allTimeHistoryTradeCount);
+  return loading ? '...' : '--';
 }
 
 function formatSignedUsd(value) {
