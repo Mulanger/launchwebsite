@@ -96,6 +96,7 @@ const lockedLeaderboardWindowIds = new Set(
 const leaderboardSortOptions = [
   { id: 'rank', label: 'Volume' },
   { id: 'trades', label: 'Trade count' },
+  { id: 'profit', label: 'Profit' },
 ];
 
 const legalLinks = [
@@ -895,8 +896,15 @@ function LeaderboardPage({ initialData = null }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(initialData?.error || '');
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [leaderboardProfits, setLeaderboardProfits] = useState({});
+  const [profitLoading, setProfitLoading] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
+  const loadedLeaderboardWallets = useMemo(
+    () => Array.from(new Set(items.map((item) => normalizeWalletKey(item.proxyWallet)).filter(Boolean))),
+    [items]
+  );
+  const loadedLeaderboardWalletSignature = loadedLeaderboardWallets.join('|');
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1020px)');
@@ -996,13 +1004,57 @@ function LeaderboardPage({ initialData = null }) {
     };
   }, [windowId, todaySession.dateKey]);
 
+  useEffect(() => {
+    if (sort !== 'profit') {
+      setProfitLoading(false);
+      return undefined;
+    }
+
+    const walletsToFetch = loadedLeaderboardWallets.filter((wallet) => !leaderboardProfits[wallet]);
+    if (!walletsToFetch.length) {
+      setProfitLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setProfitLoading(true);
+
+    fetchLeaderboardProfitSummaries(walletsToFetch, { signal: controller.signal })
+      .then((summaries) => {
+        if (controller.signal.aborted) return;
+        setLeaderboardProfits((previous) => ({ ...previous, ...summaries }));
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          setLeaderboardProfits((previous) => {
+            const failed = walletsToFetch.reduce(
+              (entries, wallet) => ({
+                ...entries,
+                [wallet]: previous[wallet] || { status: 'unavailable', value: null, hasValue: false },
+              }),
+              {}
+            );
+            return { ...previous, ...failed };
+          });
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setProfitLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [sort, loadedLeaderboardWalletSignature, leaderboardProfits]);
+
   const visibleItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = query
       ? items.filter((item) => leaderboardSearchableText(item).includes(query))
       : [...items];
-    return sortLeaderboardItems(filtered, sort);
-  }, [items, search, sort]);
+    const withProfit = filtered.map((item) => hydrateLeaderboardProfit(item, leaderboardProfits));
+    return sortLeaderboardItems(withProfit, sort);
+  }, [items, search, sort, leaderboardProfits]);
 
   const mobileRows = useMemo(
     () =>
@@ -1017,10 +1069,14 @@ function LeaderboardPage({ initialData = null }) {
         avgTrade: formatUsdCompact(
           Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0))
         ),
+        profit: formatLeaderboardProfit(trader),
+        profitTone: getLeaderboardProfitTone(trader),
+        showProfit: sort === 'profit' || Boolean(trader.allTimeProfitKnown),
+        profitLoading: sort === 'profit' && !trader.allTimeProfitKnown && profitLoading,
         avatarColor: avatarGradient(trader.proxyWallet || `${index}`),
         href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
       })),
-    [visibleItems]
+    [visibleItems, sort, profitLoading]
   );
 
   const loadMore = useCallback(async () => {
@@ -1055,6 +1111,7 @@ function LeaderboardPage({ initialData = null }) {
         onWindowChange={handleWindowChange}
         onSortChange={setSort}
         loading={loading}
+        profitLoading={profitLoading}
         error={error}
         onRefresh={() => setRefreshNonce((value) => value + 1)}
         canLoadMore={Boolean(cursor)}
@@ -1083,6 +1140,7 @@ function LeaderboardPage({ initialData = null }) {
           onWindowChange={handleWindowChange}
           onSortChange={setSort}
           loading={loading}
+          profitLoading={profitLoading}
           error={error}
           onRefresh={() => setRefreshNonce((value) => value + 1)}
           canLoadMore={Boolean(cursor)}
@@ -1104,6 +1162,7 @@ function MobileLeaderboardScreen({
   onWindowChange,
   onSortChange,
   loading,
+  profitLoading,
   error,
   onRefresh,
   canLoadMore,
@@ -1186,6 +1245,18 @@ function MobileLeaderboardScreen({
               />
             </div>
           </div>
+          {sortValue === 'profit' && profitLoading ? (
+            <div
+              style={{
+                color: 'rgba(255,255,255,0.45)',
+                fontSize: 10.5,
+                marginTop: 7,
+                textAlign: 'right',
+              }}
+            >
+              Calculating all-time profit...
+            </div>
+          ) : null}
         </div>
 
         {loading ? (
@@ -1273,6 +1344,11 @@ function mobileLeaderboardTheme(rank) {
 function MobileLeaderboardRow({ row }) {
   const [copied, setCopied] = useState(false);
   const theme = mobileLeaderboardTheme(row.rank);
+  const profitColor = row.profitTone === 'loss'
+    ? '#ff6b8a'
+    : row.profitTone === 'muted'
+      ? 'rgba(255,255,255,0.5)'
+      : '#22d3a5';
 
   const copyWallet = async (event) => {
     event.preventDefault();
@@ -1386,15 +1462,32 @@ function MobileLeaderboardRow({ row }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 10.5 }}>
-          <div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: row.showProfit ? 'repeat(3, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))',
+            gap: 8,
+            paddingTop: 8,
+            borderTop: '1px solid rgba(255,255,255,0.05)',
+            fontSize: 10.5,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
             <span style={{ color: 'rgba(255,255,255,0.45)' }}>Trades </span>
             <span style={{ color: '#fff', fontWeight: 600 }}>{row.trades}</span>
           </div>
-          <div style={{ marginLeft: 'auto' }}>
+          <div style={{ minWidth: 0, textAlign: row.showProfit ? 'center' : 'right' }}>
             <span style={{ color: 'rgba(255,255,255,0.45)' }}>Avg </span>
             <span style={{ color: '#22d3a5', fontWeight: 600 }}>{row.avgTrade}</span>
           </div>
+          {row.showProfit ? (
+            <div style={{ minWidth: 0, textAlign: 'right' }}>
+              <span style={{ color: 'rgba(255,255,255,0.45)' }}>Profit </span>
+              <span style={{ color: profitColor, fontWeight: 600 }}>
+                {row.profitLoading ? '...' : row.profit}
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -6691,6 +6784,38 @@ async function fetchTraderHistory(wallet, options = {}) {
   return sortWhales(items, 'recent');
 }
 
+async function fetchLeaderboardProfitSummaries(wallets, options = {}) {
+  const { signal, concurrency = 4 } = options;
+  const queue = Array.from(new Set(wallets.map(normalizeWalletKey).filter(Boolean)));
+  const summaries = {};
+  let index = 0;
+
+  async function worker() {
+    while (index < queue.length) {
+      if (signal?.aborted) return;
+      const wallet = queue[index];
+      index += 1;
+
+      try {
+        const trades = await fetchTraderHistory(wallet, { signal });
+        const summary = buildWalletProfitSummary(null, trades);
+        summaries[wallet] = {
+          status: summary.hasValue ? 'ready' : 'empty',
+          value: summary.hasValue ? summary.value : null,
+          hasValue: summary.hasValue,
+          pnlTradeCount: summary.pnlTradeCount,
+        };
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        summaries[wallet] = { status: 'unavailable', value: null, hasValue: false };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, () => worker()));
+  return summaries;
+}
+
 async function fetchJson(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -7566,6 +7691,31 @@ function sortWhales(items, sort) {
   return sorted.sort((a, b) => b.timestamp - a.timestamp);
 }
 
+function normalizeWalletKey(wallet) {
+  if (!wallet) return '';
+  return String(wallet).trim().toLowerCase();
+}
+
+function hydrateLeaderboardProfit(item, profitEntries) {
+  const wallet = normalizeWalletKey(item.proxyWallet);
+  const entry = wallet ? profitEntries[wallet] : null;
+  if (!entry || !Number.isFinite(entry.value)) {
+    return {
+      ...item,
+      allTimeProfitUsd: null,
+      allTimeProfitKnown: false,
+      allTimeProfitStatus: entry?.status || 'pending',
+    };
+  }
+
+  return {
+    ...item,
+    allTimeProfitUsd: entry.value,
+    allTimeProfitKnown: true,
+    allTimeProfitStatus: entry.status || 'ready',
+  };
+}
+
 function sortLeaderboardItems(items, sort) {
   const sorted = [...items];
   if (sort === 'volume' || sort === 'rank') {
@@ -7577,6 +7727,18 @@ function sortLeaderboardItems(items, sort) {
   }
   if (sort === 'trades') {
     return sorted.sort((a, b) => Number(b.tradeCount || 0) - Number(a.tradeCount || 0));
+  }
+  if (sort === 'profit') {
+    return sorted.sort((a, b) => {
+      const aHasProfit = Boolean(a.allTimeProfitKnown);
+      const bHasProfit = Boolean(b.allTimeProfitKnown);
+      if (aHasProfit !== bHasProfit) return aHasProfit ? -1 : 1;
+      if (aHasProfit && bHasProfit) {
+        const profitDiff = Number(b.allTimeProfitUsd || 0) - Number(a.allTimeProfitUsd || 0);
+        if (profitDiff !== 0) return profitDiff;
+      }
+      return Number(a.rank || 0) - Number(b.rank || 0);
+    });
   }
   return sorted.sort((a, b) => Number(b.volume || 0) - Number(a.volume || 0));
 }
@@ -8418,6 +8580,15 @@ function formatSignedUsdCompact(value) {
   const amount = Number(value || 0);
   const prefix = amount >= 0 ? '+' : '-';
   return `${prefix}${formatUsdCompact(Math.abs(amount))}`;
+}
+
+function formatLeaderboardProfit(trader) {
+  return trader?.allTimeProfitKnown ? formatSignedUsdCompact(trader.allTimeProfitUsd) : '--';
+}
+
+function getLeaderboardProfitTone(trader) {
+  if (!trader?.allTimeProfitKnown) return 'muted';
+  return Number(trader.allTimeProfitUsd || 0) < 0 ? 'loss' : 'profit';
 }
 
 function formatSignedUsd(value) {

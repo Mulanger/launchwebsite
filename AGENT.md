@@ -21,6 +21,7 @@ Recent important work:
 - Feed sort is limited to `Most recent` and `Largest size`.
 - Market images are hydrated for live websocket trades so new rows do not remain as empty fallback squares.
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
+- Leaderboard sort now includes `Profit`. It derives all-time realized wallet P/L from fetched wallet whale history, caches it by wallet, and keeps that profit calculation independent of the active `1D`/`7D`/`30D`/`1Y` leaderboard window.
 - Trader profile headers show a short wallet title such as `0xa2cd..`, full address underneath, and a copy button.
 - Trader profile daily volume chart is a bar chart so one-day data does not render as an ugly triangle.
 - Trader profile desktop/mobile design was rebuilt from the supplied mockups. Desktop uses the dashboard profile surface; mobile uses a dedicated compact profile view with top bar, identity card, performance card, window toggle, stat cards, charts, and bottom nav parity.
@@ -254,7 +255,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - `TradeRow`: visible feed row.
 - `MarketIcon` and `getMarketImageUrls`: market image rendering.
 - `mergeWhales`, `upsertWhale`, `mergeWhaleTrade`, `enrichWhaleWithExistingMarketMedia`, `hydrateWhaleTrade`: live/REST merge and market image hydration.
-- `LeaderboardPage`, `LeaderboardRow`, `buildLeaderboardStats`: leaderboard UI and data summary.
+- `LeaderboardPage`, `LeaderboardRow`, `buildLeaderboardStats`, `fetchLeaderboardProfitSummaries`: leaderboard UI, data summary, and all-time profit sort enrichment.
 - `TraderProfilePage`, `MobileWalletProfileView`, `WalletProfileRedesign`, `WalletProfilePerformanceBlock`, `WalletRecentTradesTable`, `buildWalletPerformance`, `buildWalletPositionResultEntries`, `buildWalletProfitSummary`, `fetchTraderHistory`: trader profile loading, desktop/mobile rendering, history-backed performance metrics, position-based longest win streak, all-time profit badge, recent result chips, and recent trade pagination.
 - `FollowWalletButton`, follow helpers, auth helpers: follow/unfollow and anonymous auth.
 - `FeedSidebar` / `NavItem`: left navigation, disabled profile item (`Coming soon`) behavior, and brand lockup text.
@@ -311,6 +312,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - "Today" means the date in `America/New_York`, resetting at New York midnight. Use the shared helpers in `src/App.jsx` (`getCurrentNewYorkSession`, `filterNewYorkSession`, `buildTodayLeaderboardFromTrades`) rather than adding new date logic.
 - Keep trade intent wording as provided by the backend. Do not reinterpret BUY/SELL in the website; intent classification belongs upstream.
 - The public web leaderboard is presented as `1D` and is today-scoped in the frontend. Trader profile stats still use the API's `7d` stats until the backend exposes profile stats for today. 30D and 1Y are visible but treated as future/locked UI.
+- Leaderboard `Profit` sort must use all-time realized P/L from wallet history, not the selected window's volume/trade aggregate. The selected window can change which API leaderboard rows are loaded until the backend exposes a native all-time profit leaderboard, but it must not change the P/L value used for a wallet.
 - Trader profile performance window toggles must not change full-history fields: all-time profit, longest win streak, and recent W/L chips are based on full fetched wallet history. Longest win streak is computed across grouped wallet positions, not raw fills. The W/L chip order is newest on the left, older to the right.
 - Trader profile recent trades should keep 10 rows per page unless the user asks for a different density. Pagination is client-side over the already-loaded merged wallet history, not backend numbered pages.
 - Do not add search bars back to the feed or leaderboard unless explicitly asked.
@@ -363,13 +365,14 @@ Before pushing:
 2. Run `npm run build` when touching shared React/Vite code, shared styles, dependencies, or anything that should keep the legacy fallback working.
 3. Open `/` and verify feed rows render market images, filters work, and no console errors appear.
 4. Open `/leaderboard` and verify the table has no row-level `Whales` column and no `All markets` signal label.
-5. Open a trader profile and verify short wallet title, full address copy button, all-time Profit badge, position-based longest win streak, profile chart, follow button, recent trades on desktop/mobile, 10-row recent-trades pagination, and newest-left W/L chip order.
-6. Open a trade detail and verify market card, trader card, follow button, and back behavior.
-7. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
-8. If changing metadata/SEO copy, verify `index.html`, `src/App.jsx`, `src/lib/seo.js`, and Next route metadata are aligned and contain no malformed encoding characters.
-9. For SEO route changes, verify source HTML and JSON-LD for affected native pages such as `/market/[slug]`, `/trader/[wallet]`, `/qa`, `/qa/[slug]`, `/compare`, and `/compare/polymarket-vs-kalshi`.
-10. Verify `/sitemap.xml` plus the dedicated `/sitemap-qa.xml`, `/sitemap-traders.xml`, and `/sitemap-compare.xml` routes when changing those page families.
-11. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
+5. On `/leaderboard`, choose `Sort: Profit` and verify rows show/sort by signed all-time profit; switching `1D`/`7D` must not recompute a wallet's profit from that window.
+6. Open a trader profile and verify short wallet title, full address copy button, all-time Profit badge, position-based longest win streak, profile chart, follow button, recent trades on desktop/mobile, 10-row recent-trades pagination, and newest-left W/L chip order.
+7. Open a trade detail and verify market card, trader card, follow button, and back behavior.
+8. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
+9. If changing metadata/SEO copy, verify `index.html`, `src/App.jsx`, `src/lib/seo.js`, and Next route metadata are aligned and contain no malformed encoding characters.
+10. For SEO route changes, verify source HTML and JSON-LD for affected native pages such as `/market/[slug]`, `/trader/[wallet]`, `/qa`, `/qa/[slug]`, `/compare`, and `/compare/polymarket-vs-kalshi`.
+11. Verify `/sitemap.xml` plus the dedicated `/sitemap-qa.xml`, `/sitemap-traders.xml`, and `/sitemap-compare.xml` routes when changing those page families.
+12. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
 
 ## Trade Detail Endpoint
 
