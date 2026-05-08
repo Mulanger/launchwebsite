@@ -10,9 +10,7 @@ import {
   Globe2,
   Landmark,
   Scale,
-  ShieldCheck,
   Users,
-  WalletCards,
 } from 'lucide-react';
 import JsonLd from '../../_components/JsonLd.jsx';
 import { buildNextMetadata } from '../../../src/lib/next-metadata.js';
@@ -66,7 +64,10 @@ const platformStats = [
   {
     name: 'Polymarket',
     label: 'Crypto-native prediction market',
-    icon: WalletCards,
+    logo: {
+      src: '/assets/compare/polymarket-icon-blue.svg',
+      alt: 'Polymarket logo',
+    },
     tone: 'poly',
     facts: [
       ['Funding', 'USDC / crypto rails'],
@@ -78,7 +79,10 @@ const platformStats = [
   {
     name: 'Kalshi',
     label: 'US regulated event exchange',
-    icon: ShieldCheck,
+    logo: {
+      src: '/assets/compare/kalshi-logo.png',
+      alt: 'Kalshi logo',
+    },
     tone: 'kalshi',
     facts: [
       ['Funding', 'Bank transfer / dollars'],
@@ -147,13 +151,11 @@ function CompareSidebar() {
 }
 
 function PlatformPanel({ platform }) {
-  const Icon = platform.icon;
-
   return (
     <section className={`compare-platform ${platform.tone}`}>
       <div className="compare-platform-head">
         <span className="compare-platform-logo">
-          <Icon size={22} aria-hidden="true" />
+          <img src={platform.logo.src} alt={platform.logo.alt} />
         </span>
         <span>
           <strong>{platform.name}</strong>

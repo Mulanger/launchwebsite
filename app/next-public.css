@@ -400,19 +400,40 @@
 }
 
 .compare-platform-logo {
-  width: 44px;
-  height: 44px;
+  width: 54px;
+  height: 54px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: #06110e;
-  background: #5ee7ad;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .compare-platform.poly .compare-platform-logo {
-  color: #fff;
   background: #4079ff;
+}
+
+.compare-platform.kalshi .compare-platform-logo {
+  width: 112px;
+  background: rgba(18, 194, 142, 0.12);
+}
+
+.compare-platform-logo img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.compare-platform.poly .compare-platform-logo img {
+  width: 100%;
+  height: 100%;
+}
+
+.compare-platform.kalshi .compare-platform-logo img {
+  width: 92px;
+  height: auto;
 }
 
 .compare-platform-head strong,
