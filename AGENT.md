@@ -23,6 +23,13 @@ Recent important work:
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
 - Trader profile headers show a short wallet title such as `0xa2cd..`, full address underneath, and a copy button.
 - Trader profile daily volume chart is a bar chart so one-day data does not render as an ugly triangle.
+- Trader profile desktop/mobile design was rebuilt from the supplied mockups. Desktop uses the dashboard profile surface; mobile uses a dedicated compact profile view with top bar, identity card, performance card, window toggle, stat cards, charts, and bottom nav parity.
+- Trader profile performance now fetches wallet history through `/v1/whales?limit=100&minUsd=10000&traderWallet=<wallet>&cursor=...` and merges it with `/v1/traders/:wallet` recent whales. Win/loss is inferred from backend resolution status and `pnlUsd`/profit fields when available.
+- Trader profile headers now include an all-time `Profit` badge next to rank/follow. It sums realized wallet P/L from fetched history and must not change when the `1D`, `7D`, `30D`, or `1Y` window toggle changes.
+- Trader profile time windows (`1D`, `7D`, `30D`, `1Y`) only affect windowed trade count, win rate, and volume stats. Longest win streak and recent W/L chips intentionally use full fetched history.
+- Trader profile longest win streak is position-based, not fill-based: group resolved trades by market condition/slug + outcome + side before counting consecutive winning positions, so repeated buys on one market do not inflate the streak.
+- Trader profile W/L result chips are displayed newest first on the left, then older results to the right. The desktop large strip, desktop mini "Recent" tile, and mobile cells should all follow this order.
+- Trader profile recent whale trades are shown on desktop and mobile, paginated client-side at 10 rows per page from the merged wallet history. The table shows compact numbered controls only when more than 10 loaded trades exist.
 - Alerts now have a dedicated mobile screen path with bottom nav parity (`Feed`, `Leaders`, `Following`, `Alerts`) instead of relying on desktop layout classes.
 - Alerts channel cards (`Web push`, `Following mode`, `Minimum size`) stay in one row on mobile instead of stacking.
 - Follow/unfollow buttons in the following list no longer trigger row navigation refresh; row navigation ignores nested interactive controls.
@@ -144,9 +151,10 @@ Production server:
 Public data:
 
 - `GET /v1/whales?limit=100&minUsd=...&maxUsd=...&side=...&cursor=...`
+- `GET /v1/whales?limit=100&minUsd=10000&traderWallet=...&cursor=...`
 - `GET /v1/whales/:tradeId`
 - `GET /v1/whales/:tradeId/detail`
-- `GET /v1/leaderboard?window=7d&limit=50&cursor=...`
+- `GET /v1/leaderboard?window=1d|7d|30d|365d&limit=50&cursor=...`
 - `GET /v1/traders/:wallet`
 - `WS /v1/whales/stream`
 
@@ -223,7 +231,7 @@ Market pages are not hybrid legacy wrappers. `/market/[slug]` is a native Next s
 - `MarketIcon` and `getMarketImageUrls`: market image rendering.
 - `mergeWhales`, `upsertWhale`, `mergeWhaleTrade`, `enrichWhaleWithExistingMarketMedia`, `hydrateWhaleTrade`: live/REST merge and market image hydration.
 - `LeaderboardPage`, `LeaderboardRow`, `buildLeaderboardStats`: leaderboard UI and data summary.
-- `TraderProfilePage`, `WalletAddressLine`, `DailyVolumeChart`: trader profile header, copy action, and profile chart.
+- `TraderProfilePage`, `MobileWalletProfileView`, `WalletProfileRedesign`, `WalletProfilePerformanceBlock`, `WalletRecentTradesTable`, `buildWalletPerformance`, `buildWalletPositionResultEntries`, `buildWalletProfitSummary`, `fetchTraderHistory`: trader profile loading, desktop/mobile rendering, history-backed performance metrics, position-based longest win streak, all-time profit badge, recent result chips, and recent trade pagination.
 - `FollowWalletButton`, follow helpers, auth helpers: follow/unfollow and anonymous auth.
 - `FeedSidebar` / `NavItem`: left navigation, disabled profile item (`Coming soon`) behavior, and brand lockup text.
 - `AlertsPage`: desktop + dedicated mobile render path with bottom nav support.
@@ -275,6 +283,8 @@ Market pages are not hybrid legacy wrappers. `/market/[slug]` is a native Next s
 - "Today" means the date in `America/New_York`, resetting at New York midnight. Use the shared helpers in `src/App.jsx` (`getCurrentNewYorkSession`, `filterNewYorkSession`, `buildTodayLeaderboardFromTrades`) rather than adding new date logic.
 - Keep trade intent wording as provided by the backend. Do not reinterpret BUY/SELL in the website; intent classification belongs upstream.
 - The public web leaderboard is presented as `1D` and is today-scoped in the frontend. Trader profile stats still use the API's `7d` stats until the backend exposes profile stats for today. 30D and 1Y are visible but treated as future/locked UI.
+- Trader profile performance window toggles must not change full-history fields: all-time profit, longest win streak, and recent W/L chips are based on full fetched wallet history. Longest win streak is computed across grouped wallet positions, not raw fills. The W/L chip order is newest on the left, older to the right.
+- Trader profile recent trades should keep 10 rows per page unless the user asks for a different density. Pagination is client-side over the already-loaded merged wallet history, not backend numbered pages.
 - Do not add search bars back to the feed or leaderboard unless explicitly asked.
 - Keep sidebar `Profile` nav item disabled unless specifically requested to reopen it.
 
@@ -325,7 +335,7 @@ Before pushing:
 2. Run `npm run build` when touching shared React/Vite code, shared styles, dependencies, or anything that should keep the legacy fallback working.
 3. Open `/` and verify feed rows render market images, filters work, and no console errors appear.
 4. Open `/leaderboard` and verify the table has no row-level `Whales` column and no `All markets` signal label.
-5. Open a trader profile and verify short wallet title, full address copy button, profile chart, follow button, and recent trades.
+5. Open a trader profile and verify short wallet title, full address copy button, all-time Profit badge, position-based longest win streak, profile chart, follow button, recent trades on desktop/mobile, 10-row recent-trades pagination, and newest-left W/L chip order.
 6. Open a trade detail and verify market card, trader card, follow button, and back behavior.
 7. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
 8. If changing metadata/SEO copy, verify `index.html`, `src/App.jsx`, `src/lib/seo.js`, and Next route metadata are aligned and contain no malformed encoding characters.
@@ -360,6 +370,17 @@ Cutover verification completed on 2026-05-06:
 - Live pages no longer serve the old Vite `<div id="root"></div>` shell.
 - Live `/api/v1/leaderboard?window=1d&limit=1` returns data through the production domain.
 - `robots.txt` and `sitemap.xml` return 200.
+
+SEO/domain verification on 2026-05-07:
+
+- Search Console screenshot showed `Page is indexed`, crawl allowed, page fetch successful, and indexing allowed. The sitemap discovery field showed `Temporary processing error`, which is a Google Search Console reporting state, not proof that the live sitemap is broken.
+- Export `D:\https___www.polywhaletrades.com_-Coverage-Valid-2026-05-07.zip` contained valid coverage rows only for `/`, `/privacy`, and `/delete-data`.
+- Live `https://www.polywhaletrades.com/sitemap.xml` returned 200 valid XML with 674 URLs at check time: 250 market URLs, 215 Q&A URLs, and 203 trader URLs. Live `sitemap-qa.xml` and `sitemap-traders.xml` also returned 200 valid XML.
+- Live `robots.txt` lists `sitemap.xml`, `sitemap-qa.xml`, and `sitemap-traders.xml`.
+- `www.polywhaletrades.com` is the canonical production host and points to Railway through GoDaddy DNS: `CNAME www -> 2m0bulvr.up.railway.app`.
+- The root/apex `polywhaletrades.com` is currently handled by GoDaddy forwarding, not Railway. GoDaddy created locked A records `@ -> 15.197.225.128` and `@ -> 3.33.251.168`, plus a permanent forwarding rule to `https://www.polywhaletrades.com`.
+- At check time, `http://polywhaletrades.com/` redirected to `https://www.polywhaletrades.com/`, but `https://polywhaletrades.com/` failed during TLS before a redirect. That means the GoDaddy HTTPS forwarding certificate is stuck or not provisioned. Railway cannot fix that request path because it never reaches Railway.
+- GoDaddy DNS does not accept Railway's `CNAME @ -> <railway>.up.railway.app` apex record. While using GoDaddy forwarding, keep only `www.polywhaletrades.com` as the Railway custom domain. If apex HTTPS forwarding remains broken, ask GoDaddy to re-provision SSL for HTTPS forwarding on `polywhaletrades.com`, or move DNS to a provider with apex CNAME flattening/ALIAS support such as Cloudflare.
 
 ## Related System Context
 
