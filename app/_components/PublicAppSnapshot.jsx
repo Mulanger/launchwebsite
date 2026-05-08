@@ -156,6 +156,7 @@ function PublicSidebar({ activePage = 'feed' }) {
   const links = [
     { label: 'Whale Feed', href: '/', badge: 'Live', active: activePage === 'feed' },
     { label: 'Leaderboard', href: '/leaderboard', badge: 'Rank', active: activePage === 'leaderboard' },
+    { label: 'Compare', href: '/compare', badge: 'SEO', active: activePage === 'compare' },
     { label: 'Following', href: '/profile/following', badge: 'List', active: false },
     { label: 'Alerts', href: '/alerts', badge: 'Web', active: false },
     { label: 'Profile', href: '/profile', badge: 'Soon', active: false, disabled: true },
@@ -180,14 +181,14 @@ function PublicSidebar({ activePage = 'feed' }) {
           </Link>
         ))}
         <span className="next-app-nav-label">Discover</span>
-        {links.slice(1, 3).map((item) => (
+        {links.slice(1, 4).map((item) => (
           <Link className={`next-app-nav-item ${item.active ? 'active' : ''}`} href={item.href} key={item.label}>
             <span>{item.label}</span>
             <small>{item.badge}</small>
           </Link>
         ))}
         <span className="next-app-nav-label">Account</span>
-        {links.slice(3).map((item) => (
+        {links.slice(4).map((item) => (
           <Link className={`next-app-nav-item ${item.disabled ? 'disabled' : ''}`} href={item.disabled ? '#' : item.href} key={item.label}>
             <span>{item.label}</span>
             <small>{item.badge}</small>
@@ -196,6 +197,7 @@ function PublicSidebar({ activePage = 'feed' }) {
       </nav>
 
       <div className="next-app-sidebar-links">
+        <Link href="/compare">Compare</Link>
         <Link href="/qa">Q&A</Link>
         <Link href="/about">About</Link>
         <Link href="/privacy">Privacy</Link>

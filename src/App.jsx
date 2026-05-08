@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Scale,
   ShieldCheck,
   SlidersHorizontal,
   Target,
@@ -3745,6 +3746,13 @@ function FeedSidebar({ activePage, liveState }) {
       active: activePage === 'leaderboard',
     },
     {
+      label: 'Compare',
+      href: '/compare',
+      icon: Scale,
+      badge: 'SEO',
+      active: activePage === 'compare',
+    },
+    {
       label: 'Following',
       href: '/profile/following',
       icon: Users,
@@ -3794,17 +3802,18 @@ function FeedSidebar({ activePage, liveState }) {
         ))}
 
         <div className="nav-label">Discover</div>
-        {navItems.slice(1, 3).map((item) => (
+        {navItems.slice(1, 4).map((item) => (
           <NavItem key={item.label} {...item} />
         ))}
 
         <div className="nav-label">Account</div>
-        {navItems.slice(3).map((item) => (
+        {navItems.slice(4).map((item) => (
           <NavItem key={item.label} {...item} />
         ))}
       </nav>
 
       <div className="sidebar-links">
+        <a href="/compare">Compare</a>
         <a href="/qa">Q&A</a>
         <a href="/about">About</a>
         <a href="/privacy">Privacy</a>

@@ -48,6 +48,15 @@ export const seoByPath = {
     path: '/qa',
     robots: 'index,follow,max-image-preview:large',
   },
+  '/compare': {
+    title: 'Prediction Market Comparisons | Polymarket, Kalshi & More | Polywhale',
+    description:
+      'Compare prediction markets by fees, regulation, market coverage, funding methods, liquidity signals, and trader workflows.',
+    keywords:
+      'prediction market comparisons, Polymarket vs Kalshi, Kalshi alternatives, Polymarket alternatives, prediction market fees',
+    path: '/compare',
+    robots: 'index,follow,max-image-preview:large',
+  },
   '/privacy': {
     title: 'Privacy Policy | Polywhale',
     description: 'Polywhale privacy policy for live Polymarket whale monitoring, alerts, follows, and anonymous app sessions.',

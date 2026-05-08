@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, BarChart3, Bell, Users } from 'lucide-react';
+import { Activity, BarChart3, Bell, Scale, Users } from 'lucide-react';
 import { sourceLabel } from '../../src/lib/qna.js';
 import QaWhaleRailClient from './QaWhaleRailClient.jsx';
 
@@ -34,6 +34,7 @@ function QaSidebar() {
 
         <div className="nav-label">Discover</div>
         <QaNavItem href="/leaderboard" icon={BarChart3} label="Leaderboard" badge="Rank" />
+        <QaNavItem href="/compare" icon={Scale} label="Compare" badge="SEO" />
         <QaNavItem href="/profile/following" icon={Users} label="Following" badge="List" />
 
         <div className="nav-label">Account</div>
@@ -41,6 +42,7 @@ function QaSidebar() {
       </nav>
 
       <div className="sidebar-links">
+        <Link href="/compare">Compare</Link>
         <Link href="/qa" aria-current="page">
           Q&A
         </Link>
