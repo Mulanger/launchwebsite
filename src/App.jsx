@@ -1029,7 +1029,13 @@ function LeaderboardPage({ initialData = null }) {
             const failed = walletsToFetch.reduce(
               (entries, wallet) => ({
                 ...entries,
-                [wallet]: previous[wallet] || { status: 'unavailable', value: null, hasValue: false },
+                [wallet]: previous[wallet] || {
+                  status: 'unavailable',
+                  value: null,
+                  hasValue: false,
+                  recentResults: [],
+                  recentWinRatePct: null,
+                },
               }),
               {}
             );
@@ -1068,10 +1074,13 @@ function LeaderboardPage({ initialData = null }) {
         avgTrade: formatUsdCompact(
           Number(trader.volume || 0) / Math.max(1, Number(trader.tradeCount || 0))
         ),
-        profit: formatLeaderboardProfit(trader),
-        profitTone: getLeaderboardProfitTone(trader),
-        showProfit: sort === 'profit' || Boolean(trader.allTimeProfitKnown),
+        mainMetric: sort === 'profit' ? formatLeaderboardProfit(trader) : formatUsdCompact(trader.volume),
+        mainMetricLabel: sort === 'profit' ? 'PROFIT' : 'VOLUME',
+        mainMetricTone: sort === 'profit' ? getLeaderboardProfitTone(trader) : 'profit',
         profitLoading: sort === 'profit' && !trader.allTimeProfitKnown && profitLoading,
+        showRecentForm: sort === 'profit',
+        recentResults: Array.isArray(trader.recentFormResults) ? trader.recentFormResults : [],
+        recentWinRate: formatLeaderboardRecentWinRate(trader),
         avatarColor: avatarGradient(trader.proxyWallet || `${index}`),
         href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
       })),
@@ -1343,11 +1352,16 @@ function mobileLeaderboardTheme(rank) {
 function MobileLeaderboardRow({ row }) {
   const [copied, setCopied] = useState(false);
   const theme = mobileLeaderboardTheme(row.rank);
-  const profitColor = row.profitTone === 'loss'
+  const metricColor = row.mainMetricTone === 'loss'
     ? '#ff6b8a'
-    : row.profitTone === 'muted'
+    : row.mainMetricTone === 'muted'
       ? 'rgba(255,255,255,0.5)'
       : '#22d3a5';
+  const recentWinRateColor = row.recentWinRate === '--'
+    ? 'rgba(255,255,255,0.45)'
+    : row.recentWinRate === '0%'
+      ? '#ff6b8a'
+      : '#62e7b0';
 
   const copyWallet = async (event) => {
     event.preventDefault();
@@ -1456,15 +1470,17 @@ function MobileLeaderboardRow({ row }) {
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontSize: 15, color: '#22d3a5', fontWeight: 600, lineHeight: 1 }}>{row.volume}</div>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>VOLUME</div>
+            <div style={{ fontSize: 15, color: metricColor, fontWeight: 600, lineHeight: 1 }}>
+              {row.profitLoading ? '...' : row.mainMetric}
+            </div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{row.mainMetricLabel}</div>
           </div>
         </div>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: row.showProfit ? 'repeat(3, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))',
+            gridTemplateColumns: row.showRecentForm ? 'auto minmax(0, 1fr)' : 'repeat(2, minmax(0, 1fr))',
             gap: 8,
             paddingTop: 8,
             borderTop: '1px solid rgba(255,255,255,0.05)',
@@ -1475,18 +1491,27 @@ function MobileLeaderboardRow({ row }) {
             <span style={{ color: 'rgba(255,255,255,0.45)' }}>Trades </span>
             <span style={{ color: '#fff', fontWeight: 600 }}>{row.trades}</span>
           </div>
-          <div style={{ minWidth: 0, textAlign: row.showProfit ? 'center' : 'right' }}>
-            <span style={{ color: 'rgba(255,255,255,0.45)' }}>Avg </span>
-            <span style={{ color: '#22d3a5', fontWeight: 600 }}>{row.avgTrade}</span>
-          </div>
-          {row.showProfit ? (
-            <div style={{ minWidth: 0, textAlign: 'right' }}>
-              <span style={{ color: 'rgba(255,255,255,0.45)' }}>Profit </span>
-              <span style={{ color: profitColor, fontWeight: 600 }}>
-                {row.profitLoading ? '...' : row.profit}
+          {row.showRecentForm ? (
+            <div
+              style={{
+                minWidth: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 7,
+              }}
+            >
+              <span style={{ color: recentWinRateColor, fontWeight: 700, flexShrink: 0 }}>
+                {row.profitLoading ? '--' : row.recentWinRate}
               </span>
+              <LeaderboardRecentFormChips results={row.recentResults} loading={row.profitLoading} />
             </div>
-          ) : null}
+          ) : (
+            <div style={{ minWidth: 0, textAlign: 'right' }}>
+              <span style={{ color: 'rgba(255,255,255,0.45)' }}>Avg </span>
+              <span style={{ color: '#22d3a5', fontWeight: 600 }}>{row.avgTrade}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1498,6 +1523,41 @@ function MobileLeaderboardRow({ row }) {
     <a href={row.href} style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
       {content}
     </a>
+  );
+}
+
+function LeaderboardRecentFormChips({ results, loading = false }) {
+  const paddedResults = [...(Array.isArray(results) ? results.slice(0, 5) : [])];
+  while (paddedResults.length < 5) paddedResults.push(null);
+
+  return (
+    <div
+      aria-label="Recent form"
+      style={{ display: 'inline-flex', gap: 3, alignItems: 'center', justifyContent: 'flex-end' }}
+    >
+      {paddedResults.map((result, index) => {
+        const isWin = result === 'W';
+        const isLoss = result === 'L';
+        return (
+          <span
+            key={`${result || 'empty'}-${index}`}
+            title={loading ? 'Loading result' : isWin ? 'Win' : isLoss ? 'Loss' : 'No resolved trade'}
+            style={{
+              width: 10,
+              height: 14,
+              borderRadius: 3,
+              background: loading
+                ? 'rgba(255,255,255,0.08)'
+                : isWin
+                  ? 'rgba(94,231,173,0.42)'
+                  : isLoss
+                    ? 'rgba(244,139,160,0.34)'
+                    : 'rgba(255,255,255,0.06)',
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -6791,15 +6851,24 @@ async function fetchLeaderboardProfitSummaries(wallets, options = {}) {
       try {
         const trades = await fetchTraderHistory(wallet, { signal });
         const summary = buildWalletProfitSummary(null, trades);
+        const recentForm = buildLeaderboardRecentForm(trades);
         summaries[wallet] = {
           status: summary.hasValue ? 'ready' : 'empty',
           value: summary.hasValue ? summary.value : null,
           hasValue: summary.hasValue,
           pnlTradeCount: summary.pnlTradeCount,
+          recentResults: recentForm.results,
+          recentWinRatePct: recentForm.winRatePct,
         };
       } catch (err) {
         if (err.name === 'AbortError') throw err;
-        summaries[wallet] = { status: 'unavailable', value: null, hasValue: false };
+        summaries[wallet] = {
+          status: 'unavailable',
+          value: null,
+          hasValue: false,
+          recentResults: [],
+          recentWinRatePct: null,
+        };
       }
     }
   }
@@ -7697,6 +7766,8 @@ function hydrateLeaderboardProfit(item, profitEntries) {
       allTimeProfitUsd: null,
       allTimeProfitKnown: false,
       allTimeProfitStatus: entry?.status || 'pending',
+      recentFormResults: Array.isArray(entry?.recentResults) ? entry.recentResults : [],
+      recentFormWinRatePct: Number.isFinite(entry?.recentWinRatePct) ? entry.recentWinRatePct : null,
     };
   }
 
@@ -7705,6 +7776,8 @@ function hydrateLeaderboardProfit(item, profitEntries) {
     allTimeProfitUsd: entry.value,
     allTimeProfitKnown: true,
     allTimeProfitStatus: entry.status || 'ready',
+    recentFormResults: Array.isArray(entry.recentResults) ? entry.recentResults : [],
+    recentFormWinRatePct: Number.isFinite(entry.recentWinRatePct) ? entry.recentWinRatePct : null,
   };
 }
 
@@ -8067,6 +8140,19 @@ function buildWalletProfitSummary(profile, trades) {
     hasValue: pnlValues.length > 0,
     pnlTradeCount: pnlValues.length,
     firstTradeAt,
+  };
+}
+
+function buildLeaderboardRecentForm(trades) {
+  const results = buildWalletResultEntries(trades)
+    .slice(-5)
+    .reverse()
+    .map((entry) => entry.result);
+  const wins = results.filter((result) => result === 'W').length;
+
+  return {
+    results,
+    winRatePct: results.length ? (wins / results.length) * 100 : null,
   };
 }
 
@@ -8581,6 +8667,10 @@ function formatLeaderboardProfit(trader) {
 function getLeaderboardProfitTone(trader) {
   if (!trader?.allTimeProfitKnown) return 'muted';
   return Number(trader.allTimeProfitUsd || 0) < 0 ? 'loss' : 'profit';
+}
+
+function formatLeaderboardRecentWinRate(trader) {
+  return Number.isFinite(trader?.recentFormWinRatePct) ? `${trimNumber(trader.recentFormWinRatePct)}%` : '--';
 }
 
 function formatSignedUsd(value) {
