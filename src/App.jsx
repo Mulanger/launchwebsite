@@ -1065,7 +1065,7 @@ function LeaderboardPage({ initialData = null }) {
     () =>
       visibleItems.map((trader, index) => ({
         key: trader.proxyWallet || `${trader.rank || index}-${trader.displayName || trader.pseudonym || ''}`,
-        rank: Number(trader.rank) || index + 1,
+        rank: sort === 'rank' ? Number(trader.rank) || index + 1 : index + 1,
         name: leaderboardTraderName(trader),
         wallet: shortWallet(trader.proxyWallet),
         walletFull: trader.proxyWallet || '',

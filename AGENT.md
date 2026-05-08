@@ -22,6 +22,7 @@ Recent important work:
 - Market images are hydrated for live websocket trades so new rows do not remain as empty fallback squares.
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
 - Leaderboard sort now includes `Profit`. It derives all-time realized wallet P/L from fetched wallet whale history, caches it by wallet, and keeps that profit calculation independent of the active `1D`/`7D`/`30D`/`1Y` leaderboard window. In the profit view, row cards must show signed `Profit` as the primary right-side metric and replace `Avg` with recent form from the latest 5 resolved wallet trades.
+- Leaderboard row rank badges show the API volume rank only for `Sort: Volume`; for derived sorts such as `Trade count` or `Profit`, the badge should show the current sorted display position so users do not see stale volume ranks.
 - Trader profile headers show a short wallet title such as `0xa2cd..`, full address underneath, and a copy button.
 - Trader profile daily volume chart is a bar chart so one-day data does not render as an ugly triangle.
 - Trader profile desktop/mobile design was rebuilt from the supplied mockups. Desktop uses the dashboard profile surface; mobile uses a dedicated compact profile view with top bar, identity card, performance card, window toggle, stat cards, charts, and bottom nav parity.
