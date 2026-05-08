@@ -12,7 +12,8 @@ import { buildNextMetadata } from '../../../src/lib/next-metadata.js';
 import {
   buildQnaArticleStructuredData,
   buildQnaBreadcrumbStructuredData,
-  buildQnaFaqStructuredData,
+  buildQnaWebPageStructuredData,
+  formatQnaLastModified,
   getQnaBySlug,
   getRelatedQnaItems,
   qnaItems,
@@ -69,7 +70,7 @@ export default async function QaQuestionPage({ params }) {
     <QaShell rail={<QaRail currentCategory={item.category} related={related} />}>
       <JsonLd
         data={[
-          buildQnaFaqStructuredData(item),
+          buildQnaWebPageStructuredData(item),
           buildQnaArticleStructuredData(item),
           buildQnaBreadcrumbStructuredData(item),
         ]}
@@ -90,6 +91,10 @@ export default async function QaQuestionPage({ params }) {
         <article className="qa-article">
           <QaCategoryPill item={item} />
           <h1>{item.question}</h1>
+          <div className="qa-answer-meta">
+            <span>Updated {formatQnaLastModified()}</span>
+            <span>{item.category.label}</span>
+          </div>
           <p className="qa-answer-lead">{item.answerLead}</p>
 
           <div className="qa-answer-body">

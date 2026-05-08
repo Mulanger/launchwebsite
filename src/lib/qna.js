@@ -81,6 +81,8 @@ const properCaseReplacements = [
   ['house', 'House'],
   ['senate', 'Senate'],
   ['gta', 'GTA'],
+  ['europe', 'Europe'],
+  ['reddit', 'Reddit'],
 ];
 
 function normalizeWhitespace(value) {
@@ -133,8 +135,12 @@ function stripSourceSuffix(answer) {
 }
 
 function splitSentences(text) {
+  const abbreviationSafeText = normalizeWhitespace(text).replace(/\betc\./gi, 'etc__ABBR_DOT__');
+
   return (
-    normalizeWhitespace(text).match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)?.map((sentence) => sentence.trim()) || []
+    abbreviationSafeText
+      .match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)
+      ?.map((sentence) => sentence.replace(/etc__ABBR_DOT__/gi, 'etc.').trim()) || []
   );
 }
 
@@ -376,6 +382,7 @@ export function buildQnaHubStructuredData() {
         '@type': 'WebSite',
         name: siteName,
         url: siteOrigin,
+        potentialAction: buildQnaSearchAction(),
       },
     },
     {
@@ -393,20 +400,57 @@ export function buildQnaHubStructuredData() {
   ];
 }
 
-export function buildQnaFaqStructuredData(item) {
+function buildQnaSearchAction() {
+  return {
+    '@type': 'SearchAction',
+    target: `${siteOrigin}/qa?q={search_term_string}`,
+    'query-input': 'required name=search_term_string',
+  };
+}
+
+export function formatQnaLastModified() {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(QNA_LAST_MODIFIED));
+}
+
+export function buildQnaWebPageStructuredData(item) {
+  const url = `${siteOrigin}${item.path}`;
+  const answer = {
+    '@type': 'Answer',
+    text: item.answerText,
+    dateCreated: QNA_LAST_MODIFIED,
+    dateModified: QNA_LAST_MODIFIED,
+    author: {
+      '@type': 'Organization',
+      name: siteName,
+      url: siteOrigin,
+    },
+  };
+
   return {
     '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: [
-      {
-        '@type': 'Question',
-        name: item.question,
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: item.answerText,
-        },
-      },
-    ],
+    '@type': 'WebPage',
+    name: item.question,
+    url,
+    description: item.description,
+    inLanguage: 'en-US',
+    datePublished: QNA_LAST_MODIFIED,
+    dateModified: QNA_LAST_MODIFIED,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: siteName,
+      url: siteOrigin,
+      potentialAction: buildQnaSearchAction(),
+    },
+    mainEntity: {
+      '@type': 'Question',
+      name: item.question,
+      text: item.rawQuestion,
+      acceptedAnswer: answer,
+    },
   };
 }
 
@@ -419,6 +463,8 @@ export function buildQnaArticleStructuredData(item) {
     image: seoImage,
     datePublished: QNA_LAST_MODIFIED,
     dateModified: QNA_LAST_MODIFIED,
+    inLanguage: 'en-US',
+    isAccessibleForFree: true,
     mainEntityOfPage: `${siteOrigin}${item.path}`,
     author: {
       '@type': 'Organization',

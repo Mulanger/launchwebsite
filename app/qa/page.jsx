@@ -14,17 +14,22 @@ import {
 
 export const revalidate = 86400;
 
-export const metadata = buildNextMetadata({
-  title: 'Polymarket Questions & Answers | Polywhale Q&A Hub',
-  description: `Plain-English answers to ${qnaItems.length} high-intent Polymarket questions about legality, taxes, odds, payouts, whale trades, wallets, and prediction market mechanics.`,
-  keywords:
-    'Polymarket questions, Polymarket FAQ, Polymarket Q&A, is Polymarket legal, Polymarket taxes, Polymarket whale trades, Polymarket odds, Polymarket vs Kalshi',
-  path: '/qa',
-  robots: 'index,follow,max-image-preview:large',
-});
-
 function normalizeQuery(searchParams) {
   return String(searchParams?.q || '').trim().slice(0, 80);
+}
+
+export async function generateMetadata({ searchParams }) {
+  const resolvedSearchParams = await searchParams;
+  const query = normalizeQuery(resolvedSearchParams);
+
+  return buildNextMetadata({
+    title: 'Polymarket Questions & Answers | Polywhale Q&A Hub',
+    description: `Plain-English answers to ${qnaItems.length} high-intent Polymarket questions about legality, taxes, odds, payouts, whale trades, wallets, and prediction market mechanics.`,
+    keywords:
+      'Polymarket questions, Polymarket FAQ, Polymarket Q&A, is Polymarket legal, Polymarket taxes, Polymarket whale trades, Polymarket odds, Polymarket vs Kalshi',
+    path: '/qa',
+    robots: query ? 'noindex,follow' : 'index,follow,max-image-preview:large',
+  });
 }
 
 function QaHubItem({ item }) {
@@ -52,7 +57,7 @@ export default async function QaHubPage({ searchParams }) {
       <main className="feed-main qa-main">
         <div className="feed-breadcrumb">
           <span className="live-dot online" />
-          Q&A · Polymarket knowledge base
+          Q&A - Polymarket knowledge base
         </div>
 
         <header className="qa-hub-head">
