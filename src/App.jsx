@@ -7701,6 +7701,7 @@ function buildCompactPagination(currentPage, pageCount) {
 function buildWalletPerformance(profile, trades, windowId, stats) {
   const sourceTrades = Array.isArray(trades) ? trades : [];
   const fullResults = buildWalletResultEntries(sourceTrades);
+  const positionResults = buildWalletPositionResultEntries(fullResults);
   const windowResults = fullResults.filter((entry) => isWalletTradeInWindow(entry.trade, windowId));
   const windowTrades = sourceTrades.filter((trade) => isWalletTradeInWindow(trade, windowId));
   const statTradeCount = firstFiniteNumber(stats?.tradeCount, stats?.whaleCount);
@@ -7736,7 +7737,7 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     tradeCount,
     winRatePct,
     winRateLabel: winRatePct == null ? '--' : `${trimNumber(winRatePct)}%`,
-    longestWinStreak: longestWinningStreak(fullResults),
+    longestWinStreak: longestWinningStreak(positionResults),
     recentResults,
     recentMini: recentResults.slice(0, 5),
     historyCount: sourceTrades.length,
@@ -7758,6 +7759,64 @@ function buildWalletResultEntries(trades) {
     })
     .filter(Boolean)
     .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function buildWalletPositionResultEntries(resultEntries) {
+  const groups = new Map();
+
+  for (const entry of Array.isArray(resultEntries) ? resultEntries : []) {
+    const key = getWalletPositionKey(entry.trade);
+    const existing = groups.get(key);
+    const pnl = getWalletTradePnl(entry.trade);
+
+    if (!existing) {
+      groups.set(key, {
+        key,
+        trade: entry.trade,
+        timestamp: entry.timestamp,
+        resultCounts: { W: entry.result === 'W' ? 1 : 0, L: entry.result === 'L' ? 1 : 0 },
+        pnl: Number.isFinite(pnl) ? pnl : null,
+      });
+      continue;
+    }
+
+    existing.timestamp = Math.min(existing.timestamp, entry.timestamp);
+    existing.resultCounts[entry.result] += 1;
+    if (Number.isFinite(pnl)) {
+      existing.pnl = existing.pnl == null ? pnl : existing.pnl + pnl;
+    }
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      let result = null;
+      if (group.pnl != null && group.pnl > 0) result = 'W';
+      else if (group.pnl != null && group.pnl < 0) result = 'L';
+      else if (group.resultCounts.W > group.resultCounts.L) result = 'W';
+      else if (group.resultCounts.L > group.resultCounts.W) result = 'L';
+      if (!result) return null;
+
+      return {
+        trade: group.trade,
+        result,
+        timestamp: group.timestamp,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function getWalletPositionKey(trade) {
+  const marketKey = normalizeKeyToken(
+    trade?.market?.conditionId ||
+    trade?.market?.slug ||
+    trade?.conditionId ||
+    trade?.marketSlug ||
+    trade?.id
+  );
+  const outcomeKey = normalizeKeyToken(trade?.outcome || trade?.outcomeLabel || trade?.tokenOutcome || 'outcome');
+  const sideKey = normalizeKeyToken(trade?.side || 'side');
+  return `${marketKey}:${outcomeKey}:${sideKey}`;
 }
 
 function getWalletTradeResult(trade) {
@@ -7830,6 +7889,10 @@ function inferBuyTradeResultFromWinningOutcome(trade, resolution) {
 
 function normalizeOutcomeValue(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeKeyToken(value) {
+  return normalizeOutcomeValue(value).replace(/[^a-z0-9]+/g, '_') || 'unknown';
 }
 
 function buildWalletProfitSummary(profile, trades) {
