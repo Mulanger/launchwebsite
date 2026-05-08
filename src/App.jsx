@@ -585,7 +585,9 @@ function WhaleFeedPage() {
   }, [filterKey, todaySession.dateKey]);
 
   const sessionItems = useMemo(() => filterNewYorkSession(items, clock), [items, clock]);
-  const visibleItems = useMemo(() => sortWhales(sessionItems, sort), [sessionItems, sort]);
+  const recentFallbackActive = !followingOnly && sessionItems.length === 0 && items.length > 0;
+  const visibleSourceItems = recentFallbackActive ? items : sessionItems;
+  const visibleItems = useMemo(() => sortWhales(visibleSourceItems, sort), [visibleSourceItems, sort]);
 
   const localStats = useMemo(() => buildStats(items, clock), [items, clock]);
   const stats = useMemo(() => buildDashboardFeedStats(dashboard, localStats), [dashboard, localStats]);
@@ -702,6 +704,7 @@ function WhaleFeedPage() {
         }}
         loading={loading}
         error={error}
+        recentFallbackActive={recentFallbackActive}
         canLoadMore={Boolean(cursor)}
         loadingMore={loadingMore}
         onLoadMore={loadMore}
@@ -804,6 +807,13 @@ function WhaleFeedPage() {
 
           <SortMenu value={sort} onChange={setSort} options={feedSortOptions} />
         </section>
+
+        {recentFallbackActive ? (
+          <div className="feed-session-fallback" role="status">
+            <strong>No whale trades yet in today's New York session.</strong>
+            <span>Showing the latest recent trades until new session activity appears.</span>
+          </div>
+        ) : null}
 
         <section className="feed-table" aria-live="polite">
           <div className="feed-table-head">
@@ -4304,6 +4314,7 @@ function MobileFeedScreen({
   onTabChange,
   loading,
   error,
+  recentFallbackActive,
   canLoadMore,
   loadingMore,
   onLoadMore,
@@ -4322,6 +4333,13 @@ function MobileFeedScreen({
           onSideChange={onSideChange}
           onSortChange={onSortChange}
         />
+
+        {recentFallbackActive ? (
+          <div className="feed-session-fallback mobile" role="status">
+            <strong>No whale trades yet in today's New York session.</strong>
+            <span>Showing latest recent trades.</span>
+          </div>
+        ) : null}
 
         {loading ? (
           <FeedSkeleton />
@@ -6617,8 +6635,21 @@ async function fetchTodayDashboardWithFallback(filter, options = {}) {
   const { recentLimit, leaderboardLimit, ...requestOptions } = options;
   try {
     const dashboard = await fetchTodayDashboard(filter, { recentLimit, leaderboardLimit, ...requestOptions });
+    const dashboardItems = Array.isArray(dashboard?.items) ? dashboard.items : [];
+    if (dashboardItems.length === 0) {
+      const fallback = await fetchWhalesForFilter(filter, null, requestOptions);
+      const fallbackItems = Array.isArray(fallback?.items) ? fallback.items : [];
+      if (fallbackItems.length > 0) {
+        return {
+          items: fallbackItems,
+          nextCursor: fallback?.nextCursor ?? null,
+          dashboard,
+        };
+      }
+    }
+
     return {
-      items: Array.isArray(dashboard?.items) ? dashboard.items : [],
+      items: dashboardItems,
       nextCursor: dashboard?.nextCursor ?? null,
       dashboard,
     };
