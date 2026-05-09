@@ -7969,6 +7969,7 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
   const sourceTrades = Array.isArray(trades) ? trades : [];
   const fullResults = buildWalletResultEntries(sourceTrades);
   const marketResults = buildWalletMarketResultEntries(fullResults);
+  const resolvedLongestWinStreak = firstFiniteNumber(profile?.resolved?.longestWinStreak);
   const windowResults = fullResults.filter((entry) => isWalletTradeInWindow(entry.trade, windowId));
   const windowTrades = sourceTrades.filter((trade) => isWalletTradeInWindow(trade, windowId));
   const statTradeCount = firstFiniteNumber(stats?.tradeCount, stats?.whaleCount);
@@ -8004,7 +8005,7 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     tradeCount,
     winRatePct,
     winRateLabel: winRatePct == null ? '--' : `${trimNumber(winRatePct)}%`,
-    longestWinStreak: longestWinningStreak(marketResults),
+    longestWinStreak: resolvedLongestWinStreak ?? longestWinningStreak(marketResults),
     recentResults,
     recentMini: recentResults.slice(0, 5),
     historyCount: sourceTrades.length,

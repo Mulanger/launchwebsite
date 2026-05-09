@@ -29,7 +29,7 @@ Recent important work:
 - Trader profile performance now fetches wallet history through `/v1/whales?limit=100&minUsd=10000&traderWallet=<wallet>&cursor=...` and merges it with `/v1/traders/:wallet` recent whales. Win/loss is inferred from backend resolution status and `pnlUsd`/profit fields when available.
 - Trader profile headers now include an all-time `Profit` badge next to rank/follow. It sums realized wallet P/L from fetched history and must not change when the `1D`, `7D`, `30D`, or `1Y` window toggle changes.
 - Trader profile time windows (`1D`, `7D`, `30D`, `1Y`) only affect windowed trade count, win rate, and volume stats. Longest win streak and recent W/L chips intentionally use full fetched history.
-- Trader profile longest win streak is market-level, not fill/outcome-level: group resolved wallet trades by market condition/slug, net the market P/L, then count consecutive winning markets. This prevents repeated buys or opposite-outcome fills in the same market from inflating the streak.
+- Trader profile longest win streak prefers the API's `profile.resolved.longestWinStreak`, computed from full resolved BUY outcome history in the whale server. The website only falls back to market-level grouping from visible whale history when that backend field is absent.
 - Trader profile W/L result chips are displayed newest first on the left, then older results to the right. The desktop large strip, desktop mini "Recent" tile, and mobile cells should all follow this order.
 - Trader profile recent whale trades are shown on desktop and mobile, paginated client-side at 10 rows per page from the merged wallet history. The table shows compact numbered controls only when more than 10 loaded trades exist.
 - Alerts now have a dedicated mobile screen path with bottom nav parity (`Feed`, `Leaders`, `Following`, `Alerts`) instead of relying on desktop layout classes.
@@ -180,6 +180,8 @@ Public data:
 - `GET /v1/traders/:wallet`
 - `WS /v1/whales/stream`
 
+`GET /v1/traders/:wallet` may include `resolved.longestWinStreak`, computed by the whale server from full `trade_outcomes` resolved BUY history. Trader profile UI should prefer that authoritative historical streak over frontend reconstruction from visible whale trades.
+
 Auth/follows:
 
 - `POST /v1/auth/anonymous`
@@ -269,7 +271,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - `MarketIcon` and `getMarketImageUrls`: market image rendering.
 - `mergeWhales`, `upsertWhale`, `mergeWhaleTrade`, `enrichWhaleWithExistingMarketMedia`, `hydrateWhaleTrade`: live/REST merge and market image hydration.
 - `LeaderboardPage`, `LeaderboardRow`, `buildLeaderboardStats`, `fetchLeaderboardProfitSummaries`: leaderboard UI, data summary, and all-time profit sort enrichment.
-- `TraderProfilePage`, `MobileWalletProfileView`, `WalletProfileRedesign`, `WalletProfilePerformanceBlock`, `WalletRecentTradesTable`, `buildWalletPerformance`, `buildWalletMarketResultEntries`, `buildWalletProfitSummary`, `fetchTraderHistory`: trader profile loading, desktop/mobile rendering, history-backed performance metrics, market-level longest win streak, all-time profit badge, recent result chips, and recent trade pagination.
+- `TraderProfilePage`, `MobileWalletProfileView`, `WalletProfileRedesign`, `WalletProfilePerformanceBlock`, `WalletRecentTradesTable`, `buildWalletPerformance`, `buildWalletMarketResultEntries`, `buildWalletProfitSummary`, `fetchTraderHistory`: trader profile loading, desktop/mobile rendering, history-backed performance metrics, API-backed longest win streak with market-level fallback, all-time profit badge, recent result chips, and recent trade pagination.
 - `FollowWalletButton`, follow helpers, auth helpers: follow/unfollow and anonymous auth.
 - `FeedSidebar` / `NavItem`: left navigation, disabled profile item (`Coming soon`) behavior, and brand lockup text.
 - `AlertsPage`: desktop + dedicated mobile render path with bottom nav support.
@@ -328,7 +330,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - Keep trade intent wording as provided by the backend. Do not reinterpret BUY/SELL in the website; intent classification belongs upstream.
 - The public web leaderboard is presented as `1D` and is today-scoped in the frontend. Trader profile stats still use the API's `7d` stats until the backend exposes profile stats for today. 30D and 1Y are visible but treated as future/locked UI.
 - Leaderboard `Profit` sort must use all-time realized P/L from wallet history, not the selected window's volume/trade aggregate. The selected window can change which API leaderboard rows are loaded until the backend exposes a native all-time profit leaderboard, but it must not change the P/L value used for a wallet. Do not show volume as the primary metric in profit sort; show signed profit, the all-time P/L trade count, and the latest 5-trade W/L form instead of average trade size.
-- Trader profile performance window toggles must not change full-history fields: all-time profit, longest win streak, and recent W/L chips are based on full fetched wallet history. Longest win streak is computed across grouped markets using net market P/L, not raw fills or separate outcomes. The W/L chip order is newest on the left, older to the right.
+- Trader profile performance window toggles must not change full-history fields: all-time profit, longest win streak, and recent W/L chips are based on full fetched wallet history. Longest win streak should come from `profile.resolved.longestWinStreak` when available; otherwise use grouped visible markets as a frontend fallback. The W/L chip order is newest on the left, older to the right.
 - Trader profile recent trades should keep 10 rows per page unless the user asks for a different density. Pagination is client-side over the already-loaded merged wallet history, not backend numbered pages.
 - Do not add search bars back to the feed or leaderboard unless explicitly asked.
 - Keep sidebar `Profile` nav item disabled unless specifically requested to reopen it.
