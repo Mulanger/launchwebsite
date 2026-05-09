@@ -7969,20 +7969,30 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
   const sourceTrades = Array.isArray(trades) ? trades : [];
   const fullResults = buildWalletResultEntries(sourceTrades);
   const marketResults = buildWalletMarketResultEntries(fullResults);
+  const resolvedWindow = profile?.resolved?.windows?.[windowId] || null;
   const resolvedLongestWinStreak = firstFiniteNumber(profile?.resolved?.longestWinStreak);
+  const resolvedRecentResults = normalizeResolvedResultList(profile?.resolved?.recentResults, 15);
   const windowResults = fullResults.filter((entry) => isWalletTradeInWindow(entry.trade, windowId));
   const windowTrades = sourceTrades.filter((trade) => isWalletTradeInWindow(trade, windowId));
-  const statTradeCount = firstFiniteNumber(stats?.tradeCount, stats?.whaleCount);
+  const statTradeCount = resolvedWindow
+    ? firstFiniteNumber(resolvedWindow.buyCount)
+    : firstFiniteNumber(stats?.tradeCount, stats?.whaleCount);
   const tradeCount = statTradeCount ?? windowTrades.length;
-  const suppliedWinRate = normalizeWinRatePercent(firstFiniteNumber(
-    stats?.winRate,
-    stats?.winRatePct,
-    stats?.winRatePercent,
-    profile?.performance?.[windowId]?.winRate,
-    profile?.performance?.[windowId]?.winRatePct
-  ));
-  const suppliedWins = firstFiniteNumber(stats?.wins, stats?.winCount, stats?.resolvedWins);
-  const suppliedLosses = firstFiniteNumber(stats?.losses, stats?.lossCount, stats?.resolvedLosses);
+  const suppliedWinRate = normalizeWinRatePercent(resolvedWindow
+    ? firstFiniteNumber(resolvedWindow.winRate)
+    : firstFiniteNumber(
+      stats?.winRate,
+      stats?.winRatePct,
+      stats?.winRatePercent,
+      profile?.performance?.[windowId]?.winRate,
+      profile?.performance?.[windowId]?.winRatePct
+    ));
+  const suppliedWins = resolvedWindow
+    ? firstFiniteNumber(resolvedWindow.winCount)
+    : firstFiniteNumber(stats?.wins, stats?.winCount, stats?.resolvedWins);
+  const suppliedLosses = resolvedWindow
+    ? firstFiniteNumber(resolvedWindow.lossCount)
+    : firstFiniteNumber(stats?.losses, stats?.lossCount, stats?.resolvedLosses);
   const computedWins = windowResults.filter((entry) => entry.result === 'W').length;
   const computedLosses = windowResults.filter((entry) => entry.result === 'L').length;
   const resolvedWindowCount = computedWins + computedLosses;
@@ -7996,10 +8006,12 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     winRatePct = (computedWins / resolvedWindowCount) * 100;
   }
 
-  const recentResults = fullResults
-    .slice(-15)
-    .reverse()
-    .map((entry) => entry.result);
+  const recentResults = resolvedRecentResults.length
+    ? resolvedRecentResults
+    : fullResults
+      .slice(-15)
+      .reverse()
+      .map((entry) => entry.result);
 
   return {
     tradeCount,
@@ -8118,6 +8130,14 @@ function normalizeWalletResult(...values) {
   return null;
 }
 
+function normalizeResolvedResultList(values, limit = 15) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => normalizeWalletResult(value))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
 function getWalletTradePnl(trade) {
   const resolution = getTradeResolutionBlock(trade);
   const explicitPnl = firstFiniteNumber(
@@ -8164,6 +8184,18 @@ function normalizeKeyToken(value) {
 }
 
 function buildWalletProfitSummary(profile, trades) {
+  const resolvedProfit = firstFiniteNumber(profile?.resolved?.realizedPnlUsd);
+  const resolvedTradeCount = firstFiniteNumber(profile?.resolved?.buyCount);
+
+  if (resolvedProfit != null && resolvedTradeCount != null && resolvedTradeCount > 0) {
+    return {
+      value: resolvedProfit,
+      hasValue: true,
+      pnlTradeCount: resolvedTradeCount,
+      firstTradeAt: firstFiniteNumber(profile?.resolved?.firstTradeAt, profile?.firstSeen),
+    };
+  }
+
   const sourceTrades = Array.isArray(trades) ? trades : [];
   const pnlValues = sourceTrades
     .map((trade) => getWalletTradePnl(trade))
