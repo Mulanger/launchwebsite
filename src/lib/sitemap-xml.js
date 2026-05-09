@@ -43,22 +43,3 @@ ${urls}
 </urlset>
 `;
 }
-
-export function buildSitemapIndex(entries) {
-  const sitemaps = entries
-    .filter((entry) => entry?.url || entry?.loc)
-    .map((entry) => {
-      const lines = [`    <loc>${escapeXml(entry.url || entry.loc)}</loc>`];
-      if (entry.lastmod || entry.lastModified) {
-        lines.push(`    <lastmod>${dateOnly(entry.lastmod || entry.lastModified)}</lastmod>`);
-      }
-      return `  <sitemap>\n${lines.join('\n')}\n  </sitemap>`;
-    })
-    .join('\n');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sitemaps}
-</sitemapindex>
-`;
-}
