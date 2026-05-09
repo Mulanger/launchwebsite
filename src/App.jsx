@@ -7968,7 +7968,7 @@ function buildCompactPagination(currentPage, pageCount) {
 function buildWalletPerformance(profile, trades, windowId, stats) {
   const sourceTrades = Array.isArray(trades) ? trades : [];
   const fullResults = buildWalletResultEntries(sourceTrades);
-  const positionResults = buildWalletPositionResultEntries(fullResults);
+  const marketResults = buildWalletMarketResultEntries(fullResults);
   const windowResults = fullResults.filter((entry) => isWalletTradeInWindow(entry.trade, windowId));
   const windowTrades = sourceTrades.filter((trade) => isWalletTradeInWindow(trade, windowId));
   const statTradeCount = firstFiniteNumber(stats?.tradeCount, stats?.whaleCount);
@@ -8004,7 +8004,7 @@ function buildWalletPerformance(profile, trades, windowId, stats) {
     tradeCount,
     winRatePct,
     winRateLabel: winRatePct == null ? '--' : `${trimNumber(winRatePct)}%`,
-    longestWinStreak: longestWinningStreak(positionResults),
+    longestWinStreak: longestWinningStreak(marketResults),
     recentResults,
     recentMini: recentResults.slice(0, 5),
     historyCount: sourceTrades.length,
@@ -8028,11 +8028,11 @@ function buildWalletResultEntries(trades) {
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function buildWalletPositionResultEntries(resultEntries) {
+function buildWalletMarketResultEntries(resultEntries) {
   const groups = new Map();
 
   for (const entry of Array.isArray(resultEntries) ? resultEntries : []) {
-    const key = getWalletPositionKey(entry.trade);
+    const key = getWalletMarketResultKey(entry.trade);
     const existing = groups.get(key);
     const pnl = getWalletTradePnl(entry.trade);
 
@@ -8073,17 +8073,17 @@ function buildWalletPositionResultEntries(resultEntries) {
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function getWalletPositionKey(trade) {
+function getWalletMarketResultKey(trade) {
   const marketKey = normalizeKeyToken(
     trade?.market?.conditionId ||
     trade?.market?.slug ||
+    trade?.market?.eventSlug ||
     trade?.conditionId ||
     trade?.marketSlug ||
+    trade?.eventSlug ||
     trade?.id
   );
-  const outcomeKey = normalizeKeyToken(trade?.outcome || trade?.outcomeLabel || trade?.tokenOutcome || 'outcome');
-  const sideKey = normalizeKeyToken(trade?.side || 'side');
-  return `${marketKey}:${outcomeKey}:${sideKey}`;
+  return marketKey;
 }
 
 function getWalletTradeResult(trade) {
