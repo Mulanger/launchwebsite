@@ -27,6 +27,8 @@ Disallow: /profile
 Disallow: /alerts
 
 Sitemap: https://www.polywhaletrades.com/sitemap.xml
+Sitemap: https://www.polywhaletrades.com/sitemap-static.xml
+Sitemap: https://www.polywhaletrades.com/sitemap-markets.xml
 Sitemap: https://www.polywhaletrades.com/sitemap-qa.xml
 Sitemap: https://www.polywhaletrades.com/sitemap-traders.xml
 Sitemap: https://www.polywhaletrades.com/sitemap-compare.xml
