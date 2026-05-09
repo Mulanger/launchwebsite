@@ -64,7 +64,7 @@ D:\polywatch-website
   README.md                Short public/developer overview.
   package.json             npm scripts and dependencies.
   package-lock.json        Locked dependency tree.
-  next.config.mjs          Next config and `/api` rewrite.
+  next.config.mjs          Next config.
   vite.config.js           Vite React config and dev/preview `/api` proxy.
   server.js                Production static server plus `/api` proxy.
   railway.json             Railway build/start config.
@@ -72,6 +72,7 @@ D:\polywatch-website
   NEXT_SSR_MIGRATION_PLAN.md
                            Phased Next SSR migration plan and implementation log.
   app/                     Next App Router public routes and legacy app route wrappers.
+    api/[...path]/         Next API proxy route for `/api/*`.
     sitemap.xml/           Root all-in URL-set sitemap route.
     sitemap-static.xml/    Dedicated static-page sitemap route.
     sitemap-markets.xml/   Dedicated market-page sitemap route.
@@ -147,7 +148,7 @@ Next public env compatibility:
 Production server:
 
 - `PORT`: server port. Defaults to `4173`.
-- `API_BASE_URL`: upstream target for `server.js` `/api` proxy, `next.config.mjs` `/api/:path*` rewrite, and Next server helpers. Defaults to production API.
+- `API_BASE_URL`: upstream target for the Next `app/api/[...path]` proxy route, `server.js` `/api` proxy, and Next server helpers. Defaults to production API.
 
 ## Runtime Data Flow
 
@@ -160,6 +161,12 @@ Production server:
 7. Websocket trades are inserted at the top, filtered client-side, then hydrated/merged when image metadata is missing.
 8. Today-scoped feed stats, last-60-minute stats, feed top whales, and the leaderboard page are computed from the same current New York session key in the web client.
 9. Follow state is stored locally and synced to the API after anonymous auth.
+
+Crawler/resource behavior:
+
+- `robots.txt` allows Googlebot, Bingbot, and DuckDuckBot to fetch `/api/*` resources because the hydrated public pages use those JSON requests during rendering checks in Search Console.
+- The generic `User-agent: *` group still disallows `/api/` to reduce broad crawler traffic.
+- Next and the legacy `server.js` API proxies add `X-Robots-Tag: noindex, nofollow` to `/api/*` responses so API JSON can be fetched as a page resource without being intended for search indexing.
 
 ## API Endpoints Used
 
@@ -380,7 +387,8 @@ Before pushing:
 9. If changing metadata/SEO copy, verify `index.html`, `src/App.jsx`, `src/lib/seo.js`, and Next route metadata are aligned and contain no malformed encoding characters.
 10. For SEO route changes, verify source HTML and JSON-LD for affected native pages such as `/market/[slug]`, `/trader/[wallet]`, `/qa`, `/qa/[slug]`, `/compare`, and `/compare/polymarket-vs-kalshi`.
 11. Verify `/sitemap.xml` plus the dedicated `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-qa.xml`, `/sitemap-traders.xml`, and `/sitemap-compare.xml` routes when changing those page families.
-12. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
+12. For robots/API SEO changes, verify Googlebot can access `/api/*` in `robots.txt` and that `/api/*` responses include `X-Robots-Tag: noindex, nofollow`.
+13. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
 
 ## Trade Detail Endpoint
 
@@ -402,7 +410,7 @@ Railway uses `railway.json`:
 - build: `npm run next:build`
 - start: `npm run next:start -- -H 0.0.0.0 -p $PORT`
 
-The production Next server rewrites `/api/*` to the production API by default. Set `API_BASE_URL` in Railway only if changing the backend target.
+The production Next server proxies `/api/*` through `app/api/[...path]/route.js` to the production API by default. Set `API_BASE_URL` in Railway only if changing the backend target.
 
 Cutover verification completed on 2026-05-06:
 
@@ -433,6 +441,12 @@ Sitemap route update on 2026-05-09:
 - `/sitemap.xml` is a direct URL-set sitemap with every canonical public SEO URL family: static pages, qualified markets, trader profiles, Q&A pages, and compare pages.
 - Dedicated sitemap routes also exist at `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-traders.xml`, `/sitemap-qa.xml`, and `/sitemap-compare.xml` for Search Console diagnostics by page family.
 - `robots.txt` lists the root all-in sitemap and all dedicated sitemap routes so crawlers can discover either path.
+
+Googlebot API resource update on 2026-05-09:
+
+- Search Console live testing reported blocked page resources because `robots.txt` disallowed `/api/` while the hydrated app fetches `/api/v1/...` JSON.
+- `robots.txt` now allows `/api/` for Googlebot, Bingbot, and DuckDuckBot, while keeping `/api/` disallowed for the generic `User-agent: *` group.
+- `app/api/[...path]/route.js` and `server.js` add `X-Robots-Tag: noindex, nofollow` on `/api/*` responses so crawlers can render public pages without API JSON being treated as indexable content.
 
 ## Related System Context
 

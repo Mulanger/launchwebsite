@@ -7,21 +7,21 @@ Disallow: /alerts
 
 User-agent: Googlebot
 Allow: /
-Disallow: /api/
+Allow: /api/
 Disallow: /trade/
 Disallow: /profile
 Disallow: /alerts
 
 User-agent: Bingbot
 Allow: /
-Disallow: /api/
+Allow: /api/
 Disallow: /trade/
 Disallow: /profile
 Disallow: /alerts
 
 User-agent: DuckDuckBot
 Allow: /
-Disallow: /api/
+Allow: /api/
 Disallow: /trade/
 Disallow: /profile
 Disallow: /alerts

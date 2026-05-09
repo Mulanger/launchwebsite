@@ -57,6 +57,7 @@ function proxyApiRequest(req, res) {
       const responseHeaders = {
         ...upstreamRes.headers,
         'X-Content-Type-Options': 'nosniff',
+        'X-Robots-Tag': 'noindex, nofollow',
       };
       res.writeHead(upstreamRes.statusCode || 502, responseHeaders);
       upstreamRes.pipe(res);
