@@ -21,7 +21,7 @@ Recent important work:
 - Feed sort is limited to `Most recent` and `Largest size`.
 - Market images are hydrated for live websocket trades so new rows do not remain as empty fallback squares.
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
-- Leaderboard sort now includes `Profit`. It derives all-time realized wallet P/L from fetched wallet whale history, caches it by wallet, and keeps that profit calculation independent of the active `1D`/`7D`/`30D`/`1Y` leaderboard window. In the profit view, row cards must show signed `Profit` as the primary right-side metric, show `P/L trades` from the fetched all-time P/L trade count, and replace `Avg` with recent form from the latest 5 resolved wallet trades.
+- Leaderboard sort now includes `Profit`. The website prefers cached all-time P/L fields on `/v1/leaderboard` items from the whale server and only falls back to client-side wallet-history fetching while backend rollout is incomplete. Profit remains independent of the active `1D`/`7D`/`30D`/`1Y` leaderboard window. In the profit view, row cards must show signed `Profit` as the primary right-side metric, show `P/L trades` from the all-time P/L trade count, and replace `Avg` with recent form from the latest 5 resolved wallet trades.
 - Leaderboard row rank badges show the API volume rank only for `Sort: Volume`; for derived sorts such as `Trade count` or `Profit`, the badge should show the current sorted display position so users do not see stale volume ranks.
 - Trader profile headers show a short wallet title such as `0xa2cd..`, full address underneath, and a copy button.
 - Trader profile daily volume chart is a bar chart so one-day data does not render as an ugly triangle.
@@ -191,6 +191,7 @@ Important fallback behavior:
 - The trade detail page should tolerate the enhanced endpoint being unavailable by normalizing a basic trade into a reduced detail view.
 - Following-only feed uses server auth when available. Without auth, it filters public feed results against local followed wallets.
 - The production API supports `/v1/leaderboard?window=1d`, `7d`, `30d`, and `365d`. Use the API leaderboard for authoritative windows instead of client-derived rank fallbacks.
+- `/v1/leaderboard` items may include server-cached all-time profit fields: `allTimeProfitUsd`, `allTimeProfitKnown`, `allTimePnlTradeCount`, `recentFormResults`, and `recentFormWinRatePct`. The website should prefer these fields and avoid per-visitor history crawling when they are present.
 
 ## Routes
 

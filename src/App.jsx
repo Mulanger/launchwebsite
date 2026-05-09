@@ -1009,7 +1009,12 @@ function LeaderboardPage({ initialData = null }) {
       return undefined;
     }
 
-    const walletsToFetch = loadedLeaderboardWallets.filter((wallet) => !leaderboardProfits[wallet]);
+    const walletsToFetch = Array.from(new Set(
+      items
+        .filter((item) => !getLeaderboardProfitEntryFromItem(item))
+        .map((item) => normalizeWalletKey(item.proxyWallet))
+        .filter((wallet) => wallet && !leaderboardProfits[wallet])
+    ));
     if (!walletsToFetch.length) {
       setProfitLoading(false);
       return undefined;
@@ -7765,9 +7770,32 @@ function normalizeWalletKey(wallet) {
   return String(wallet).trim().toLowerCase();
 }
 
+function getLeaderboardProfitEntryFromItem(item) {
+  const value = firstFiniteNumber(item?.allTimeProfitUsd);
+  const pnlTradeCount = firstFiniteNumber(item?.allTimePnlTradeCount);
+  const historyTradeCount = firstFiniteNumber(item?.allTimeHistoryTradeCount);
+  const recentResults = Array.isArray(item?.recentFormResults) ? item.recentFormResults : [];
+  const recentWinRatePct = firstFiniteNumber(item?.recentFormWinRatePct);
+  const hasProfitFlag = typeof item?.allTimeProfitKnown === 'boolean';
+  const hasProfitValue = value != null || item?.allTimeProfitKnown === true;
+  const hasProfitMeta = pnlTradeCount != null || historyTradeCount != null || recentResults.length > 0;
+
+  if (!hasProfitFlag && !hasProfitValue && !hasProfitMeta) return null;
+
+  return {
+    status: hasProfitValue ? 'ready' : 'empty',
+    value: value ?? null,
+    hasValue: hasProfitValue,
+    pnlTradeCount: pnlTradeCount ?? null,
+    historyTradeCount: historyTradeCount ?? pnlTradeCount ?? null,
+    recentResults,
+    recentWinRatePct: recentWinRatePct ?? null,
+  };
+}
+
 function hydrateLeaderboardProfit(item, profitEntries) {
   const wallet = normalizeWalletKey(item.proxyWallet);
-  const entry = wallet ? profitEntries[wallet] : null;
+  const entry = getLeaderboardProfitEntryFromItem(item) || (wallet ? profitEntries[wallet] : null);
   if (!entry || !Number.isFinite(entry.value)) {
     return {
       ...item,
