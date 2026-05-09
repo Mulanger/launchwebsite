@@ -156,7 +156,6 @@ function PublicSidebar({ activePage = 'feed' }) {
   const links = [
     { label: 'Whale Feed', href: '/', badge: 'Live', active: activePage === 'feed' },
     { label: 'Leaderboard', href: '/leaderboard', badge: 'Rank', active: activePage === 'leaderboard' },
-    { label: 'Compare', href: '/compare', badge: 'SEO', active: activePage === 'compare' },
     { label: 'Following', href: '/profile/following', badge: 'List', active: false },
     { label: 'Alerts', href: '/alerts', badge: 'Web', active: false },
     { label: 'Profile', href: '/profile', badge: 'Soon', active: false, disabled: true },
@@ -165,7 +164,7 @@ function PublicSidebar({ activePage = 'feed' }) {
   return (
     <aside className="next-app-sidebar" aria-label="Product navigation">
       <Link className="next-app-brand" href="/">
-        <img src="/assets/polywatch-icon.png" alt="" />
+        <img src="/assets/polywatch-icon.png" alt="" width="36" height="36" />
         <span>
           <strong>Polywhale</strong>
           <small>trades</small>
@@ -181,14 +180,14 @@ function PublicSidebar({ activePage = 'feed' }) {
           </Link>
         ))}
         <span className="next-app-nav-label">Discover</span>
-        {links.slice(1, 4).map((item) => (
+        {links.slice(1, 3).map((item) => (
           <Link className={`next-app-nav-item ${item.active ? 'active' : ''}`} href={item.href} key={item.label}>
             <span>{item.label}</span>
             <small>{item.badge}</small>
           </Link>
         ))}
         <span className="next-app-nav-label">Account</span>
-        {links.slice(4).map((item) => (
+        {links.slice(3).map((item) => (
           <Link className={`next-app-nav-item ${item.disabled ? 'disabled' : ''}`} href={item.disabled ? '#' : item.href} key={item.label}>
             <span>{item.label}</span>
             <small>{item.badge}</small>
@@ -208,10 +207,10 @@ function PublicSidebar({ activePage = 'feed' }) {
   );
 }
 
-function DesktopTradeRow({ trade }) {
+function DesktopTradeRow({ trade, index = 0 }) {
   const marketContent = (
     <>
-      <MarketThumb trade={trade} size="desktop" />
+      <MarketThumb trade={trade} size="desktop" loading={index < 6 ? 'eager' : 'lazy'} />
       <span>
         <strong>{trade.marketName}</strong>
         <small className="next-app-market-meta-row">
@@ -257,7 +256,7 @@ function DesktopTradeRow({ trade }) {
 function MobileTradeCard({ trade }) {
   const marketContent = (
     <>
-      <MarketThumb trade={trade} size="mobile" />
+      <MarketThumb trade={trade} size="mobile" loading="eager" />
       <span>
         <strong>{trade.marketName}</strong>
         <small className="next-app-market-meta-row">
@@ -302,9 +301,21 @@ function MobileTradeCard({ trade }) {
   );
 }
 
-function MarketThumb({ trade, size }) {
+function MarketThumb({ trade, size, loading = 'lazy' }) {
   if (trade.imageUrl) {
-    return <img className={`next-app-market-thumb ${size}`} src={trade.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />;
+    const dimension = size === 'desktop' ? 42 : 32;
+    return (
+      <img
+        className={`next-app-market-thumb ${size}`}
+        src={trade.imageUrl}
+        alt=""
+        width={dimension}
+        height={dimension}
+        loading={loading}
+        decoding="async"
+        referrerPolicy="no-referrer"
+      />
+    );
   }
   return <span className={`next-app-market-thumb fallback ${trade.category.id} ${size}`}>{trade.category.short}</span>;
 }
@@ -680,6 +691,8 @@ export function PublicFeedSnapshot({ whales = [], leaders = [], error = '' }) {
   const normalizedLeaders = leaders.map(normalizeLeader);
   const volume = whales.reduce((total, trade) => total + Number(trade.usdSize || 0), 0);
   const biggest = whales.reduce((max, trade) => Math.max(max, Number(trade.usdSize || 0)), 0);
+  const activeWhales = new Set(whales.map((trade) => trade.trader?.proxyWallet).filter(Boolean)).size;
+  const megaTrades = whales.filter((trade) => Number(trade.usdSize || 0) >= 250000).length;
 
   return (
     <div className="next-app-snapshot">
@@ -687,18 +700,25 @@ export function PublicFeedSnapshot({ whales = [], leaders = [], error = '' }) {
         <PublicSidebar activePage="feed" />
         <main className="next-app-main">
           <header className="next-app-page-head">
-            <span className="next-app-live-kicker"><i /> Live - Polymarket</span>
-            <h1>Whale <em>trades</em></h1>
+            <span className="next-app-live-kicker"><i /> Live Feed - Polymarket</span>
+            <h1>Polymarket <em>Whale Trades</em></h1>
           </header>
           <div className="next-app-stats-grid">
-            <StatPanel volume={volume} whales={trades.length} biggest={biggest} />
             <span>
-              <small>Recent whales</small>
-              <strong>{trades.length}</strong>
+              <small>today's volume</small>
+              <strong>{formatUsdCompact(volume)}</strong>
             </span>
             <span>
-              <small>Ranked wallets</small>
-              <strong>{normalizedLeaders.length}</strong>
+              <small>Active whales</small>
+              <strong>{activeWhales || trades.length}</strong>
+            </span>
+            <span>
+              <small>Mega trades</small>
+              <strong>{megaTrades}</strong>
+            </span>
+            <span>
+              <small>today's biggest trade</small>
+              <strong>{formatUsdCompact(biggest)}</strong>
             </span>
           </div>
           <FeedFilters />
@@ -712,8 +732,8 @@ export function PublicFeedSnapshot({ whales = [], leaders = [], error = '' }) {
               <span>Trader</span>
               <span />
             </div>
-            {trades.map((trade) => (
-              <DesktopTradeRow trade={trade} key={trade.id} />
+            {trades.map((trade, index) => (
+              <DesktopTradeRow trade={trade} index={index} key={trade.id} />
             ))}
           </section>
         </main>

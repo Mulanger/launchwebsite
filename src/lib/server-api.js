@@ -31,6 +31,16 @@ export async function fetchPublicWhales(limit = 12) {
   });
 }
 
+export async function fetchPublicDashboardToday(recentLimit = 100, leaderboardLimit = 50) {
+  const params = new URLSearchParams({
+    recentLimit: String(recentLimit),
+    leaderboardLimit: String(leaderboardLimit),
+  });
+  return fetchServerJson(`/v1/dashboard/today?${params.toString()}`, {
+    next: { revalidate: 60 },
+  });
+}
+
 export async function fetchPublicLeaderboard(windowId = '1d', limit = 20) {
   const params = new URLSearchParams({
     window: windowId,

@@ -14,7 +14,8 @@
     "start": "node server.js",
     "next:dev": "next dev --hostname 127.0.0.1",
     "next:build": "next build",
-    "next:start": "next start"
+    "next:start": "next start",
+    "test:cls": "node scripts/check-cls.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
@@ -25,5 +26,8 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "vite": "^7.3.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.1"
   }
 }

@@ -46,6 +46,8 @@ Recent important work:
 - App-only routes are wired through a legacy client wrapper so existing interactive behavior stays owned by `src/App.jsx`.
 - `/` and `/leaderboard` use a hybrid route that serves crawlable HTML first, then hydrates into the existing app UI in browsers.
 - `/` and `/leaderboard` server snapshots were aligned with the existing app UI through `app/_components/PublicAppSnapshot.jsx`.
+- Hybrid public routes now avoid Lighthouse CLS during hydration by keeping the SSR snapshot as a non-flowing overlay while the legacy React app mounts in the document flow. The homepage also passes server-loaded feed/dashboard data into `WhaleFeedPage` so hydration does not immediately replace the first viewport with a duplicate client fetch.
+- `npm run test:cls` runs the Playwright layout-shift check in `scripts/check-cls.mjs`. Use `CLS_BASE_URL`, `CLS_ROUTES`, `CLS_THRESHOLD`, and optional `CLS_SCREENSHOT_DIR` to measure local or deployed pages.
 - Railway production cutover to Next was completed and verified. Live source contains `next-app-snapshot` and `/_next/static`, not the old Vite `<div id="root"></div>` shell.
 - Market landing page MVP was added at `/market/[slug]` as a native Next server route. It keeps the Polywhale dashboard frame, uses the exact market title as the H1, renders market-specific whale stats/recent trades/top wallets, 404s unknown slugs, and marks weak known markets `noindex,follow`.
 - Feed market icons/titles now link to `/market/[slug]` while row click still opens `/trade/[tradeId]`.
@@ -119,11 +121,20 @@ npm start
 npm run next:dev
 npm run next:build
 npm run next:start
+npm run test:cls
 ```
 
 Use `npm run next:build` before pushing changes that affect production. `npm run next:start` serves the Next production build.
 
 Run `npm run build` as well when changes affect shared legacy Vite code, `src/App.jsx`, `src/styles.css`, dependencies, or anything that could break the fallback build. `npm start` serves the legacy Vite `dist` folder with `server.js`.
+
+Use `npm run test:cls` against a running Next production server when changing hybrid public routes, first-viewport layout, image dimensions, or skeleton/loading behavior. Example:
+
+```powershell
+$env:CLS_BASE_URL='http://127.0.0.1:3100'
+$env:CLS_ROUTES='/,/leaderboard,/trader/0x88c4919de76e526d55a32c1f8afb439dd1f1129a'
+npm run test:cls
+```
 
 ## Environment Variables
 

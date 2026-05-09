@@ -12,15 +12,21 @@ export default function HybridPublicRoute({ initialPath, initialData = null, chi
   }, []);
 
   return (
-    <>
-      {legacyReady ? null : children}
+    <div
+      className="hybrid-public-route"
+      data-mounted={mounted ? 'true' : 'false'}
+      data-legacy-ready={legacyReady ? 'true' : 'false'}
+    >
+      {legacyReady ? null : <div className="hybrid-public-snapshot">{children}</div>}
       {mounted ? (
-        <LegacyAppRoute
-          initialPath={initialPath}
-          initialData={initialData}
-          onReady={() => setLegacyReady(true)}
-        />
+        <div className="hybrid-public-client" aria-hidden={legacyReady ? undefined : 'true'}>
+          <LegacyAppRoute
+            initialPath={initialPath}
+            initialData={initialData}
+            onReady={() => setLegacyReady(true)}
+          />
+        </div>
       ) : null}
-    </>
+    </div>
   );
 }

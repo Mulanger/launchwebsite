@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import App from '../../src/App.jsx';
 
 export default function LegacyAppRouteClient({ initialPath, initialData, onReady }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     onReady?.();
   }, [onReady]);
 

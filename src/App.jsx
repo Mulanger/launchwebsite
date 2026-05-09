@@ -251,7 +251,7 @@ function App({ initialPath = null, initialData = null }) {
   else if (path === '/alerts') page = <AlertsPage />;
   else if (tradeMatch) page = <TradeDetailPage tradeId={decodeURIComponent(tradeMatch[1])} />;
   else if (traderMatch) page = <TraderProfilePage wallet={decodeURIComponent(traderMatch[1])} />;
-  else page = <WhaleFeedPage />;
+  else page = <WhaleFeedPage initialData={initialData?.feed} />;
 
   return (
     <>
@@ -335,27 +335,31 @@ function ScrollToTopButton({
   );
 }
 
-function WhaleFeedPage() {
+function WhaleFeedPage({ initialData = null }) {
+  const initialFollowingOnly = (() => {
+    const query = new URLSearchParams(window.location.search);
+    return query.get('following') === '1' || query.get('following') === 'true';
+  })();
+  const hasInitialFeedData = Boolean(initialData) && !initialFollowingOnly;
+  const initialFeedItems = hasInitialFeedData && Array.isArray(initialData?.items) ? initialData.items : [];
+  const usedInitialFeedRef = useRef(hasInitialFeedData);
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     window.matchMedia('(max-width: 1020px)').matches
   );
   const [rangeId, setRangeId] = useState('all');
   const [side, setSide] = useState('all');
-  const [followingOnly, setFollowingOnly] = useState(() => {
-    const query = new URLSearchParams(window.location.search);
-    return query.get('following') === '1' || query.get('following') === 'true';
-  });
+  const [followingOnly, setFollowingOnly] = useState(initialFollowingOnly);
   const [sort, setSort] = useState('recent');
-  const [items, setItems] = useState([]);
-  const [cursor, setCursor] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState(initialFeedItems);
+  const [cursor, setCursor] = useState(hasInitialFeedData ? initialData?.nextCursor ?? null : null);
+  const [loading, setLoading] = useState(!hasInitialFeedData);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState('');
-  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
-  const [liveState, setLiveState] = useState('connecting');
+  const [error, setError] = useState(hasInitialFeedData ? initialData?.error || '' : '');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(hasInitialFeedData ? Date.now() : null);
+  const [liveState, setLiveState] = useState(hasInitialFeedData ? 'live' : 'connecting');
   const [clock, setClock] = useState(() => Date.now());
   const [refreshNonce, setRefreshNonce] = useState(0);
-  const [dashboard, setDashboard] = useState(null);
+  const [dashboard, setDashboard] = useState(hasInitialFeedData ? initialData?.dashboard ?? null : null);
   const [followedCount, setFollowedCount] = useState(() => readFollowedWallets().size);
   const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
 
@@ -418,6 +422,17 @@ function WhaleFeedPage() {
   }, [followingOnly]);
 
   useEffect(() => {
+    if (
+      usedInitialFeedRef.current &&
+      refreshNonce === 0 &&
+      rangeId === 'all' &&
+      side === 'all' &&
+      !followingOnly
+    ) {
+      usedInitialFeedRef.current = false;
+      return undefined;
+    }
+
     const controller = new AbortController();
 
     async function loadInitialWhales() {
@@ -3966,7 +3981,7 @@ function FeedSidebar({ activePage, liveState }) {
           window.location.href = '/';
         }}
       >
-        <img src="/assets/polywatch-icon.png" alt="" />
+        <img src="/assets/polywatch-icon.png" alt="" width="36" height="36" />
         <span className="feed-brand-text">
           <strong>Polywhale</strong>
           <small>trades</small>
@@ -5033,7 +5048,15 @@ function MobileMarketIcon({ icon }) {
   if (icon.type === 'img') {
     return (
       <div style={{ width: 32, height: 32, borderRadius: 7, flexShrink: 0, overflow: 'hidden' }}>
-        <img src={icon.value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img
+          src={icon.value}
+          alt=""
+          width="32"
+          height="32"
+          loading="lazy"
+          decoding="async"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
       </div>
     );
   }
@@ -5145,7 +5168,7 @@ function TradeRow({ trade, index }) {
   const marketHref = buildMarketHref(trade);
   const marketContent = (
     <>
-      <MarketIcon trade={trade} category={category} />
+      <MarketIcon trade={trade} category={category} loading={index < 6 ? 'eager' : 'lazy'} />
       <div className="market-text">
         <strong title={marketTitle}>{marketTitle}</strong>
         <div className="market-meta-row">
@@ -5374,7 +5397,7 @@ function TradeResolutionPills({ trade, compact = false }) {
   );
 }
 
-function MarketIcon({ trade, category }) {
+function MarketIcon({ trade, category, loading = 'lazy' }) {
   const [failedUrls, setFailedUrls] = useState([]);
   const iconUrl = getMarketImageUrls(trade).find((url) => !failedUrls.includes(url));
   if (iconUrl) {
@@ -5383,7 +5406,10 @@ function MarketIcon({ trade, category }) {
         className="market-icon image"
         src={iconUrl}
         alt=""
-        loading="lazy"
+        width="42"
+        height="42"
+        loading={loading}
+        decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setFailedUrls((previous) => [...previous, iconUrl])}
       />
@@ -5396,7 +5422,7 @@ function MarketIcon({ trade, category }) {
 function TraderAvatar({ trade }) {
   const image = trade.trader?.profileImage;
   if (image) {
-    return <img className="trader-avatar" src={image} alt="" loading="lazy" />;
+    return <img className="trader-avatar" src={image} alt="" width="34" height="34" loading="lazy" decoding="async" />;
   }
 
   return (
@@ -6019,7 +6045,7 @@ function TraderProfileRail({ profile, stats }) {
 
 function ProfileAvatar({ profile }) {
   if (profile.profileImage) {
-    return <img className="profile-avatar" src={profile.profileImage} alt="" />;
+    return <img className="profile-avatar" src={profile.profileImage} alt="" width="82" height="82" decoding="async" />;
   }
 
   return (

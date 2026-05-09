@@ -4,6 +4,35 @@
   color: #eef8f4;
 }
 
+.hybrid-public-route {
+  position: relative;
+  min-height: 100vh;
+  background: #07100d;
+}
+
+.hybrid-public-snapshot,
+.hybrid-public-client {
+  min-height: 100vh;
+}
+
+.hybrid-public-route[data-mounted="true"][data-legacy-ready="false"] .hybrid-public-snapshot {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #07100d;
+  pointer-events: none;
+}
+
+.hybrid-public-route[data-legacy-ready="false"] .hybrid-public-client {
+  visibility: hidden;
+}
+
+.hybrid-public-route[data-legacy-ready="true"] .hybrid-public-client {
+  visibility: visible;
+}
+
 .next-public-shell {
   min-height: 100vh;
   background:
@@ -1084,7 +1113,7 @@
 
 .next-app-stats-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1.4fr) repeat(2, minmax(120px, 0.6fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -1092,6 +1121,7 @@
 .next-app-stats-grid > span,
 .next-app-leader-summary > span {
   min-width: 0;
+  min-height: 96px;
   padding: 14px 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -1972,6 +2002,7 @@
 }
 
 .next-app-mobile-card {
+  min-height: 142px;
   display: block;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -2290,6 +2321,7 @@
 }
 
 .next-app-mobile-leader {
+  min-height: 82px;
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
   overflow: hidden;
