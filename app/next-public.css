@@ -2144,11 +2144,10 @@
   font-weight: 600;
 }
 
-.next-app-mobile-bottom i {
+.next-app-mobile-bottom svg {
   width: 18px;
   height: 18px;
-  border: 1.5px solid currentColor;
-  border-radius: 5px;
+  flex: 0 0 auto;
   opacity: 0.85;
 }
 

@@ -33,6 +33,7 @@ Recent important work:
 - Trader profile W/L result chips are displayed newest first on the left, then older results to the right. The desktop large strip, desktop mini "Recent" tile, and mobile cells should all follow this order.
 - Trader profile recent whale trades are shown on desktop and mobile, paginated client-side at 10 rows per page from the merged wallet history. The table shows compact numbered controls only when more than 10 loaded trades exist.
 - Alerts now have a dedicated mobile screen path with bottom nav parity (`Feed`, `Leaders`, `Following`, `Alerts`) instead of relying on desktop layout classes.
+- SSR mobile bottom nav snapshots must render the same Lucide icons as hydrated `MobileBottomNav`; do not use placeholder `<i>` boxes because they can flash during route transitions.
 - Alerts channel cards (`Web push`, `Following mode`, `Minimum size`) stay in one row on mobile instead of stacking.
 - Follow/unfollow buttons in the following list no longer trigger row navigation refresh; row navigation ignores nested interactive controls.
 - Sidebar "Public web beta" panel was removed.

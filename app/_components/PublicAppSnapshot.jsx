@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Activity, BarChart3, Bell, Users } from 'lucide-react';
 import { formatUsdCompact, shortWallet } from './format.js';
 
 const sizeFilters = ['All', '50k-100k', '100k-250k', '250k+', 'Following'];
@@ -374,16 +375,16 @@ function FeedFilters() {
 
 function MobileBottomNav({ active = 'feed' }) {
   const tabs = [
-    ['feed', 'Feed'],
-    ['leaders', 'Leaders'],
-    ['following', 'Following'],
-    ['alerts', 'Alerts'],
+    { id: 'feed', label: 'Feed', href: '/', icon: Activity },
+    { id: 'leaders', label: 'Leaders', href: '/leaderboard', icon: BarChart3 },
+    { id: 'following', label: 'Following', href: '/profile/following', icon: Users },
+    { id: 'alerts', label: 'Alerts', href: '/alerts', icon: Bell },
   ];
   return (
     <nav className="next-app-mobile-bottom" aria-label="Mobile navigation">
-      {tabs.map(([id, label]) => (
-        <Link className={active === id ? 'active' : ''} href={id === 'feed' ? '/' : id === 'leaders' ? '/leaderboard' : id === 'following' ? '/profile/following' : '/alerts'} key={id}>
-          <i />
+      {tabs.map(({ id, label, href, icon: Icon }) => (
+        <Link className={active === id ? 'active' : ''} href={href} key={id}>
+          <Icon size={18} aria-hidden="true" />
           <span>{label}</span>
         </Link>
       ))}
