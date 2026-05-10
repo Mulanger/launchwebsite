@@ -1069,6 +1069,7 @@ function LeaderboardPage({ initialData = null }) {
                   historyTradeCount: null,
                   recentResults: [],
                   recentWinRatePct: null,
+                  allTimeWinRatePct: null,
                 },
               }),
               {}
@@ -1117,7 +1118,7 @@ function LeaderboardPage({ initialData = null }) {
         profitLoading: sort === 'profit' && !trader.allTimeProfitKnown && profitLoading,
         showRecentForm: sort === 'profit',
         recentResults: Array.isArray(trader.recentFormResults) ? trader.recentFormResults : [],
-        recentWinRate: formatLeaderboardRecentWinRate(trader),
+        allTimeWinRate: formatLeaderboardAllTimeWinRate(trader),
         avatarColor: avatarGradient(trader.proxyWallet || `${index}`),
         href: trader.proxyWallet ? `/trader/${encodeURIComponent(trader.proxyWallet)}` : null,
       })),
@@ -1418,9 +1419,9 @@ function MobileLeaderboardRow({ row }) {
     : row.mainMetricTone === 'muted'
       ? 'rgba(255,255,255,0.5)'
       : '#22d3a5';
-  const recentWinRateColor = row.recentWinRate === '--'
+  const allTimeWinRateColor = row.allTimeWinRate === '--'
     ? 'rgba(255,255,255,0.45)'
-    : row.recentWinRate === '0%'
+    : row.allTimeWinRate === '0%'
       ? '#ff6b8a'
       : '#62e7b0';
 
@@ -1562,8 +1563,11 @@ function MobileLeaderboardRow({ row }) {
                 gap: 7,
               }}
             >
-              <span style={{ color: recentWinRateColor, fontWeight: 700, flexShrink: 0 }}>
-                {row.profitLoading ? '--' : row.recentWinRate}
+              <span
+                title="All-time resolved win rate"
+                style={{ color: allTimeWinRateColor, fontWeight: 700, flexShrink: 0 }}
+              >
+                {row.profitLoading ? '--' : row.allTimeWinRate}
               </span>
               <LeaderboardRecentFormChips results={row.recentResults} loading={row.profitLoading} />
             </div>
@@ -6933,6 +6937,7 @@ async function fetchLeaderboardProfitSummaries(wallets, options = {}) {
           historyTradeCount: trades.length,
           recentResults: recentForm.results,
           recentWinRatePct: recentForm.winRatePct,
+          allTimeWinRatePct: recentForm.allTimeWinRatePct,
         };
       } catch (err) {
         if (err.name === 'AbortError') throw err;
@@ -6944,6 +6949,7 @@ async function fetchLeaderboardProfitSummaries(wallets, options = {}) {
           historyTradeCount: null,
           recentResults: [],
           recentWinRatePct: null,
+          allTimeWinRatePct: null,
         };
       }
     }
@@ -7843,6 +7849,7 @@ function getLeaderboardProfitEntryFromItem(item) {
   const historyTradeCount = firstFiniteNumber(item?.allTimeHistoryTradeCount);
   const recentResults = Array.isArray(item?.recentFormResults) ? item.recentFormResults : [];
   const recentWinRatePct = firstFiniteNumber(item?.recentFormWinRatePct);
+  const allTimeWinRatePct = firstFiniteNumber(item?.allTimeWinRatePct);
   const hasProfitFlag = typeof item?.allTimeProfitKnown === 'boolean';
   const hasProfitValue = value != null || item?.allTimeProfitKnown === true;
   const hasProfitMeta = pnlTradeCount != null || historyTradeCount != null || recentResults.length > 0;
@@ -7857,6 +7864,7 @@ function getLeaderboardProfitEntryFromItem(item) {
     historyTradeCount: historyTradeCount ?? pnlTradeCount ?? null,
     recentResults,
     recentWinRatePct: recentWinRatePct ?? null,
+    allTimeWinRatePct: allTimeWinRatePct ?? recentWinRatePct ?? null,
   };
 }
 
@@ -7873,6 +7881,7 @@ function hydrateLeaderboardProfit(item, profitEntries) {
       allTimeHistoryTradeCount: Number.isFinite(entry?.historyTradeCount) ? entry.historyTradeCount : null,
       recentFormResults: Array.isArray(entry?.recentResults) ? entry.recentResults : [],
       recentFormWinRatePct: Number.isFinite(entry?.recentWinRatePct) ? entry.recentWinRatePct : null,
+      allTimeWinRatePct: Number.isFinite(entry?.allTimeWinRatePct) ? entry.allTimeWinRatePct : null,
     };
   }
 
@@ -7885,6 +7894,7 @@ function hydrateLeaderboardProfit(item, profitEntries) {
     allTimeHistoryTradeCount: Number.isFinite(entry.historyTradeCount) ? entry.historyTradeCount : null,
     recentFormResults: Array.isArray(entry.recentResults) ? entry.recentResults : [],
     recentFormWinRatePct: Number.isFinite(entry.recentWinRatePct) ? entry.recentWinRatePct : null,
+    allTimeWinRatePct: Number.isFinite(entry.allTimeWinRatePct) ? entry.allTimeWinRatePct : null,
   };
 }
 
@@ -8284,15 +8294,18 @@ function buildWalletProfitSummary(profile, trades) {
 }
 
 function buildLeaderboardRecentForm(trades) {
-  const results = buildWalletResultEntries(trades)
+  const entries = buildWalletResultEntries(trades);
+  const results = entries
     .slice(-5)
     .reverse()
     .map((entry) => entry.result);
   const wins = results.filter((result) => result === 'W').length;
+  const allTimeWins = entries.filter((entry) => entry.result === 'W').length;
 
   return {
     results,
     winRatePct: results.length ? (wins / results.length) * 100 : null,
+    allTimeWinRatePct: entries.length ? (allTimeWins / entries.length) * 100 : null,
   };
 }
 
@@ -8809,8 +8822,9 @@ function getLeaderboardProfitTone(trader) {
   return Number(trader.allTimeProfitUsd || 0) < 0 ? 'loss' : 'profit';
 }
 
-function formatLeaderboardRecentWinRate(trader) {
-  return Number.isFinite(trader?.recentFormWinRatePct) ? `${trimNumber(trader.recentFormWinRatePct)}%` : '--';
+function formatLeaderboardAllTimeWinRate(trader) {
+  const value = firstFiniteNumber(trader?.allTimeWinRatePct, trader?.recentFormWinRatePct);
+  return value != null ? `${trimNumber(value)}%` : '--';
 }
 
 function formatLeaderboardProfitTradeCount(trader, loading = false) {
