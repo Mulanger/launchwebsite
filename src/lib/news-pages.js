@@ -3,7 +3,15 @@ import { seoImage, siteName, siteOrigin } from './seo.js';
 const defaultAutonewsBase = '';
 
 export function getAutonewsBase() {
-  return (process.env.AUTONEWS_BASE_URL || process.env.NEWS_API_BASE_URL || defaultAutonewsBase).replace(/\/$/, '');
+  const raw = (process.env.AUTONEWS_BASE_URL || process.env.NEWS_API_BASE_URL || defaultAutonewsBase).trim();
+  if (!raw) return '';
+
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    return new URL(withProtocol).origin;
+  } catch {
+    return '';
+  }
 }
 
 export function newsPathForSlug(slug) {
@@ -73,4 +81,3 @@ export function normalizeNewsDate(value) {
 export function buildNewsDescription(article) {
   return article?.dek || 'Latest Polymarket whale trade and resolved-loss news from Polywhale.';
 }
-
