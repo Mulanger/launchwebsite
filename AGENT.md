@@ -58,6 +58,7 @@ Recent important work:
 - Q&A SEO hub is live at `/qa` with static question pages at `/qa/[slug]`. Legacy `/qna` and `/qna/[slug]` permanently redirect to the canonical `/qa` routes. Q&A content is generated from `qna_sample.json` through `src/lib/qna.js` and has a dedicated `/sitemap-qa.xml`.
 - Trader profile SEO pages now use a native Next server route at `/trader/[wallet]` with crawlable `TraderProfileSnapshot` HTML, profile JSON-LD, canonical wallet URLs, pseudonym alias redirects when resolvable, and `/sitemap-traders.xml`.
 - Compare SEO pages are live at `/compare` and `/compare/polymarket-vs-kalshi`. They are native Next pages backed by `src/lib/compare-pages.js`, use Article/WebPage/Breadcrumb JSON-LD, source links, official logo assets, and `/sitemap-compare.xml`.
+- News SEO pages are live at `/news` and `/news/[slug]`. The website fetches published articles from the separate `D:\autonews` Railway service through `AUTONEWS_BASE_URL`, renders them under the existing Polywhale dashboard chrome, includes article URLs in `/sitemap.xml`, and exposes a Google News sitemap at `/sitemap-news.xml`.
 
 ## Project Shape
 
@@ -79,6 +80,7 @@ D:\polywatch-website
     sitemap.xml/           Root all-in URL-set sitemap route.
     sitemap-static.xml/    Dedicated static-page sitemap route.
     sitemap-markets.xml/   Dedicated market-page sitemap route.
+    sitemap-news.xml/      Google News sitemap route for fresh news articles.
     sitemap-compare.xml/   Dedicated compare-page sitemap route.
     sitemap-qa.xml/        Dedicated Q&A sitemap route.
     sitemap-traders.xml/   Dedicated trader-profile sitemap route.
@@ -97,6 +99,7 @@ D:\polywatch-website
     lib/
       env.js               Shared public env reader for Vite and Next browser bundles.
       compare-pages.js     Native compare page metadata, copy, source links, and JSON-LD.
+      news-pages.js        Autonews article API adapter, news metadata helpers, and structured data.
       qna.js               Q&A route data, search/grouping helpers, metadata, and JSON-LD.
       trader-pages.js      Trader profile SEO fetching, sitemap source, alias resolution, metadata, and JSON-LD.
       next-metadata.js     Next metadata helpers.
@@ -161,6 +164,7 @@ Production server:
 
 - `PORT`: server port. Defaults to `4173`.
 - `API_BASE_URL`: upstream target for the Next `app/api/[...path]` proxy route, `server.js` `/api` proxy, and Next server helpers. Defaults to production API.
+- `AUTONEWS_BASE_URL`: base URL for the separate autonews Railway service, used by `/news`, `/news/[slug]`, `/sitemap.xml`, and `/sitemap-news.xml`. Values with or without `https://` are accepted, but Railway should normally use the full URL such as `https://autonews-production-xxxx.up.railway.app`.
 
 ## Runtime Data Flow
 
@@ -173,6 +177,7 @@ Production server:
 7. Websocket trades are inserted at the top, filtered client-side, then hydrated/merged when image metadata is missing.
 8. Today-scoped feed stats, last-60-minute stats, feed top whales, and the leaderboard page are computed from the same current New York session key in the web client.
 9. Follow state is stored locally and synced to the API after anonymous auth.
+10. News pages fetch article JSON from the autonews service (`GET /v1/news` and `GET /v1/news/:slug`) and render canonical URLs on `www.polywhaletrades.com/news/...`.
 
 Crawler/resource behavior:
 
@@ -192,6 +197,11 @@ Public data:
 - `GET /v1/leaderboard?sort=profit&limit=50&cursor=...`
 - `GET /v1/traders/:wallet`
 - `WS /v1/whales/stream`
+
+Autonews data:
+
+- `GET <AUTONEWS_BASE_URL>/v1/news?limit=...`
+- `GET <AUTONEWS_BASE_URL>/v1/news/:slug`
 
 `GET /v1/traders/:wallet` may include `resolved` metrics computed by the whale server from full `trade_outcomes` resolved BUY history: all-time realized P/L, longest win streak, recent W/L results, and resolved `1d`/`7d`/`30d`/`365d` window summaries. Trader profile UI should prefer those authoritative values over frontend reconstruction from visible whale trades.
 
@@ -244,6 +254,8 @@ Public SEO routes:
 - `/leaderboard`
 - `/compare`
 - `/compare/polymarket-vs-kalshi`
+- `/news`
+- `/news/[slug]`
 - `/market/[slug]`
 - `/qa`
 - `/qa/[slug]`
@@ -274,6 +286,8 @@ Q&A pages are static Next SEO pages. `/qa` is the canonical hub and `/qa/[slug]`
 
 Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/polymarket-vs-kalshi` is the first comparison page, focused on fees, regulation, funding, market coverage, and Polywhale's wallet-transparency angle. Add new comparison pages through `src/lib/compare-pages.js` and they will flow into `/compare`, `/sitemap.xml`, and `/sitemap-compare.xml`.
 
+News pages are native Next SEO pages backed by `src/lib/news-pages.js` and the separate `D:\autonews` service. `/news` is the public hub, `/news/[slug]` renders a crawlable article with NewsArticle JSON-LD, and article URLs flow into `/sitemap.xml`. `/sitemap-news.xml` is a Google News sitemap containing only articles published in the last 48 hours. In Search Console, submit `sitemap.xml` and `sitemap-news.xml`; the latter may temporarily contain zero URLs when no recent articles exist.
+
 ## Important Code Areas
 
 `src/App.jsx`
@@ -298,6 +312,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - `app/_components/HybridPublicRoute.jsx`: serves crawlable public HTML and hydrates into the legacy app for browser users.
 - `app/_components/LegacyAppRoute.jsx` and `LegacyAppRouteClient.jsx`: route wrappers for app-only pages.
 - `app/_components/PublicChrome.jsx`: reusable public SSR chrome.
+- `app/_components/NewsLayout.jsx`: reusable News sidebar, rail, mobile nav, and article helpers.
 
 `src/lib/`
 
@@ -310,6 +325,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - `trader-pages.js`: native trader-profile SEO adapter, canonical wallet helpers, alias lookup, sitemap source, and JSON-LD.
 - `qna.js`: Q&A content normalization, search/grouping, metadata, and structured data.
 - `compare-pages.js`: comparison page registry, copy, source links, metadata, and structured data.
+- `news-pages.js`: autonews API reads, canonical news paths, metadata descriptions, and NewsArticle structured data.
 - `sitemap-pages.js`: static URL registry used by root and static sitemaps.
 - `sitemap-xml.js`: shared XML escaping and sitemap URL-set builder.
 
@@ -401,7 +417,7 @@ Before pushing:
 8. Check responsive layout if the change touches grids, feed rows, profile header, or charts.
 9. If changing metadata/SEO copy, verify `index.html`, `src/App.jsx`, `src/lib/seo.js`, and Next route metadata are aligned and contain no malformed encoding characters.
 10. For SEO route changes, verify source HTML and JSON-LD for affected native pages such as `/market/[slug]`, `/trader/[wallet]`, `/qa`, `/qa/[slug]`, `/compare`, and `/compare/polymarket-vs-kalshi`.
-11. Verify `/sitemap.xml` plus the dedicated `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-qa.xml`, `/sitemap-traders.xml`, and `/sitemap-compare.xml` routes when changing those page families.
+11. Verify `/sitemap.xml` plus the dedicated `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-news.xml`, `/sitemap-qa.xml`, `/sitemap-traders.xml`, and `/sitemap-compare.xml` routes when changing those page families.
 12. For robots/API SEO changes, verify Googlebot can access `/api/*` in `robots.txt` and that `/api/*` responses include `X-Robots-Tag: noindex, nofollow`.
 13. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
 
@@ -453,9 +469,9 @@ SEO route verification on 2026-05-08:
 
 Sitemap route update on 2026-05-09:
 
-- `/sitemap.xml` is a direct URL-set sitemap with every canonical public SEO URL family: static pages, qualified markets, trader profiles, Q&A pages, and compare pages.
-- Dedicated sitemap routes also exist at `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-traders.xml`, `/sitemap-qa.xml`, and `/sitemap-compare.xml` for Search Console diagnostics by page family.
-- `robots.txt` lists the root all-in sitemap and all dedicated sitemap routes so crawlers can discover either path.
+- `/sitemap.xml` is a direct URL-set sitemap with every canonical public SEO URL family: static pages, qualified markets, trader profiles, Q&A pages, compare pages, the news hub, and published news articles.
+- Dedicated sitemap routes also exist at `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-news.xml`, `/sitemap-traders.xml`, `/sitemap-qa.xml`, and `/sitemap-compare.xml` for Search Console diagnostics by page family.
+- `robots.txt` lists the root all-in sitemap and all dedicated sitemap routes so crawlers can discover either path. For Google Search Console, submit `sitemap.xml` and `sitemap-news.xml`; the news sitemap is intentionally limited to recent articles.
 
 Googlebot API resource update on 2026-05-09:
 
@@ -471,6 +487,7 @@ The Railway-backed Polywhale system is split across four local project directori
 2. `D:\whaleserver\api-server`: whale server/API. Owns REST and websocket contracts such as `/v1/whales`, `/v1/traders/:wallet`, `/v1/leaderboard`, follows/auth, alerts, trade detail composition, and the public SEO snapshot endpoints such as `/v1/market-pages` and `/v1/trader-pages` when available.
 3. `D:\whalebackend\whale-watcher`: whale watcher. Watches Polymarket activity, normalizes whale trades, publishes/stores trade events for the API, and populates enriched market-page snapshot data used by the website's `/market/[slug]` routes.
 4. `D:\Resolution-tracker`: market resolution service. Tracks market outcomes/resolution state and writes or publishes resolution fields consumed by the API and website, including statuses such as `resolved_win`/`resolved_loss`, `winningOutcome`, `payoutUsd`, `pnlUsd`, `resolvedAt`, and `closed`.
+5. `D:\autonews`: automated news worker and article API. Watches Redis whale/resolution events, writes `news_articles`, uses MiniMax through `MINIMAX_API_KEY` with template fallback, and serves article JSON for this website's `/news` routes.
 
 The Flutter/mobile app is separate local client work under `D:\whaletracker`. It shares product language and API concepts, but it is not one of the four Railway service directories above.
 
