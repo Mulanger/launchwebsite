@@ -18,6 +18,10 @@ export function newsPathForSlug(slug) {
   return `/news/${encodeURIComponent(slug)}`;
 }
 
+export function newsImagePathForSlug(slug) {
+  return `${newsPathForSlug(slug)}/image.svg`;
+}
+
 export async function fetchNewsIndex(limit = 50) {
   const base = getAutonewsBase();
   if (!base) return [];
@@ -49,18 +53,32 @@ export async function fetchNewsArticle(slug) {
 }
 
 export function buildNewsArticleStructuredData(article) {
+  const image = getNewsArticleImage(article);
+  const sourceUrls = (article.sourceLinks || []).map((source) => source.url).filter(Boolean);
+
   return {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
     headline: article.title,
     description: article.dek,
+    image: image
+      ? [
+          {
+            '@type': 'ImageObject',
+            url: image.url,
+            width: image.width,
+            height: image.height,
+            caption: image.alt,
+          },
+        ]
+      : undefined,
     datePublished: article.publishedAt,
     dateModified: article.updatedAt || article.publishedAt,
     mainEntityOfPage: `${siteOrigin}${newsPathForSlug(article.slug)}`,
     author: {
-      '@type': 'Organization',
-      name: siteName,
-      url: siteOrigin,
+      '@type': article.byline?.type || 'Organization',
+      name: article.byline?.name || `${siteName} News Desk`,
+      url: article.byline?.url || `${siteOrigin}/about`,
     },
     publisher: {
       '@type': 'Organization',
@@ -70,6 +88,11 @@ export function buildNewsArticleStructuredData(article) {
         url: seoImage,
       },
     },
+    articleSection: article.kind === 'whale_loss' ? 'Resolved whale losses' : 'Whale trades',
+    keywords: article.tags,
+    about: ['Polymarket', 'Prediction markets', article.facts?.marketTitle].filter(Boolean),
+    isAccessibleForFree: true,
+    ...(sourceUrls.length ? { citation: sourceUrls } : {}),
   };
 }
 
@@ -80,4 +103,16 @@ export function normalizeNewsDate(value) {
 
 export function buildNewsDescription(article) {
   return article?.dek || 'Latest Polymarket whale trade and resolved-loss news from Polywhale.';
+}
+
+export function getNewsArticleImage(article) {
+  if (!article?.slug) return null;
+  const image = article.image || {};
+  return {
+    url: image.url || `${siteOrigin}${newsImagePathForSlug(article.slug)}`,
+    alt: image.alt || `${article.title} - Polywhale news image`,
+    width: image.width || 1200,
+    height: image.height || 675,
+    type: image.mimeType || 'image/svg+xml',
+  };
 }

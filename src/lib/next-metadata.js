@@ -5,6 +5,8 @@ export function buildNextMetadata(seo) {
   const path = metadata.path === '/' ? '/' : metadata.path || '/';
   const canonical = `${siteOrigin}${path}`;
   const robots = metadata.robots || seoDefaults.robots;
+  const image = metadata.image || seoImage;
+  const images = [normalizeMetadataImage(image)];
 
   return {
     metadataBase: new URL(siteOrigin),
@@ -32,16 +34,33 @@ export function buildNextMetadata(seo) {
       siteName,
       title: metadata.title || seoDefaults.title,
       description: metadata.description || seoDefaults.description,
-      type: 'website',
+      type: metadata.openGraphType || 'website',
       url: canonical,
-      images: [seoImage],
+      images,
       locale: 'en_US',
+      ...(metadata.publishedTime ? { publishedTime: metadata.publishedTime } : {}),
+      ...(metadata.modifiedTime ? { modifiedTime: metadata.modifiedTime } : {}),
+      ...(metadata.authors ? { authors: metadata.authors } : {}),
     },
     twitter: {
       card: 'summary_large_image',
       title: metadata.title || seoDefaults.title,
       description: metadata.description || seoDefaults.description,
-      images: [seoImage],
+      images,
     },
   };
+}
+
+function normalizeMetadataImage(image) {
+  if (typeof image === 'string') return image;
+  if (image?.url) {
+    return {
+      url: image.url,
+      ...(image.width ? { width: image.width } : {}),
+      ...(image.height ? { height: image.height } : {}),
+      ...(image.alt ? { alt: image.alt } : {}),
+      ...(image.type ? { type: image.type } : {}),
+    };
+  }
+  return seoImage;
 }

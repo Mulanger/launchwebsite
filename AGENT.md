@@ -58,7 +58,7 @@ Recent important work:
 - Q&A SEO hub is live at `/qa` with static question pages at `/qa/[slug]`. Legacy `/qna` and `/qna/[slug]` permanently redirect to the canonical `/qa` routes. Q&A content is generated from `qna_sample.json` through `src/lib/qna.js` and has a dedicated `/sitemap-qa.xml`.
 - Trader profile SEO pages now use a native Next server route at `/trader/[wallet]` with crawlable `TraderProfileSnapshot` HTML, profile JSON-LD, canonical wallet URLs, pseudonym alias redirects when resolvable, and `/sitemap-traders.xml`.
 - Compare SEO pages are live at `/compare` and `/compare/polymarket-vs-kalshi`. They are native Next pages backed by `src/lib/compare-pages.js`, use Article/WebPage/Breadcrumb JSON-LD, source links, official logo assets, and `/sitemap-compare.xml`.
-- News SEO pages are live at `/news` and `/news/[slug]`. The website fetches published articles from the separate `D:\autonews` Railway service through `AUTONEWS_BASE_URL`, renders them under the existing Polywhale dashboard chrome, includes article URLs in `/sitemap.xml`, and exposes a Google News sitemap at `/sitemap-news.xml`.
+- News SEO pages are live at `/news` and `/news/[slug]`. The website fetches published articles from the separate `D:\autonews` Railway service through `AUTONEWS_BASE_URL`, renders them under the existing Polywhale dashboard chrome, includes article URLs in `/sitemap.xml`, and exposes a Google News sitemap at `/sitemap-news.xml`. Article pages consume autonews `image`, `byline`, `sourceLinks`, and `editorialDisclosure` fields when present; `/news/[slug]/image.svg` proxies the generated autonews article image onto the canonical website domain for Open Graph, Twitter, and NewsArticle metadata.
 
 ## Project Shape
 
@@ -286,7 +286,7 @@ Q&A pages are static Next SEO pages. `/qa` is the canonical hub and `/qa/[slug]`
 
 Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/polymarket-vs-kalshi` is the first comparison page, focused on fees, regulation, funding, market coverage, and Polywhale's wallet-transparency angle. Add new comparison pages through `src/lib/compare-pages.js` and they will flow into `/compare`, `/sitemap.xml`, and `/sitemap-compare.xml`.
 
-News pages are native Next SEO pages backed by `src/lib/news-pages.js` and the separate `D:\autonews` service. `/news` is the public hub, `/news/[slug]` renders a crawlable article with NewsArticle JSON-LD, and article URLs flow into `/sitemap.xml`. `/sitemap-news.xml` is a Google News sitemap containing only articles published in the last 48 hours. In Search Console, submit `sitemap.xml` and `sitemap-news.xml`; the latter may temporarily contain zero URLs when no recent articles exist.
+News pages are native Next SEO pages backed by `src/lib/news-pages.js` and the separate `D:\autonews` service. `/news` is the public hub, `/news/[slug]` renders a crawlable article with NewsArticle JSON-LD, and article URLs flow into `/sitemap.xml`. `/news/[slug]/image.svg` proxies the autonews generated SVG image for the canonical domain, and article metadata uses the article-specific image instead of the generic site logo when available. `/sitemap-news.xml` is a Google News sitemap containing only articles published in the last 48 hours. In Search Console, submit `sitemap.xml` and `sitemap-news.xml`; the latter may temporarily contain zero URLs when no recent articles exist.
 
 ## Important Code Areas
 
