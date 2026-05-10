@@ -21,7 +21,7 @@ Recent important work:
 - Feed sort is limited to `Most recent` and `Largest size`.
 - Market images are hydrated for live websocket trades so new rows do not remain as empty fallback squares.
 - Leaderboard rows show volume, trade count, and average trade. The confusing row-level "Whales" column and "All markets" label were removed.
-- Leaderboard sort now includes `Profit`. The website prefers cached all-time P/L fields on `/v1/leaderboard` items from the whale server and only falls back to client-side wallet-history fetching while backend rollout is incomplete. Profit remains independent of the active `1D`/`7D`/`30D`/`1Y` leaderboard window. In the profit view, row cards must show signed `Profit` as the primary right-side metric, show `P/L trades` from the all-time P/L trade count, and replace `Avg` with recent form from the latest 5 resolved wallet trades.
+- Leaderboard sort includes `Profit`, backed by the whale server's all-time `GET /v1/leaderboard?sort=profit` mode. Profit rows are ranked directly from resolved BUY `trade_outcomes` since tracking began, not from the active `1D`/`7D` window cohort. In the profit view, hide the day-window controls, show an `All-time P/L` label, show signed `Profit` as the primary right-side metric, show `P/L trades` from the all-time P/L trade count, and replace `Avg` with recent form from the latest 5 resolved wallet trades.
 - Leaderboard row rank badges show the API volume rank only for `Sort: Volume`; for derived sorts such as `Trade count` or `Profit`, the badge should show the current sorted display position so users do not see stale volume ranks.
 - Trader profile headers show a short wallet title such as `0xa2cd..`, full address underneath, and a copy button.
 - Trader profile daily volume chart is a bar chart so one-day data does not render as an ugly triangle.
@@ -189,6 +189,7 @@ Public data:
 - `GET /v1/whales/:tradeId`
 - `GET /v1/whales/:tradeId/detail`
 - `GET /v1/leaderboard?window=1d|7d|30d|365d&limit=50&cursor=...`
+- `GET /v1/leaderboard?sort=profit&limit=50&cursor=...`
 - `GET /v1/traders/:wallet`
 - `WS /v1/whales/stream`
 
@@ -216,7 +217,7 @@ Important fallback behavior:
 - The trade detail page should tolerate the enhanced endpoint being unavailable by normalizing a basic trade into a reduced detail view.
 - Following-only feed uses server auth when available. Without auth, it filters public feed results against local followed wallets.
 - The production API supports `/v1/leaderboard?window=1d`, `7d`, `30d`, and `365d`. Use the API leaderboard for authoritative windows instead of client-derived rank fallbacks.
-- `/v1/leaderboard` items may include server-cached all-time profit fields: `allTimeProfitUsd`, `allTimeProfitKnown`, `allTimePnlTradeCount`, `recentFormResults`, and `recentFormWinRatePct`. The website should prefer these fields and avoid per-visitor history crawling when they are present.
+- The production API supports `/v1/leaderboard?sort=profit` for the authoritative all-time profit leaderboard. This mode ignores `window` for row selection and returns server-cached all-time profit fields: `allTimeProfitUsd`, `allTimeProfitKnown`, `allTimePnlTradeCount`, `recentFormResults`, and `recentFormWinRatePct`. The website should hide time-window controls in profit mode and avoid per-visitor history crawling when these fields are present.
 
 ## Routes
 
@@ -341,7 +342,7 @@ Compare pages are native Next SEO pages. `/compare` is the hub and `/compare/pol
 - "Today" means the date in `America/New_York`, resetting at New York midnight. Use the shared helpers in `src/App.jsx` (`getCurrentNewYorkSession`, `filterNewYorkSession`, `buildTodayLeaderboardFromTrades`) rather than adding new date logic.
 - Keep trade intent wording as provided by the backend. Do not reinterpret BUY/SELL in the website; intent classification belongs upstream.
 - The public web leaderboard is presented as `1D` and is today-scoped in the frontend. Trader profile stats still use the API's `7d` stats until the backend exposes profile stats for today. 30D and 1Y are visible but treated as future/locked UI.
-- Leaderboard `Profit` sort must use all-time realized P/L from wallet history, not the selected window's volume/trade aggregate. The selected window can change which API leaderboard rows are loaded until the backend exposes a native all-time profit leaderboard, but it must not change the P/L value used for a wallet. Do not show volume as the primary metric in profit sort; show signed profit, the all-time P/L trade count, and the latest 5-trade W/L form instead of average trade size.
+- Leaderboard `Profit` sort must use `/v1/leaderboard?sort=profit` and all-time realized P/L from resolved BUY outcomes, not the selected window's volume/trade aggregate. Time-window controls must be hidden in profit mode and must not affect profit fetches, rows, ranks, or values. Do not show volume as the primary metric in profit sort; show signed profit, the all-time P/L trade count, and the latest 5-trade W/L form instead of average trade size.
 - Trader profile performance window toggles must not change full-history fields: all-time profit, longest win streak, and recent W/L chips are based on full resolved wallet history. Prefer `profile.resolved` for these values; only use grouped visible whale history as a frontend fallback. Windowed win rate and its adjacent trade count should prefer `profile.resolved.windows[windowId]` when available so both numbers describe the same resolved BUY-trade set. The W/L chip order is newest on the left, older to the right.
 - Trader profile recent trades should keep 10 rows per page unless the user asks for a different density. Pagination is client-side over the already-loaded merged wallet history, not backend numbered pages.
 - Do not add search bars back to the feed or leaderboard unless explicitly asked.

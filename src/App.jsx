@@ -914,6 +914,9 @@ function LeaderboardPage({ initialData = null }) {
   const [profitLoading, setProfitLoading] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const todaySession = useMemo(() => getCurrentNewYorkSession(clock), [clock]);
+  const leaderboardRequestSort = sort === 'profit' ? 'profit' : 'volume';
+  const leaderboardRequestWindow = sort === 'profit' ? '1d' : windowId;
+  const leaderboardRequestDateKey = sort === 'profit' ? 'all-time' : todaySession.dateKey;
   const loadedLeaderboardWallets = useMemo(
     () => Array.from(new Set(items.map((item) => normalizeWalletKey(item.proxyWallet)).filter(Boolean))),
     [items]
@@ -946,7 +949,8 @@ function LeaderboardPage({ initialData = null }) {
     if (
       usedInitialLeaderboardRef.current &&
       refreshNonce === 0 &&
-      windowId === initialLeaderboardWindow
+      leaderboardRequestSort !== 'profit' &&
+      leaderboardRequestWindow === initialLeaderboardWindow
     ) {
       usedInitialLeaderboardRef.current = false;
       return undefined;
@@ -958,7 +962,11 @@ function LeaderboardPage({ initialData = null }) {
       setLoading(true);
       setError('');
       try {
-        const data = await fetchLeaderboardPage(windowId, null, { signal: controller.signal, limit: 100 });
+        const data = await fetchLeaderboardPage(leaderboardRequestWindow, null, {
+          signal: controller.signal,
+          limit: 100,
+          sort: leaderboardRequestSort,
+        });
         setItems(Array.isArray(data.items) ? data.items : []);
         setCursor(data.nextCursor ?? null);
         setAsOf(data.asOf ?? Math.floor(Date.now() / 1000));
@@ -975,7 +983,7 @@ function LeaderboardPage({ initialData = null }) {
 
     loadLeaderboard();
     return () => controller.abort();
-  }, [windowId, refreshNonce, todaySession.dateKey, initialLeaderboardWindow]);
+  }, [leaderboardRequestWindow, leaderboardRequestSort, refreshNonce, leaderboardRequestDateKey, initialLeaderboardWindow]);
 
   useEffect(() => {
     let closed = false;
@@ -987,7 +995,11 @@ function LeaderboardPage({ initialData = null }) {
       inFlight = true;
 
       try {
-        const data = await fetchLeaderboardPage(windowId, null, { signal: controller.signal, limit: 100 });
+        const data = await fetchLeaderboardPage(leaderboardRequestWindow, null, {
+          signal: controller.signal,
+          limit: 100,
+          sort: leaderboardRequestSort,
+        });
         if (closed) return;
 
         setItems(Array.isArray(data.items) ? data.items : []);
@@ -1016,7 +1028,7 @@ function LeaderboardPage({ initialData = null }) {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [windowId, todaySession.dateKey]);
+  }, [leaderboardRequestWindow, leaderboardRequestSort, leaderboardRequestDateKey]);
 
   useEffect(() => {
     if (sort !== 'profit') {
@@ -1118,7 +1130,10 @@ function LeaderboardPage({ initialData = null }) {
     setLoadingMore(true);
     setError('');
     try {
-      const data = await fetchLeaderboardPage(windowId, cursor, { limit: 100 });
+      const data = await fetchLeaderboardPage(leaderboardRequestWindow, cursor, {
+        limit: 100,
+        sort: leaderboardRequestSort,
+      });
       const incoming = Array.isArray(data.items) ? data.items : [];
       setItems((previous) => mergeLeaderboardItems(previous, incoming));
       setCursor(data.nextCursor ?? null);
@@ -1128,7 +1143,7 @@ function LeaderboardPage({ initialData = null }) {
     } finally {
       setLoadingMore(false);
     }
-  }, [windowId, cursor, loadingMore]);
+  }, [leaderboardRequestWindow, leaderboardRequestSort, cursor, loadingMore]);
   const handleWindowChange = useCallback((nextWindowId) => {
     if (lockedLeaderboardWindowIds.has(nextWindowId)) return;
     setWindowId(nextWindowId);
@@ -1210,6 +1225,7 @@ function MobileLeaderboardScreen({
     minHeight: showBottomNav ? '100vh' : 'auto',
     paddingBottom: showBottomNav ? 92 : 0,
   };
+  const isProfitSort = sortValue === 'profit';
 
   return (
     <div className={`leaderboard-mobile-screen ${className}`.trim()} style={shellStyle}>
@@ -1227,46 +1243,66 @@ function MobileLeaderboardScreen({
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 999,
-              padding: 2,
-            }}
-          >
-            {leaderboardWindows.map((option) => {
-              const locked = Boolean(option.locked);
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  title={locked ? 'Coming soon' : option.caption}
-                  aria-disabled={locked}
-                  onClick={() => {
-                    if (!locked) onWindowChange(option.id);
-                  }}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: 999,
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    cursor: locked ? 'default' : 'pointer',
-                    border: 0,
-                    opacity: locked ? 0.42 : 1,
-                    background: windowId === option.id ? '#22d3a5' : 'transparent',
-                    color: windowId === option.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                  }}
-                >
-                  <span>{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          {isProfitSort ? (
+            <div
+              aria-label="Profit leaderboard timeframe"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 32,
+                borderRadius: 999,
+                padding: '0 14px',
+                border: '1px solid rgba(34,211,165,0.22)',
+                background: 'rgba(34,211,165,0.1)',
+                color: '#62e7b0',
+                fontSize: 11.5,
+                fontWeight: 700,
+              }}
+            >
+              All-time P/L
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 999,
+                padding: 2,
+              }}
+            >
+              {leaderboardWindows.map((option) => {
+                const locked = Boolean(option.locked);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    title={locked ? 'Coming soon' : option.caption}
+                    aria-disabled={locked}
+                    onClick={() => {
+                      if (!locked) onWindowChange(option.id);
+                    }}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 999,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: locked ? 'default' : 'pointer',
+                      border: 0,
+                      opacity: locked ? 0.42 : 1,
+                      background: windowId === option.id ? '#22d3a5' : 'transparent',
+                      color: windowId === option.id ? '#0a3a2a' : 'rgba(255,255,255,0.6)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
             <div style={{ marginLeft: 'auto' }}>
@@ -1298,10 +1334,10 @@ function MobileLeaderboardScreen({
           <EmptyState title="Leaderboard unavailable" body={error} actionLabel="Try again" onAction={onRefresh} />
         ) : rows.length === 0 ? (
           <EmptyState
-            title="No ranked traders"
-            body="No rows are available for this window right now."
-            actionLabel="Switch window"
-            onAction={() => onWindowChange('7d')}
+            title={isProfitSort ? 'No profit leaders' : 'No ranked traders'}
+            body={isProfitSort ? 'No resolved P/L rows are available right now.' : 'No rows are available for this window right now.'}
+            actionLabel={isProfitSort ? 'Refresh' : 'Switch window'}
+            onAction={isProfitSort ? onRefresh : () => onWindowChange('7d')}
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -6848,8 +6884,8 @@ async function fetchTodayDashboard(filter, options = {}) {
 }
 
 async function fetchLeaderboardPage(windowId, cursor = null, options = {}) {
-  const { limit, ...requestOptions } = options;
-  return fetchJson(buildLeaderboardPath(windowId, cursor, limit), requestOptions);
+  const { limit, sort, ...requestOptions } = options;
+  return fetchJson(buildLeaderboardPath(windowId, cursor, limit, sort), requestOptions);
 }
 
 async function fetchTraderHistory(wallet, options = {}) {
@@ -7596,9 +7632,13 @@ function buildTraderWhalesPath(wallet, cursor = null, limit = 100) {
   return `/v1/whales?${params.toString()}`;
 }
 
-function buildLeaderboardPath(windowId, cursor = null, limit = 50) {
+function buildLeaderboardPath(windowId, cursor = null, limit = 50, sort = 'volume') {
   const params = new URLSearchParams();
-  params.set('window', windowId);
+  if (sort === 'profit') {
+    params.set('sort', 'profit');
+  } else {
+    params.set('window', windowId);
+  }
   params.set('limit', String(limit || 50));
   if (cursor) params.set('cursor', cursor);
   return `/v1/leaderboard?${params.toString()}`;
