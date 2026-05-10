@@ -55,7 +55,7 @@ export default async function NewsHubPage() {
           <h1>
             Polymarket whale <em>news</em>.
           </h1>
-          <p>Large trades and resolved whale losses, turned into crawlable stories as the data arrives.</p>
+          <p>Follow the biggest Polymarket whale trades, market moves, and resolved losses as they happen.</p>
         </header>
 
         <section className="news-list" aria-label="Latest Polywhale news">
@@ -72,4 +72,3 @@ export default async function NewsHubPage() {
     </NewsShell>
   );
 }
-

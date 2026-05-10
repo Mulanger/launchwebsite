@@ -121,7 +121,7 @@ function CompareSidebar() {
         <Link className="feed-nav-item active" href="/compare">
           <Scale size={17} aria-hidden="true" />
           <span>Compare</span>
-          <small>SEO</small>
+          <small>Guide</small>
         </Link>
         <Link className="feed-nav-item" href="/profile/following">
           <Users size={17} aria-hidden="true" />

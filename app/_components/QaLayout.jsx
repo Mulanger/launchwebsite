@@ -34,7 +34,7 @@ function QaSidebar() {
 
         <div className="nav-label">Discover</div>
         <QaNavItem href="/leaderboard" icon={BarChart3} label="Leaderboard" badge="Rank" />
-        <QaNavItem href="/compare" icon={Scale} label="Compare" badge="SEO" />
+        <QaNavItem href="/compare" icon={Scale} label="Compare" badge="Guide" />
         <QaNavItem href="/profile/following" icon={Users} label="Following" badge="List" />
 
         <div className="nav-label">Account</div>

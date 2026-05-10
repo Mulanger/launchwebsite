@@ -33,7 +33,7 @@ function NewsSidebar() {
         <div className="nav-label">Discover</div>
         <NewsNavItem href="/leaderboard" icon={BarChart3} label="Leaderboard" badge="Rank" />
         <NewsNavItem href="/news" icon={Newspaper} label="News" badge="New" active />
-        <NewsNavItem href="/compare" icon={Scale} label="Compare" badge="SEO" />
+        <NewsNavItem href="/compare" icon={Scale} label="Compare" badge="Guide" />
         <NewsNavItem href="/profile/following" icon={Users} label="Following" badge="List" />
 
         <div className="nav-label">Account</div>
