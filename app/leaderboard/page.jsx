@@ -9,12 +9,13 @@ export const metadata = buildNextMetadata(seoByPath['/leaderboard']);
 
 async function loadLeaderboard() {
   try {
-    const data = await fetchPublicLeaderboard('1d', 50);
+    const data = await fetchPublicLeaderboard('1d', 50, { sort: 'profit' });
     return {
       items: Array.isArray(data?.items) ? data.items : [],
       nextCursor: data?.nextCursor ?? null,
       asOf: data?.asOf ?? null,
       windowId: '1d',
+      sort: 'profit',
       error: '',
     };
   } catch (error) {
@@ -23,20 +24,21 @@ async function loadLeaderboard() {
       nextCursor: null,
       asOf: null,
       windowId: '1d',
+      sort: 'profit',
       error: error.message || 'Leaderboard unavailable',
     };
   }
 }
 
 export default async function LeaderboardPage() {
-  const { items, nextCursor, asOf, error } = await loadLeaderboard();
+  const { items, nextCursor, asOf, sort, error } = await loadLeaderboard();
 
   return (
     <HybridPublicRoute
       initialPath="/leaderboard"
-      initialData={{ leaderboard: { items, nextCursor, asOf, windowId: '1d', error } }}
+      initialData={{ leaderboard: { items, nextCursor, asOf, windowId: '1d', sort, error } }}
     >
-      <PublicLeaderboardSnapshot items={items} error={error} />
+      <PublicLeaderboardSnapshot items={items} sort={sort} error={error} />
     </HybridPublicRoute>
   );
 }

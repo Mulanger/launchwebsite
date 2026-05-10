@@ -138,6 +138,11 @@ function normalizeLeader(wallet, index) {
   const rank = wallet.rank || index + 1;
   const trades = Number(wallet.tradeCount || 0);
   const volume = Number(wallet.volume || 0);
+  const profit = Number(wallet.allTimeProfitUsd);
+  const profitKnown = Boolean(wallet.allTimeProfitKnown) && Number.isFinite(profit);
+  const pnlTrades = Number(wallet.allTimePnlTradeCount || wallet.allTimeHistoryTradeCount || trades || 0);
+  const allTimeWinRatePct = Number(wallet.allTimeWinRatePct);
+  const recentResults = Array.isArray(wallet.recentFormResults) ? wallet.recentFormResults.slice(0, 5) : [];
   return {
     key: proxyWallet || `${rank}-${index}`,
     rank,
@@ -148,9 +153,27 @@ function normalizeLeader(wallet, index) {
     volume: formatUsdCompact(volume),
     fullVolume: formatUsdFull(volume),
     trades,
+    pnlTrades,
     avgTrade: formatUsdCompact(volume / Math.max(1, trades)),
+    profit: profitKnown ? formatSignedUsdCompact(profit) : '--',
+    profitTone: !profitKnown ? 'muted' : profit < 0 ? 'loss' : 'profit',
+    allTimeWinRate: Number.isFinite(allTimeWinRatePct) ? `${trimNumber(allTimeWinRatePct)}%` : '--',
+    recentResults,
     avatar: avatarGradient(proxyWallet || rank),
   };
+}
+
+function formatSignedUsdCompact(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '--';
+  const prefix = number > 0 ? '+' : number < 0 ? '-' : '';
+  return `${prefix}${formatUsdCompact(Math.abs(number))}`;
+}
+
+function trimNumber(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '0';
+  return number % 1 === 0 ? String(number) : number.toFixed(1);
 }
 
 function PublicSidebar({ activePage = 'feed' }) {
@@ -665,7 +688,18 @@ function LeaderboardSummary({ leaders }) {
   );
 }
 
-function MobileLeaderboardRow({ leader }) {
+function MobileLeaderboardRow({ leader, sort = 'volume' }) {
+  const isProfit = sort === 'profit';
+  const metric = isProfit ? leader.profit : leader.volume;
+  const metricLabel = isProfit ? 'PROFIT' : 'VOLUME';
+  const metricColor = isProfit
+    ? leader.profitTone === 'loss'
+      ? '#ff6b8a'
+      : leader.profitTone === 'muted'
+        ? 'rgba(255,255,255,0.58)'
+        : '#22d3a5'
+    : undefined;
+
   return (
     <Link className={`next-app-mobile-leader ${leader.rank <= 3 ? `rank-${leader.rank}` : ''}`} href={leader.href}>
       <span className="rank">{leader.rank}</span>
@@ -677,14 +711,37 @@ function MobileLeaderboardRow({ leader }) {
         </span>
       </div>
       <div className="value">
-        <strong>{leader.volume}</strong>
-        <small>VOLUME</small>
+        <strong style={metricColor ? { color: metricColor } : undefined}>{metric}</strong>
+        <small>{metricLabel}</small>
       </div>
       <div className="meta">
-        <span>Trades <b>{leader.trades}</b></span>
-        <span>Avg <b>{leader.avgTrade}</b></span>
+        {isProfit ? (
+          <>
+            <span>P/L trades <b>{leader.pnlTrades}</b></span>
+            <span className="center">All time winrate: <b>{leader.allTimeWinRate}</b></span>
+            <span className="recent">Recent form: <SnapshotRecentFormChips results={leader.recentResults} /></span>
+          </>
+        ) : (
+          <>
+            <span>Trades <b>{leader.trades}</b></span>
+            <span>Avg <b>{leader.avgTrade}</b></span>
+          </>
+        )}
       </div>
     </Link>
+  );
+}
+
+function SnapshotRecentFormChips({ results }) {
+  const paddedResults = [...(Array.isArray(results) ? results.slice(0, 5) : [])];
+  while (paddedResults.length < 5) paddedResults.push(null);
+
+  return (
+    <span className="next-app-recent-form-chips" aria-hidden="true">
+      {paddedResults.map((result, index) => (
+        <i className={result === 'W' ? 'win' : result === 'L' ? 'loss' : ''} key={`${result || 'empty'}-${index}`} />
+      ))}
+    </span>
   );
 }
 
@@ -761,8 +818,9 @@ export function PublicFeedSnapshot({ whales = [], leaders = [], error = '' }) {
   );
 }
 
-export function PublicLeaderboardSnapshot({ items = [], error = '' }) {
+export function PublicLeaderboardSnapshot({ items = [], sort = 'profit', error = '' }) {
   const leaders = items.map(normalizeLeader);
+  const isProfit = sort === 'profit';
 
   return (
     <div className="next-app-snapshot">
@@ -775,15 +833,19 @@ export function PublicLeaderboardSnapshot({ items = [], error = '' }) {
               <h1>Whale <em>leaderboard</em></h1>
             </header>
             <div className="next-app-leader-windows compact">
-              {leaderboardWindows.map((window, index) => (
-                <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
-              ))}
-              <b>Sort: Volume</b>
+              {isProfit ? (
+                <span className="active">All-time P/L</span>
+              ) : (
+                leaderboardWindows.map((window, index) => (
+                  <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
+                ))
+              )}
+              <b>Sort: {isProfit ? 'Profit' : 'Volume'}</b>
             </div>
             {error ? <p className="next-app-error">{error}</p> : null}
             <section className="next-app-mobile-list next-app-leader-list" aria-label="Ranked whale wallets">
               {leaders.map((leader) => (
-                <MobileLeaderboardRow leader={leader} key={leader.key} />
+                <MobileLeaderboardRow leader={leader} sort={sort} key={leader.key} />
               ))}
             </section>
           </section>
@@ -796,15 +858,19 @@ export function PublicLeaderboardSnapshot({ items = [], error = '' }) {
           <h1>Whale <em>leaderboard</em></h1>
         </header>
         <div className="next-app-leader-windows mobile">
-          {leaderboardWindows.map((window, index) => (
-            <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
-          ))}
-          <b>Sort: Volume</b>
+          {isProfit ? (
+            <span className="active">All-time P/L</span>
+          ) : (
+            leaderboardWindows.map((window, index) => (
+              <span className={index === 0 ? 'active' : index >= 2 ? 'locked' : ''} key={window}>{window}</span>
+            ))
+          )}
+          <b>Sort: {isProfit ? 'Profit' : 'Volume'}</b>
         </div>
         {error ? <p className="next-app-error">{error}</p> : null}
         <section className="next-app-mobile-list" aria-label="Ranked whale wallets">
           {leaders.map((leader) => (
-            <MobileLeaderboardRow leader={leader} key={leader.key} />
+            <MobileLeaderboardRow leader={leader} sort={sort} key={leader.key} />
           ))}
         </section>
         <MobileBottomNav active="leaders" />

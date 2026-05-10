@@ -93,9 +93,9 @@ const lockedLeaderboardWindowIds = new Set(
 );
 
 const leaderboardSortOptions = [
+  { id: 'profit', label: 'Profit' },
   { id: 'rank', label: 'Volume' },
   { id: 'trades', label: 'Trade count' },
-  { id: 'profit', label: 'Profit' },
 ];
 
 const legalLinks = [
@@ -896,12 +896,13 @@ function LeaderboardPage({ initialData = null }) {
   const initialLeaderboardItems = Array.isArray(initialData?.items) ? initialData.items : [];
   const hasInitialLeaderboardData = Boolean(initialData);
   const initialLeaderboardWindow = initialData?.windowId || '1d';
+  const initialLeaderboardSort = initialData?.sort || 'profit';
   const usedInitialLeaderboardRef = useRef(hasInitialLeaderboardData);
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     window.matchMedia('(max-width: 1020px)').matches
   );
   const [windowId, setWindowId] = useState(initialLeaderboardWindow);
-  const [sort, setSort] = useState('rank');
+  const [sort, setSort] = useState(initialLeaderboardSort);
   const [search, setSearch] = useState('');
   const [items, setItems] = useState(initialLeaderboardItems);
   const [cursor, setCursor] = useState(initialData?.nextCursor ?? null);
@@ -949,7 +950,7 @@ function LeaderboardPage({ initialData = null }) {
     if (
       usedInitialLeaderboardRef.current &&
       refreshNonce === 0 &&
-      leaderboardRequestSort !== 'profit' &&
+      leaderboardRequestSort === initialLeaderboardSort &&
       leaderboardRequestWindow === initialLeaderboardWindow
     ) {
       usedInitialLeaderboardRef.current = false;
@@ -983,7 +984,7 @@ function LeaderboardPage({ initialData = null }) {
 
     loadLeaderboard();
     return () => controller.abort();
-  }, [leaderboardRequestWindow, leaderboardRequestSort, refreshNonce, leaderboardRequestDateKey, initialLeaderboardWindow]);
+  }, [leaderboardRequestWindow, leaderboardRequestSort, refreshNonce, leaderboardRequestDateKey, initialLeaderboardWindow, initialLeaderboardSort]);
 
   useEffect(() => {
     let closed = false;
@@ -1541,12 +1542,16 @@ function MobileLeaderboardRow({ row }) {
 
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: row.showRecentForm ? 'auto minmax(0, 1fr)' : 'repeat(2, minmax(0, 1fr))',
+            display: row.showRecentForm ? 'flex' : 'grid',
+            gridTemplateColumns: row.showRecentForm ? undefined : 'repeat(2, minmax(0, 1fr))',
             gap: 8,
+            rowGap: 6,
+            flexWrap: row.showRecentForm ? 'wrap' : undefined,
+            justifyContent: row.showRecentForm ? 'space-between' : undefined,
             paddingTop: 8,
             borderTop: '1px solid rgba(255,255,255,0.05)',
             fontSize: 10.5,
+            alignItems: 'center',
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -1554,25 +1559,44 @@ function MobileLeaderboardRow({ row }) {
             <span style={{ color: '#fff', fontWeight: 600 }}>{row.trades}</span>
           </div>
           {row.showRecentForm ? (
+            <>
+              <div
+                title="All-time resolved win rate"
+                style={{
+                  minWidth: 0,
+                  flex: '1 1 118px',
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ color: 'rgba(255,255,255,0.45)' }}>All time winrate: </span>
+                <span style={{ color: allTimeWinRateColor, fontWeight: 700 }}>
+                  {row.profitLoading ? '--' : row.allTimeWinRate}
+                </span>
+              </div>
+              <div
+                style={{
+                  minWidth: 0,
+                  flex: '0 1 auto',
+                  marginLeft: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 5,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ color: 'rgba(255,255,255,0.45)' }}>Recent form:</span>
+                <LeaderboardRecentFormChips results={row.recentResults} loading={row.profitLoading} />
+              </div>
+            </>
+          ) : (
             <div
               style={{
                 minWidth: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: 7,
+                textAlign: 'right',
               }}
             >
-              <span
-                title="All-time resolved win rate"
-                style={{ color: allTimeWinRateColor, fontWeight: 700, flexShrink: 0 }}
-              >
-                {row.profitLoading ? '--' : row.allTimeWinRate}
-              </span>
-              <LeaderboardRecentFormChips results={row.recentResults} loading={row.profitLoading} />
-            </div>
-          ) : (
-            <div style={{ minWidth: 0, textAlign: 'right' }}>
               <span style={{ color: 'rgba(255,255,255,0.45)' }}>Avg </span>
               <span style={{ color: '#22d3a5', fontWeight: 600 }}>{row.avgTrade}</span>
             </div>

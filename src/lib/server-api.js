@@ -41,11 +41,15 @@ export async function fetchPublicDashboardToday(recentLimit = 100, leaderboardLi
   });
 }
 
-export async function fetchPublicLeaderboard(windowId = '1d', limit = 20) {
+export async function fetchPublicLeaderboard(windowId = '1d', limit = 20, options = {}) {
   const params = new URLSearchParams({
-    window: windowId,
     limit: String(limit),
   });
+  if (options.sort === 'profit') {
+    params.set('sort', 'profit');
+  } else {
+    params.set('window', windowId);
+  }
   return fetchServerJson(`/v1/leaderboard?${params.toString()}`, {
     next: { revalidate: 60 },
   });
