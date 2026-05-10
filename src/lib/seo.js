@@ -57,6 +57,15 @@ export const seoByPath = {
     path: '/compare',
     robots: 'index,follow,max-image-preview:large',
   },
+  '/news': {
+    title: 'Polymarket Whale News | Latest Whale Trades & Resolved Losses | Polywhale',
+    description:
+      'Read the latest Polywhale news on large Polymarket whale trades, resolved whale losses, market-moving wallets, and public prediction-market activity.',
+    keywords:
+      'Polymarket news, Polymarket whale news, whale trades, Polymarket losses, prediction market news, Polywhale news',
+    path: '/news',
+    robots: 'index,follow,max-image-preview:large',
+  },
   '/privacy': {
     title: 'Privacy Policy | Polywhale',
     description: 'Polywhale privacy policy for live Polymarket whale monitoring, alerts, follows, and anonymous app sessions.',

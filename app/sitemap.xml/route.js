@@ -1,6 +1,7 @@
 import { COMPARE_LAST_MODIFIED, comparePages } from '../../src/lib/compare-pages.js';
 import { fetchMarketPageIndex, marketPathForSlug } from '../../src/lib/market-pages.js';
 import { QNA_LAST_MODIFIED, qnaItems } from '../../src/lib/qna.js';
+import { fetchNewsIndex, newsPathForSlug, normalizeNewsDate } from '../../src/lib/news-pages.js';
 import { siteOrigin } from '../../src/lib/seo.js';
 import { staticSitemapPages } from '../../src/lib/sitemap-pages.js';
 import { buildUrlSet } from '../../src/lib/sitemap-xml.js';
@@ -59,6 +60,20 @@ export async function GET() {
     );
   } catch {
     // Keep the root sitemap available even if the upstream whale API is temporarily unavailable.
+  }
+
+  try {
+    const articles = await fetchNewsIndex(1000);
+    entries.push(
+      ...articles.map((article) => ({
+        url: `${siteOrigin}${newsPathForSlug(article.slug)}`,
+        lastmod: normalizeNewsDate(article.updatedAt || article.publishedAt),
+        changeFrequency: 'daily',
+        priority: article.kind === 'whale_loss' ? 0.76 : 0.72,
+      })),
+    );
+  } catch {
+    // Keep the root sitemap available even if the autonews service is temporarily unavailable.
   }
 
   const body = buildUrlSet(entries);
