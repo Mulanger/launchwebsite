@@ -43,6 +43,7 @@ function QaSidebar() {
 
       <div className="sidebar-links">
         <Link href="/compare">Compare</Link>
+        <Link href="/news">News</Link>
         <Link href="/qa" aria-current="page">
           Q&A
         </Link>

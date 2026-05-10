@@ -41,11 +41,11 @@ function NewsSidebar() {
       </nav>
 
       <div className="sidebar-links">
+        <Link href="/compare">Compare</Link>
         <Link href="/news" aria-current="page">
           News
         </Link>
         <Link href="/qa">Q&A</Link>
-        <Link href="/compare">Compare</Link>
         <Link href="/about">About</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/terms">Terms</Link>
@@ -151,4 +151,3 @@ export function formatNewsDate(value) {
     timeZoneName: 'short',
   }).format(date);
 }
-

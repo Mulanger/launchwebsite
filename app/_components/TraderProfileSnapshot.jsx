@@ -204,6 +204,8 @@ function TraderSidebar() {
       </nav>
 
       <div className="sidebar-links">
+        <Link href="/compare">Compare</Link>
+        <Link href="/news">News</Link>
         <Link href="/qa">Q&A</Link>
         <Link href="/about">About</Link>
         <Link href="/privacy">Privacy</Link>

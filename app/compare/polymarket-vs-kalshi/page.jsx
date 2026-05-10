@@ -141,6 +141,7 @@ function CompareSidebar() {
         <Link href="/compare" aria-current="page">
           Compare
         </Link>
+        <Link href="/news">News</Link>
         <Link href="/qa">Q&A</Link>
         <Link href="/about">About</Link>
         <Link href="/privacy">Privacy</Link>

@@ -4043,6 +4043,7 @@ function FeedSidebar({ activePage, liveState }) {
 
       <div className="sidebar-links">
         <a href="/compare">Compare</a>
+        <a href="/news">News</a>
         <a href="/qa">Q&A</a>
         <a href="/about">About</a>
         <a href="/privacy">Privacy</a>
