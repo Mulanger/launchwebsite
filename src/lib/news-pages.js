@@ -1,6 +1,7 @@
 import { seoImage, siteName, siteOrigin } from './seo.js';
 
 const defaultAutonewsBase = '';
+const staleTradeMaxEventAgeHours = 4;
 
 export function getAutonewsBase() {
   const raw = (process.env.AUTONEWS_BASE_URL || process.env.NEWS_API_BASE_URL || defaultAutonewsBase).trim();
@@ -35,7 +36,7 @@ export async function fetchNewsIndex(limit = 50) {
 
   if (!response.ok) return [];
   const payload = await response.json();
-  return Array.isArray(payload.items) ? payload.items : [];
+  return Array.isArray(payload.items) ? payload.items.filter(isIndexableNewsArticle) : [];
 }
 
 export async function fetchNewsArticle(slug) {
@@ -103,6 +104,20 @@ export function normalizeNewsDate(value) {
 
 export function buildNewsDescription(article) {
   return article?.dek || 'Latest Polymarket whale trade and resolved-loss news from Polywhale.';
+}
+
+export function isIndexableNewsArticle(article) {
+  return !isStaleTradeArticle(article);
+}
+
+export function isStaleTradeArticle(article) {
+  if (article?.kind !== 'whale_trade') return false;
+  const eventTimestamp = Number(article?.facts?.timestamp);
+  if (!Number.isFinite(eventTimestamp) || eventTimestamp <= 0) return false;
+
+  const published = normalizeNewsDate(article.publishedAt);
+  const ageHours = (published.getTime() - eventTimestamp * 1000) / (60 * 60 * 1000);
+  return ageHours > staleTradeMaxEventAgeHours;
 }
 
 export function getNewsArticleImage(article) {

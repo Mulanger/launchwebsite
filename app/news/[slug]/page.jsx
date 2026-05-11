@@ -15,6 +15,7 @@ import {
   fetchNewsArticle,
   fetchNewsIndex,
   getNewsArticleImage,
+  isIndexableNewsArticle,
   newsPathForSlug,
 } from '../../../src/lib/news-pages.js';
 import { siteOrigin } from '../../../src/lib/seo.js';
@@ -35,12 +36,15 @@ export async function generateMetadata({ params }) {
   }
 
   const image = getNewsArticleImage(article);
+  const robots = isIndexableNewsArticle(article)
+    ? 'index,follow,max-image-preview:large'
+    : 'noindex,follow,max-image-preview:large';
   return buildNextMetadata({
     title: `${article.title} | Polywhale News`,
     description: buildNewsDescription(article),
     keywords: [...(article.tags || []), 'Polymarket news', 'whale trade news', 'Polywhale'].join(', '),
     path: newsPathForSlug(article.slug),
-    robots: 'index,follow,max-image-preview:large',
+    robots,
     image,
     openGraphType: 'article',
     publishedTime: article.publishedAt,
