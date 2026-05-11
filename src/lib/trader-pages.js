@@ -1,4 +1,4 @@
-import { fetchPublicTraderPageIndex, fetchServerJson } from './server-api.js';
+import { fetchPublicTraderPageIndex, fetchServerJson, isApiNotFoundError } from './server-api.js';
 import { seoImage, siteName, siteOrigin } from './seo.js';
 
 export const traderSitemapWindows = ['1d', '7d', '30d', '365d'];
@@ -65,7 +65,10 @@ export async function fetchTraderProfile(wallet) {
     return await fetchServerJson(`/v1/traders/${encodeURIComponent(normalizeWallet(wallet))}`, {
       next: { revalidate: 300 },
     });
-  } catch {
+  } catch (error) {
+    if (!isApiNotFoundError(error)) {
+      throw error;
+    }
     return null;
   }
 }

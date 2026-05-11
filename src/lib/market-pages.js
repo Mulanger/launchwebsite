@@ -4,6 +4,7 @@ import {
   fetchPublicMarketPage,
   fetchPublicMarketPageIndex,
   fetchServerJson,
+  isApiNotFoundError,
 } from './server-api.js';
 
 const marketScanPageLimit = 100;
@@ -58,16 +59,34 @@ export async function fetchMarketPageData(slug) {
   const decodedSlug = decodeURIComponent(String(slug || '')).trim();
   if (!decodedSlug) return null;
 
-  const apiData = await fetchMarketPageDataFromSnapshotApi(decodedSlug);
-  if (apiData) return apiData;
+  let snapshotError = null;
 
-  const [whales, leaderboard] = await Promise.all([
-    fetchWhalePagesForMarketScan(),
-    fetchPublicLeaderboard('1d', 10).catch(() => ({ items: [] })),
-  ]);
+  try {
+    const apiData = await fetchMarketPageDataFromSnapshotApi(decodedSlug);
+    if (apiData) return apiData;
+  } catch (error) {
+    if (!isApiNotFoundError(error)) {
+      snapshotError = error;
+    }
+  }
+
+  let whales = [];
+  let leaderboard = { items: [] };
+
+  try {
+    [whales, leaderboard] = await Promise.all([
+      fetchWhalePagesForMarketScan(),
+      fetchPublicLeaderboard('1d', 10).catch(() => ({ items: [] })),
+    ]);
+  } catch (error) {
+    throw snapshotError || error;
+  }
 
   const marketTrades = whales.filter((trade) => trade?.market?.slug === decodedSlug);
-  if (!marketTrades.length) return null;
+  if (!marketTrades.length) {
+    if (snapshotError) throw snapshotError;
+    return null;
+  }
 
   const newestFirst = [...marketTrades].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
   const market = buildMarketSummary(newestFirst[0], decodedSlug);
@@ -129,30 +148,26 @@ export async function fetchMarketPageIndex(limit = 250) {
 }
 
 async function fetchMarketPageDataFromSnapshotApi(slug) {
-  try {
-    const [data, leaderboard] = await Promise.all([
-      fetchPublicMarketPage(slug),
-      fetchPublicLeaderboard('1d', 10).catch(() => ({ items: [] })),
-    ]);
+  const [data, leaderboard] = await Promise.all([
+    fetchPublicMarketPage(slug),
+    fetchPublicLeaderboard('1d', 10).catch(() => ({ items: [] })),
+  ]);
 
-    if (!data?.market?.slug) return null;
+  if (!data?.market?.slug) return null;
 
-    return {
-      market: data.market,
-      stats: data.stats,
-      recentTrades: Array.isArray(data.recentTrades) ? data.recentTrades : [],
-      topWallets: Array.isArray(data.topWallets) ? data.topWallets : [],
-      relatedMarkets: Array.isArray(data.relatedMarkets) ? data.relatedMarkets : [],
-      topWhalesToday: Array.isArray(leaderboard?.items) ? leaderboard.items : [],
-      seo: {
-        indexable: Boolean(data.seo?.indexable),
-        canonicalUrl: marketUrlForSlug(data.market.slug),
-        reason: data.seo?.reason || 'Market page snapshot from Polywhale enrichment worker',
-      },
-    };
-  } catch {
-    return null;
-  }
+  return {
+    market: data.market,
+    stats: data.stats,
+    recentTrades: Array.isArray(data.recentTrades) ? data.recentTrades : [],
+    topWallets: Array.isArray(data.topWallets) ? data.topWallets : [],
+    relatedMarkets: Array.isArray(data.relatedMarkets) ? data.relatedMarkets : [],
+    topWhalesToday: Array.isArray(leaderboard?.items) ? leaderboard.items : [],
+    seo: {
+      indexable: Boolean(data.seo?.indexable),
+      canonicalUrl: marketUrlForSlug(data.market.slug),
+      reason: data.seo?.reason || 'Market page snapshot from Polywhale enrichment worker',
+    },
+  };
 }
 
 function buildMarketSummary(trade, slug) {

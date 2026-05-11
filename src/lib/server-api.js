@@ -1,5 +1,18 @@
 const defaultApiBase = 'https://whaleserver-production.up.railway.app';
 
+export class ApiRequestError extends Error {
+  constructor(message, { status, url } = {}) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.url = url;
+  }
+}
+
+export function isApiNotFoundError(error) {
+  return error instanceof ApiRequestError && error.status === 404;
+}
+
 export function getServerApiBase() {
   return (process.env.API_BASE_URL || defaultApiBase).replace(/\/$/, '');
 }
@@ -15,7 +28,10 @@ export async function fetchServerJson(path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed with ${response.status}`);
+    throw new ApiRequestError(`API request failed with ${response.status}`, {
+      status: response.status,
+      url: url.toString(),
+    });
   }
 
   return response.json();
