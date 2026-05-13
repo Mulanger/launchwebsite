@@ -419,21 +419,23 @@ function MobileBottomNav({ active = 'feed' }) {
 function FeedRail({ leaders }) {
   return (
     <aside className="next-app-rail" aria-label="Top whales today">
-      <section>
-        <span className="next-app-rail-kicker">Top whales today</span>
-        <div className="next-app-rail-list">
-          {leaders.slice(0, 6).map((leader) => (
-            <Link className="next-app-rail-row" href={leader.href} key={leader.key}>
-              <i style={{ background: leader.avatar }} />
-              <span>
-                <strong>{leader.name}</strong>
-                <small>{leader.shortWallet}</small>
-              </span>
-              <b>{leader.volume}</b>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {leaders.length ? (
+        <section>
+          <span className="next-app-rail-kicker">Top whales today</span>
+          <div className="next-app-rail-list">
+            {leaders.slice(0, 6).map((leader) => (
+              <Link className="next-app-rail-row" href={leader.href} key={leader.key}>
+                <i style={{ background: leader.avatar }} />
+                <span>
+                  <strong>{leader.name}</strong>
+                  <small>{leader.shortWallet}</small>
+                </span>
+                <b>{leader.volume}</b>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </aside>
   );
 }
@@ -503,21 +505,23 @@ function MarketRail({ data, leaders }) {
         </section>
       ) : null}
 
-      <section>
-        <span className="next-app-rail-kicker">Top whales today</span>
-        <div className="next-app-rail-list">
-          {leaders.slice(0, 6).map((leader) => (
-            <Link className="next-app-rail-row" href={leader.href} key={leader.key}>
-              <i style={{ background: leader.avatar }} />
-              <span>
-                <strong>{leader.name}</strong>
-                <small>{leader.shortWallet}</small>
-              </span>
-              <b>{leader.volume}</b>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {leaders.length ? (
+        <section>
+          <span className="next-app-rail-kicker">Top whales today</span>
+          <div className="next-app-rail-list">
+            {leaders.slice(0, 6).map((leader) => (
+              <Link className="next-app-rail-row" href={leader.href} key={leader.key}>
+                <i style={{ background: leader.avatar }} />
+                <span>
+                  <strong>{leader.name}</strong>
+                  <small>{leader.shortWallet}</small>
+                </span>
+                <b>{leader.volume}</b>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </aside>
   );
 }

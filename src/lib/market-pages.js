@@ -1,6 +1,5 @@
 import { siteOrigin } from './seo.js';
 import {
-  fetchPublicLeaderboard,
   fetchPublicMarketPage,
   fetchPublicMarketPageIndex,
   fetchServerJson,
@@ -11,6 +10,8 @@ const marketScanPageLimit = 100;
 const marketScanMaxPages = 8;
 export const marketIndexMinTrades = 3;
 export const marketIndexMinVolume = 50000;
+
+let marketPageIndexCache = [];
 
 export function marketPathForSlug(slug) {
   if (!slug) return null;
@@ -65,19 +66,18 @@ export async function fetchMarketPageData(slug) {
     const apiData = await fetchMarketPageDataFromSnapshotApi(decodedSlug);
     if (apiData) return apiData;
   } catch (error) {
+    const indexFallback = await fetchMarketPageDataFromIndex(decodedSlug).catch(() => null);
+    if (indexFallback) return indexFallback;
+
     if (!isApiNotFoundError(error)) {
       snapshotError = error;
     }
   }
 
   let whales = [];
-  let leaderboard = { items: [] };
 
   try {
-    [whales, leaderboard] = await Promise.all([
-      fetchWhalePagesForMarketScan(),
-      fetchPublicLeaderboard('1d', 10).catch(() => ({ items: [] })),
-    ]);
+    whales = await fetchWhalePagesForMarketScan();
   } catch (error) {
     throw snapshotError || error;
   }
@@ -101,7 +101,7 @@ export async function fetchMarketPageData(slug) {
     recentTrades: newestFirst.slice(0, 50),
     topWallets,
     relatedMarkets,
-    topWhalesToday: Array.isArray(leaderboard?.items) ? leaderboard.items : [],
+    topWhalesToday: [],
     seo: {
       indexable,
       canonicalUrl: marketUrlForSlug(decodedSlug),
@@ -115,12 +115,24 @@ export async function fetchMarketPageData(slug) {
 export async function fetchMarketPageIndex(limit = 250) {
   try {
     const data = await fetchPublicMarketPageIndex(limit);
-    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.items)) {
+      marketPageIndexCache = data.items
+        .filter(isMarketIndexItemIndexable)
+        .slice(0, limit);
+      return marketPageIndexCache;
+    }
   } catch {
     // Rollout safety: while the API server deploys, sitemap can still use whale-feed scanning.
+    if (marketPageIndexCache.length) return marketPageIndexCache.slice(0, limit);
   }
 
-  const whales = await fetchWhalePagesForMarketScan();
+  let whales = [];
+  try {
+    whales = await fetchWhalePagesForMarketScan();
+  } catch (error) {
+    if (marketPageIndexCache.length) return marketPageIndexCache.slice(0, limit);
+    throw error;
+  }
   const bySlug = new Map();
 
   for (const trade of whales) {
@@ -141,19 +153,18 @@ export async function fetchMarketPageIndex(limit = 250) {
     bySlug.set(slug, current);
   }
 
-  return [...bySlug.values()]
+  marketPageIndexCache = [...bySlug.values()]
     .filter(isQualifiedMarket)
     .sort((a, b) => b.whaleVolume - a.whaleVolume)
     .slice(0, limit);
+  return marketPageIndexCache;
 }
 
 async function fetchMarketPageDataFromSnapshotApi(slug) {
-  const [data, leaderboard] = await Promise.all([
-    fetchPublicMarketPage(slug),
-    fetchPublicLeaderboard('1d', 10).catch(() => ({ items: [] })),
-  ]);
+  const data = await fetchPublicMarketPage(slug);
 
   if (!data?.market?.slug) return null;
+  const indexable = Boolean(data.seo?.indexable) || isQualifiedMarket(data.stats);
 
   return {
     market: data.market,
@@ -161,13 +172,55 @@ async function fetchMarketPageDataFromSnapshotApi(slug) {
     recentTrades: Array.isArray(data.recentTrades) ? data.recentTrades : [],
     topWallets: Array.isArray(data.topWallets) ? data.topWallets : [],
     relatedMarkets: Array.isArray(data.relatedMarkets) ? data.relatedMarkets : [],
-    topWhalesToday: Array.isArray(leaderboard?.items) ? leaderboard.items : [],
+    topWhalesToday: [],
     seo: {
-      indexable: Boolean(data.seo?.indexable),
+      indexable,
       canonicalUrl: marketUrlForSlug(data.market.slug),
       reason: data.seo?.reason || 'Market page snapshot from Polywhale enrichment worker',
     },
   };
+}
+
+async function fetchMarketPageDataFromIndex(slug) {
+  const markets = await fetchMarketPageIndex(250);
+  const item = markets.find((market) => market?.slug === slug);
+  if (!item) return null;
+
+  const stats = {
+    whaleVolume: Number(item.whaleVolume || 0),
+    whaleTradeCount: Number(item.whaleTradeCount || 0),
+    uniqueWhales: Number(item.uniqueWhales || 0),
+    biggestTradeUsd: Number(item.biggestTradeUsd || 0),
+    latestTradeTs: Number(item.latestTradeTs || 0),
+  };
+
+  return {
+    market: {
+      slug: item.slug,
+      conditionId: item.conditionId || '',
+      title: item.title || item.slug,
+      icon: item.icon || item.image || item.imageUrl || '',
+      category: item.category || '',
+      eventSlug: item.eventSlug || '',
+      polymarketUrl: item.polymarketUrl || '',
+      yesPriceCents: item.yesPriceCents,
+      noPriceCents: item.noPriceCents,
+    },
+    stats,
+    recentTrades: [],
+    topWallets: [],
+    relatedMarkets: [],
+    topWhalesToday: [],
+    seo: {
+      indexable: true,
+      canonicalUrl: marketUrlForSlug(item.slug),
+      reason: 'Indexable market from the Polywhale market sitemap snapshot',
+    },
+  };
+}
+
+function isMarketIndexItemIndexable(item) {
+  return Boolean(item?.slug) && isQualifiedMarket(item);
 }
 
 function buildMarketSummary(trade, slug) {

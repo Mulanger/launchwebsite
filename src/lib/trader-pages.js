@@ -5,6 +5,7 @@ export const traderSitemapWindows = ['1d', '7d', '30d', '365d'];
 export const traderSitemapRevalidateSeconds = 900;
 
 const walletRegex = /^0x[0-9a-fA-F]{40}$/;
+let traderPageIndexCache = [];
 
 export function isWalletAddress(value) {
   return walletRegex.test(String(value || '').trim());
@@ -66,11 +67,61 @@ export async function fetchTraderProfile(wallet) {
       next: { revalidate: 300 },
     });
   } catch (error) {
+    const indexFallback = await fetchTraderProfileFromIndex(wallet).catch(() => null);
+    if (indexFallback) return indexFallback;
+
     if (!isApiNotFoundError(error)) {
       throw error;
     }
     return null;
   }
+}
+
+async function fetchTraderProfileFromIndex(wallet) {
+  const normalizedWallet = normalizeWallet(wallet);
+  const traders = await fetchTraderPageIndex(500);
+  const item = traders.find((trader) => trader.proxyWallet === normalizedWallet);
+  if (!item) return null;
+
+  const stats = buildFallbackTraderStats(item);
+
+  return {
+    proxyWallet: normalizedWallet,
+    shortAddress: shortWallet(normalizedWallet),
+    displayName: item.displayName || null,
+    pseudonym: item.pseudonym || null,
+    profileImage: item.profileImage || null,
+    firstSeen: item.firstSeenTs || item.lastSeenTs || 0,
+    rankBadge: item.bestRank
+      ? {
+          rank: item.bestRank,
+          window: item.bestRankWindow || item.windows?.[0] || '30d',
+        }
+      : null,
+    stats,
+    dailyVolume: [],
+    recentWhales: [],
+    seoFallback: true,
+  };
+}
+
+function buildFallbackTraderStats(item) {
+  const volume = Number(item.volume || 0);
+  const tradeCount = Number(item.tradeCount || item.whaleCount || 0);
+  const stats = {
+    volume,
+    tradeCount,
+    whaleCount: tradeCount,
+    buyVolume: 0,
+    sellVolume: 0,
+  };
+
+  return {
+    '1d': stats,
+    '7d': stats,
+    '30d': stats,
+    '365d': stats,
+  };
 }
 
 async function fetchLeaderboardWindow(windowId, limit) {
@@ -99,13 +150,21 @@ export async function fetchTraderPageIndex(limit = 500) {
         .map(normalizeTraderPageIndexItem)
         .filter((item) => isWalletAddress(item.proxyWallet))
         .forEach((item) => byWallet.set(item.proxyWallet, item));
+      traderPageIndexCache = Array.from(byWallet.values()).sort(compareTraderIndexItems).slice(0, limit);
     }
   } catch {
     // Fall back to live leaderboard windows while the API endpoint rolls out.
+    if (traderPageIndexCache.length) return traderPageIndexCache.slice(0, limit);
   }
 
   if (byWallet.size < limit) {
-    const fallback = await fetchLeaderboardTraderPageIndex(Math.min(limit, 100));
+    let fallback = [];
+    try {
+      fallback = await fetchLeaderboardTraderPageIndex(Math.min(limit, 100));
+    } catch (error) {
+      if (traderPageIndexCache.length) return traderPageIndexCache.slice(0, limit);
+      throw error;
+    }
     fallback.forEach((item) => {
       if (!byWallet.has(item.proxyWallet)) {
         byWallet.set(item.proxyWallet, item);
@@ -113,7 +172,8 @@ export async function fetchTraderPageIndex(limit = 500) {
     });
   }
 
-  return Array.from(byWallet.values()).sort(compareTraderIndexItems).slice(0, limit);
+  traderPageIndexCache = Array.from(byWallet.values()).sort(compareTraderIndexItems).slice(0, limit);
+  return traderPageIndexCache;
 }
 
 async function fetchLeaderboardTraderPageIndex(limitPerWindow = 100) {
@@ -138,15 +198,20 @@ async function fetchLeaderboardTraderPageIndex(limitPerWindow = 100) {
         profileImage: item.profileImage || null,
         windows: [],
         bestRank: null,
+        bestRankWindow: null,
         volume: 0,
         tradeCount: 0,
       };
 
+      const itemRank = Number(item.rank || 0) || null;
       existing.displayName = existing.displayName || item.displayName || null;
       existing.pseudonym = existing.pseudonym || item.pseudonym || null;
       existing.profileImage = existing.profileImage || item.profileImage || null;
       existing.windows.push(windowId);
-      existing.bestRank = existing.bestRank ? Math.min(existing.bestRank, item.rank || existing.bestRank) : item.rank || null;
+      if (itemRank && (!existing.bestRank || itemRank < existing.bestRank)) {
+        existing.bestRank = itemRank;
+        existing.bestRankWindow = windowId;
+      }
       existing.volume = Math.max(existing.volume, Number(item.volume || 0));
       existing.tradeCount = Math.max(existing.tradeCount, Number(item.tradeCount || item.whaleCount || 0));
 
@@ -168,6 +233,7 @@ function normalizeTraderPageIndexItem(item) {
     profileImage: item.profileImage || null,
     windows: item.bestRankWindow ? [item.bestRankWindow] : [],
     bestRank,
+    bestRankWindow: item.bestRankWindow || null,
     volume: Number(item.bestVolume || item.volume || 0),
     tradeCount: Number(item.tradeCount || item.whaleCount || 0),
     lastSeenTs: Number(item.lastSeenTs || 0),
