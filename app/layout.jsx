@@ -1,6 +1,7 @@
 import '../src/styles.css';
 import './next-public.css';
 import Script from 'next/script';
+import GoogleAnalytics from './_components/GoogleAnalytics.jsx';
 import { buildNextMetadata } from '../src/lib/next-metadata.js';
 import { seoDefaults } from '../src/lib/seo.js';
 
@@ -26,6 +27,13 @@ function buildPublicEnv() {
     process.env.NEXT_PUBLIC_FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '';
   const firebaseVapidKey =
     process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || process.env.VITE_FIREBASE_VAPID_KEY || '';
+  const gaMeasurementId =
+    process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || process.env.VITE_GA_MEASUREMENT_ID || '';
+  const gaAllowedHosts =
+    process.env.NEXT_PUBLIC_GA_ALLOWED_HOSTS || process.env.VITE_GA_ALLOWED_HOSTS || '';
+  const gaDebug = process.env.NEXT_PUBLIC_GA_DEBUG || process.env.VITE_GA_DEBUG || '';
+  const gaUseDefaultId =
+    process.env.NEXT_PUBLIC_GA_USE_DEFAULT_ID || process.env.VITE_GA_USE_DEFAULT_ID || '';
 
   return {
     VITE_API_BASE_URL: apiBaseUrl,
@@ -44,6 +52,14 @@ function buildPublicEnv() {
     NEXT_PUBLIC_FIREBASE_APP_ID: firebaseAppId,
     VITE_FIREBASE_VAPID_KEY: firebaseVapidKey,
     NEXT_PUBLIC_FIREBASE_VAPID_KEY: firebaseVapidKey,
+    VITE_GA_MEASUREMENT_ID: gaMeasurementId,
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: gaMeasurementId,
+    VITE_GA_ALLOWED_HOSTS: gaAllowedHosts,
+    NEXT_PUBLIC_GA_ALLOWED_HOSTS: gaAllowedHosts,
+    VITE_GA_DEBUG: gaDebug,
+    NEXT_PUBLIC_GA_DEBUG: gaDebug,
+    VITE_GA_USE_DEFAULT_ID: gaUseDefaultId,
+    NEXT_PUBLIC_GA_USE_DEFAULT_ID: gaUseDefaultId,
   };
 }
 
@@ -62,23 +78,7 @@ export default function RootLayout({ children }) {
             __html: `window.__POLYWHALE_PUBLIC_ENV__=${serializePublicEnv()};`,
           }}
         />
-        <Script
-          id="polywhale-ga-src"
-          src="https://www.googletagmanager.com/gtag/js?id=G-TMS7KN5K7G"
-          strategy="afterInteractive"
-        />
-        <Script
-          id="polywhale-ga"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-TMS7KN5K7G');
-            `,
-          }}
-        />
+        <GoogleAnalytics />
         {children}
       </body>
     </html>

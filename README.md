@@ -58,6 +58,10 @@ Build: npm run next:build
 Start: npm run next:start -- -H 0.0.0.0 -p $PORT
 ```
 
+## Analytics
+
+GA4 is implemented through the Next root layout and shared helper code, with consent mode and manual SPA page views. See `ANALYTICS.md` for env vars, event names, and the GA4 Enhanced Measurement setting required to avoid duplicate page views.
+
 ## SSR migration status
 
 The migration plan is documented in `NEXT_SSR_MIGRATION_PLAN.md`.

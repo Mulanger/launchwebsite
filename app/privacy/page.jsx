@@ -1,5 +1,6 @@
 import HybridPublicRoute from '../_components/HybridPublicRoute.jsx';
 import PublicChrome from '../_components/PublicChrome.jsx';
+import { AnalyticsConsentSettings } from '../../src/AnalyticsConsentControls.jsx';
 import { buildNextMetadata } from '../../src/lib/next-metadata.js';
 import { seoByPath } from '../../src/lib/seo.js';
 
@@ -17,6 +18,7 @@ export default function PrivacyPage() {
             browser-local preferences, followed wallet selections, anonymous session identifiers,
             and alert settings required to support app features.
           </p>
+          <AnalyticsConsentSettings />
           <h2>Public market data</h2>
           <p>
             Trade, market, and wallet information shown by Polywhale comes from public Polymarket
@@ -27,6 +29,12 @@ export default function PrivacyPage() {
             When users activate alerts or follow wallets, Polywhale stores the minimum information
             needed to deliver those features, such as anonymous session data, notification tokens,
             wallet addresses, and alert preferences.
+          </p>
+          <h2>Analytics</h2>
+          <p>
+            Polywhale uses Google Analytics for aggregate page and product measurement, such as
+            page views, feature usage, and outbound Polymarket link clicks. Advertising storage,
+            ad personalization, and ad user-data sharing are disabled in the site tag.
           </p>
           <h2>Contact</h2>
           <p>Privacy and deletion requests can be sent to support@whaletracker.com.</p>

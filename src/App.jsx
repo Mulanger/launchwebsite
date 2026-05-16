@@ -40,6 +40,8 @@ import {
 import { readPublicEnv } from './lib/env.js';
 import { getBrowserPathname, matchAppRoute } from './lib/routes.js';
 import { getSeoForPath, seoDefaults, seoImage, siteName, siteOrigin } from './lib/seo.js';
+import { AnalyticsConsentSettings } from './AnalyticsConsentControls.jsx';
+import { trackAnalyticsEvent } from './lib/analytics.js';
 
 const supportEmail = 'support@whaletracker.com';
 const lastUpdated = 'May 1, 2026';
@@ -639,6 +641,9 @@ function WhaleFeedPage({ initialData = null }) {
           notifyFollowsChanged({ wallet, isFollowing: next });
           try {
             await setWalletFollowedOnServer(wallet, next);
+            trackAnalyticsEvent(next ? 'follow_wallet' : 'unfollow_wallet', {
+              source: 'mobile_trade_card',
+            });
           } catch (err) {
             setWalletFollowedLocally(wallet, previous);
             notifyFollowsChanged({ wallet, isFollowing: previous });
@@ -676,6 +681,50 @@ function WhaleFeedPage({ initialData = null }) {
     }
   }, [apiFilter, cursor, loadingMore]);
 
+  const handleFeedFilterChange = useCallback((filter) => {
+    if (filter === 'following') {
+      const next = !followingOnly;
+      setFollowingOnly(next);
+      updateFollowingQueryParam(next);
+      if (next) setRangeId('all');
+      trackAnalyticsEvent('feed_filter_change', {
+        filter_type: 'following',
+        filter_value: next ? 'on' : 'off',
+      });
+      return;
+    }
+
+    if (filter !== rangeId || followingOnly) {
+      trackAnalyticsEvent('feed_filter_change', {
+        filter_type: 'size',
+        filter_value: filter,
+      });
+    }
+    setRangeId(filter);
+    if (followingOnly) {
+      setFollowingOnly(false);
+      updateFollowingQueryParam(false);
+    }
+  }, [followingOnly, rangeId]);
+
+  const handleSideChange = useCallback((next) => {
+    const nextSide = next === 'all' ? 'all' : next.toUpperCase();
+    if (nextSide !== side) {
+      trackAnalyticsEvent('feed_filter_change', {
+        filter_type: 'side',
+        filter_value: nextSide.toLowerCase(),
+      });
+    }
+    setSide(nextSide);
+  }, [side]);
+
+  const handleFeedSortChange = useCallback((nextSort) => {
+    if (nextSort !== sort) {
+      trackAnalyticsEvent('feed_sort_change', { sort_value: nextSort });
+    }
+    setSort(nextSort);
+  }, [sort]);
+
   if (isMobileViewport) {
     return (
       <MobileFeedScreen
@@ -692,22 +741,9 @@ function WhaleFeedPage({ initialData = null }) {
         activeSide={side === 'all' ? 'all' : side.toLowerCase()}
         sortValue={sort}
         sortOptions={feedSortOptions}
-        onFilterChange={(filter) => {
-          if (filter === 'following') {
-            const next = !followingOnly;
-            setFollowingOnly(next);
-            updateFollowingQueryParam(next);
-            if (next) setRangeId('all');
-            return;
-          }
-          setRangeId(filter);
-          if (followingOnly) {
-            setFollowingOnly(false);
-            updateFollowingQueryParam(false);
-          }
-        }}
-        onSideChange={(next) => setSide(next === 'all' ? 'all' : next.toUpperCase())}
-        onSortChange={setSort}
+        onFilterChange={handleFeedFilterChange}
+        onSideChange={handleSideChange}
+        onSortChange={handleFeedSortChange}
         onRefresh={() => setRefreshNonce((value) => value + 1)}
         activeTab="feed"
         onTabChange={(tab) => {
@@ -781,7 +817,7 @@ function WhaleFeedPage({ initialData = null }) {
                 className={`filter-pill ${rangeId === option.id ? 'active' : ''}`}
                 key={option.id}
                 type="button"
-                onClick={() => setRangeId(option.id)}
+                onClick={() => handleFeedFilterChange(option.id)}
               >
                 {option.label}
               </button>
@@ -794,9 +830,7 @@ function WhaleFeedPage({ initialData = null }) {
             className={`filter-pill personal ${followingOnly ? 'active' : ''}`}
             type="button"
             onClick={() => {
-              const next = !followingOnly;
-              setFollowingOnly(next);
-              updateFollowingQueryParam(next);
+              handleFeedFilterChange('following');
             }}
             title={followedCount ? 'Show only traders you follow' : 'Follow traders from the leaderboard or profile pages'}
           >
@@ -811,14 +845,14 @@ function WhaleFeedPage({ initialData = null }) {
                 className={`filter-pill ${side === option.id ? 'active' : ''}`}
                 key={option.id}
                 type="button"
-                onClick={() => setSide(option.id)}
+                onClick={() => handleSideChange(option.id)}
               >
                 {option.label}
               </button>
             ))}
           </div>
 
-          <SortMenu value={sort} onChange={setSort} options={feedSortOptions} />
+          <SortMenu value={sort} onChange={handleFeedSortChange} options={feedSortOptions} />
         </section>
 
         <section className="feed-table" aria-live="polite">
@@ -1148,8 +1182,18 @@ function LeaderboardPage({ initialData = null }) {
   }, [leaderboardRequestWindow, leaderboardRequestSort, cursor, loadingMore]);
   const handleWindowChange = useCallback((nextWindowId) => {
     if (lockedLeaderboardWindowIds.has(nextWindowId)) return;
+    if (nextWindowId !== windowId) {
+      trackAnalyticsEvent('leaderboard_window_change', { window_value: nextWindowId });
+    }
     setWindowId(nextWindowId);
-  }, []);
+  }, [windowId]);
+
+  const handleLeaderboardSortChange = useCallback((nextSort) => {
+    if (nextSort !== sort) {
+      trackAnalyticsEvent('leaderboard_sort_change', { sort_value: nextSort });
+    }
+    setSort(nextSort);
+  }, [sort]);
 
   if (isMobileViewport) {
     return (
@@ -1159,7 +1203,7 @@ function LeaderboardPage({ initialData = null }) {
         sortOptions={leaderboardSortOptions}
         rows={mobileRows}
         onWindowChange={handleWindowChange}
-        onSortChange={setSort}
+        onSortChange={handleLeaderboardSortChange}
         loading={loading}
         profitLoading={profitLoading}
         error={error}
@@ -1188,7 +1232,7 @@ function LeaderboardPage({ initialData = null }) {
           sortOptions={leaderboardSortOptions}
           rows={mobileRows}
           onWindowChange={handleWindowChange}
-          onSortChange={setSort}
+          onSortChange={handleLeaderboardSortChange}
           loading={loading}
           profitLoading={profitLoading}
           error={error}
@@ -3211,6 +3255,10 @@ function AlertsPage() {
       setStatus('active');
       setSavedAt(Date.now());
       setActionMessage('System alerts are active on this browser.');
+      trackAnalyticsEvent('alert_subscribe', {
+        min_usd: Number(nextPrefs.minUsd || 0),
+        following_only: Boolean(nextPrefs.followedOnly),
+      });
     } catch (error) {
       const nextStatus = deriveWebAlertErrorStatus(error);
       setStatus(nextStatus);
@@ -3242,6 +3290,10 @@ function AlertsPage() {
       setStatus('active');
       setSavedAt(Date.now());
       setActionMessage('Alert preferences updated.');
+      trackAnalyticsEvent('alert_update', {
+        min_usd: Number(nextPrefs.minUsd || 0),
+        following_only: Boolean(nextPrefs.followedOnly),
+      });
     } catch (error) {
       setStatus('error');
       setActionMessage(error.message || 'Could not save alert preferences.');
@@ -3270,6 +3322,7 @@ function AlertsPage() {
       setStatus(getInitialWebAlertStatus(nextPrefs));
       setSavedAt(Date.now());
       setActionMessage('Web alerts are turned off for this browser.');
+      trackAnalyticsEvent('alert_disable');
     } catch (error) {
       setStatus('error');
       setActionMessage(error.message || 'Could not turn off web alerts.');
@@ -3303,11 +3356,13 @@ function AlertsPage() {
         url: '/alerts',
       });
       setActionMessage('Test alert sent through the server. If no toast appears, check Windows and browser notification settings.');
+      trackAnalyticsEvent('alert_test_send', { mode: 'server' });
     } catch (error) {
       if (error.status === 404) {
         try {
           await showLocalBrowserTestAlert(prefs);
           setActionMessage('Local test alert sent. The server test endpoint is still deploying.');
+          trackAnalyticsEvent('alert_test_send', { mode: 'local' });
           return;
         } catch (localError) {
           setActionMessage(localError.message || 'Could not send the local test alert.');
@@ -6317,6 +6372,9 @@ function FollowWalletButton({ wallet, variant = 'wide' }) {
 
     try {
       await setWalletFollowedOnServer(normalizedWallet, next);
+      trackAnalyticsEvent(next ? 'follow_wallet' : 'unfollow_wallet', {
+        source: variant === 'icon' ? 'icon_button' : 'wide_button',
+      });
     } catch (err) {
       setWalletFollowedLocally(normalizedWallet, previous);
       setIsFollowing(previous);
@@ -6552,19 +6610,25 @@ function PrivacyPage() {
             status, and error information needed to run and protect the service.
           </li>
           <li>Public market, trader, wallet, and trade data displayed in the app.</li>
+          <li>
+            Google Analytics page and feature measurement data when analytics consent is accepted,
+            plus cookieless consent-mode signals when analytics storage is declined.
+          </li>
         </ul>
       </LegalSection>
+      <AnalyticsConsentSettings />
       <LegalSection title="How we use information">
         <p>
           We use this information to run the app, authenticate anonymous sessions,
           deliver push notifications, save preferences, maintain followed-trader
-          features, diagnose issues, prevent abuse, and improve reliability.
+          features, measure aggregate page and feature usage, diagnose issues,
+          prevent abuse, and improve reliability.
         </p>
       </LegalSection>
       <LegalSection title="Service providers">
         <p>
           Polywatch may use infrastructure providers such as Firebase Cloud
-          Messaging, hosting providers, databases, and monitoring tools. These
+          Messaging, hosting providers, databases, Google Analytics, and monitoring tools. These
           providers process data only as needed to operate the app.
         </p>
       </LegalSection>
@@ -6572,6 +6636,8 @@ function PrivacyPage() {
         <p>
           We do not sell personal information. We do not share user alert
           preferences, notification tokens, or followed-trader lists with advertisers.
+          The Google Analytics tag disables advertising storage, ad personalization,
+          and ad user-data sharing.
         </p>
       </LegalSection>
       <LegalSection title="Retention and deletion">

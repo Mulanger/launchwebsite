@@ -39,7 +39,7 @@ Recent important work:
 - Sidebar "Public web beta" panel was removed.
 - Sidebar brand lockup now displays `Polywhale` with a small `trades` subtitle under it.
 - Sidebar `Profile` tab is intentionally disabled and shows a `Coming soon` hover tooltip.
-- GA4 is installed in `index.html` using tag id `G-TMS7KN5K7G`.
+- GA4 is installed through `app/_components/GoogleAnalytics.jsx` and `src/lib/analytics.js`, with the legacy Vite fallback using `src/LegacyAnalytics.jsx`. The current default tag id is `G-TMS7KN5K7G`, gated to allowed production hosts. See `ANALYTICS.md`.
 - SEO title/metadata defaults now use `Polywhale | Live Polymarket Whale Trades, Top Whales & Whale Feed`.
 - Mojibake metadata strings were cleaned (for example broken `today...` characters in search snippets).
 - Next.js SSR/SSG foundation was added in parallel with Vite on `codex/next-ssr-foundation`.
@@ -153,12 +153,17 @@ Frontend/Vite:
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`: Firebase Cloud Messaging sender id for the Web app.
 - `VITE_FIREBASE_APP_ID`: Firebase Web app id.
 - `VITE_FIREBASE_VAPID_KEY`: Firebase Web Push certificate key used by `getToken()`.
+- `VITE_GA_MEASUREMENT_ID`: Optional GA4 measurement id for the legacy Vite path.
+- `VITE_GA_ALLOWED_HOSTS`: Comma-separated host allowlist for GA collection. Defaults to the canonical production hosts.
+- `VITE_GA_USE_DEFAULT_ID`: Defaults to `true`; allows fallback to the current production GA4 id when no explicit id is set.
+- `VITE_GA_DEBUG`: Set to `true` only for local GA DebugView checks.
 
 Next public env compatibility:
 
 - `NEXT_PUBLIC_API_BASE_URL`: browser REST base equivalent for Next bundles. `src/lib/env.js` prefers Vite values when present, then Next values, then fallback defaults.
 - `NEXT_PUBLIC_WS_BASE_URL`: browser websocket base equivalent for Next bundles.
 - `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`, `NEXT_PUBLIC_FIREBASE_VAPID_KEY`: Next equivalents for Firebase browser config.
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID`, `NEXT_PUBLIC_GA_ALLOWED_HOSTS`, `NEXT_PUBLIC_GA_USE_DEFAULT_ID`, `NEXT_PUBLIC_GA_DEBUG`: Next equivalents for GA4. Production should use `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-TMS7KN5K7G` and `NEXT_PUBLIC_GA_ALLOWED_HOSTS=www.polywhaletrades.com,polywhaletrades.com`.
 
 Production server:
 
@@ -420,6 +425,7 @@ Before pushing:
 11. Verify `/sitemap.xml` plus the dedicated `/sitemap-static.xml`, `/sitemap-markets.xml`, `/sitemap-news.xml`, `/sitemap-qa.xml`, `/sitemap-traders.xml`, and `/sitemap-compare.xml` routes when changing those page families.
 12. For robots/API SEO changes, verify Googlebot can access `/api/*` in `robots.txt` and that `/api/*` responses include `X-Robots-Tag: noindex, nofollow`.
 13. For Next branch routing changes, start local Next (`npm run next:start -- -p 3000`) and verify direct route refreshes, page source HTML, hydrated UI, `/api/*`, websocket connection, follows, alerts, and mobile views.
+14. For analytics changes, follow `ANALYTICS.md`: verify one manual GA4 `page_view` per route change, confirm consent choices persist, and keep GA4 Enhanced Measurement history page views disabled to avoid duplicates.
 
 ## Trade Detail Endpoint
 
