@@ -40,6 +40,7 @@ Recent important work:
 - Sidebar brand lockup now displays `Polywhale` with a small `trades` subtitle under it.
 - Sidebar `Profile` tab is intentionally disabled and shows a `Coming soon` hover tooltip.
 - GA4 is installed through `app/_components/GoogleAnalytics.jsx` and `src/lib/analytics.js`, with the legacy Vite fallback using `src/LegacyAnalytics.jsx`. The current default tag id is `G-TMS7KN5K7G`, gated to allowed production hosts. See `ANALYTICS.md`.
+- Security hardening was added on 2026-05-16: Next upgraded to `16.2.6`, npm audit is clean with a PostCSS override for Next's bundled dependency, global Next/static security headers are set, API proxy responses are `no-store`, API request bodies are capped by `API_PROXY_MAX_BODY_BYTES`, JSON-LD escapes `<`, proxied news SVGs are size-limited and sandboxed, and web-push notification click URLs are restricted to same-origin paths.
 - SEO title/metadata defaults now use `Polywhale | Live Polymarket Whale Trades, Top Whales & Whale Feed`.
 - Mojibake metadata strings were cleaned (for example broken `today...` characters in search snippets).
 - Next.js SSR/SSG foundation was added in parallel with Vite on `codex/next-ssr-foundation`.
@@ -170,6 +171,7 @@ Production server:
 - `PORT`: server port. Defaults to `4173`.
 - `API_BASE_URL`: upstream target for the Next `app/api/[...path]` proxy route, `server.js` `/api` proxy, and Next server helpers. Defaults to production API.
 - `AUTONEWS_BASE_URL`: base URL for the separate autonews Railway service, used by `/news`, `/news/[slug]`, `/sitemap.xml`, and `/sitemap-news.xml`. Values with or without `https://` are accepted, but Railway should normally use the full URL such as `https://autonews-production-xxxx.up.railway.app`.
+- `API_PROXY_MAX_BODY_BYTES`: maximum body size accepted by the website `/api/*` proxies before returning `413`. Defaults to `1048576` bytes.
 
 ## Runtime Data Flow
 

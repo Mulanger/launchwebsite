@@ -180,6 +180,14 @@ function setLinkTag(rel, href) {
   tag.setAttribute('href', href);
 }
 
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return String(value || '');
+  }
+}
+
 function App({ initialPath = null, initialData = null }) {
   const { path, tradeMatch, traderMatch } = useMemo(
     () => matchAppRoute(initialPath ?? getBrowserPathname()),
@@ -251,8 +259,8 @@ function App({ initialPath = null, initialData = null }) {
   else if (path === '/profile/following') page = <FollowingPage />;
   else if (path === '/profile') page = <ProfilePage />;
   else if (path === '/alerts') page = <AlertsPage />;
-  else if (tradeMatch) page = <TradeDetailPage tradeId={decodeURIComponent(tradeMatch[1])} />;
-  else if (traderMatch) page = <TraderProfilePage wallet={decodeURIComponent(traderMatch[1])} />;
+  else if (tradeMatch) page = <TradeDetailPage tradeId={safeDecodeURIComponent(tradeMatch[1])} />;
+  else if (traderMatch) page = <TraderProfilePage wallet={safeDecodeURIComponent(traderMatch[1])} />;
   else page = <WhaleFeedPage initialData={initialData?.feed} />;
 
   return (

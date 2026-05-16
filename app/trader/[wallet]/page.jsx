@@ -18,7 +18,7 @@ import {
 export const revalidate = 300;
 
 async function resolveTraderParam(rawParam) {
-  const decoded = decodeURIComponent(String(rawParam || '').trim());
+  const decoded = safeDecodeURIComponent(String(rawParam || '').trim());
 
   if (isWalletAddress(decoded)) {
     const wallet = normalizeWallet(decoded);
@@ -40,6 +40,14 @@ async function resolveTraderParam(rawParam) {
     canonicalPath: traderPathForWallet(aliasMatch.proxyWallet),
     redirectPath: traderPathForWallet(aliasMatch.proxyWallet),
   };
+}
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return String(value || '');
+  }
 }
 
 export async function generateMetadata({ params }) {

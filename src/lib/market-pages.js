@@ -57,7 +57,7 @@ export async function fetchWhalePagesForMarketScan() {
 }
 
 export async function fetchMarketPageData(slug) {
-  const decodedSlug = decodeURIComponent(String(slug || '')).trim();
+  const decodedSlug = safeDecodeURIComponent(String(slug || '')).trim();
   if (!decodedSlug) return null;
 
   let snapshotError = null;
@@ -110,6 +110,14 @@ export async function fetchMarketPageData(slug) {
         : 'Known market below current indexing thresholds',
     },
   };
+}
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return String(value || '');
+  }
 }
 
 export async function fetchMarketPageIndex(limit = 250) {

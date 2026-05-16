@@ -1,6 +1,7 @@
 import { getAutonewsBase } from '../../../../src/lib/news-pages.js';
 
 export const revalidate = 300;
+const maxSvgBytes = 512 * 1024;
 
 export async function GET(_request, { params }) {
   const { slug } = await params;
@@ -13,9 +14,12 @@ export async function GET(_request, { params }) {
     });
 
     if (response.ok) {
-      return new Response(await response.text(), {
-        headers: imageHeaders(),
-      });
+      const svg = await readTextWithLimit(response, maxSvgBytes);
+      if (svg) {
+        return new Response(svg, {
+          headers: imageHeaders(),
+        });
+      }
     }
   }
 
@@ -28,7 +32,35 @@ function imageHeaders() {
   return {
     'Content-Type': 'image/svg+xml; charset=utf-8',
     'Cache-Control': 'public, max-age=300, s-maxage=1800',
+    'Content-Security-Policy': "sandbox; default-src 'none'; img-src data: https:; style-src 'unsafe-inline'",
+    'X-Content-Type-Options': 'nosniff',
   };
+}
+
+async function readTextWithLimit(response, maxBytes) {
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) return '';
+  if (!response.body) return response.text();
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) return '';
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
 }
 
 function fallbackSvg(slug) {

@@ -20,9 +20,19 @@ function hasFirebaseConfig(config) {
 }
 
 function notificationUrl(data = {}) {
-  if (data.url) return data.url;
+  if (data.url) return sameOriginPath(data.url);
   if (data.tradeId) return `/trade/${encodeURIComponent(data.tradeId)}`;
   return '/';
+}
+
+function sameOriginPath(value) {
+  try {
+    const url = new URL(value, self.location.origin);
+    if (url.origin !== self.location.origin) return '/';
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return '/';
+  }
 }
 
 self.addEventListener('notificationclick', (event) => {
