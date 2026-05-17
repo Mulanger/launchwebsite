@@ -47,6 +47,7 @@ function QaSidebar() {
         <Link href="/qa" aria-current="page">
           Q&A
         </Link>
+        <Link href="/polymarket-whale-alerts">Whale alerts</Link>
         <Link href="/about">About</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/terms">Terms</Link>

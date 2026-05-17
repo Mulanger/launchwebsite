@@ -3410,6 +3410,9 @@ function AlertsPage() {
           Alerts <em>setup</em>
         </h1>
         <p>Get notified when whales make significant trades.</p>
+        <p>
+          New to alerts? <a href="/polymarket-whale-alerts">Learn how Polymarket whale alerts work</a>.
+        </p>
       </header>
 
       <AlertsStatusHero

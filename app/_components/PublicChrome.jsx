@@ -11,7 +11,8 @@ export default function PublicChrome({ children }) {
           <Link href="/">Live feed</Link>
           <Link href="/leaderboard">Leaderboard</Link>
           <Link href="/about">About</Link>
-          <Link href="/alerts">Alerts</Link>
+          <Link href="/polymarket-whale-alerts">Whale alerts</Link>
+          <Link href="/alerts">Activate</Link>
         </nav>
       </header>
       <main className="next-public-main">{children}</main>

@@ -39,6 +39,25 @@ export const seoByPath = {
     path: '/leaderboard',
     robots: 'index,follow,max-image-preview:large',
   },
+  '/polymarket-whale-alerts': {
+    title: 'Polymarket Whale Alerts | Real-Time Trade Notifications',
+    description:
+      'Get real-time Polymarket whale alerts for large trades with custom thresholds, following-only filters, quiet hours, browser push, Android alerts, and live whale feed context.',
+    keywords:
+      'Polymarket whale alerts, Polymarket whale tracker, Polymarket smart money alerts, whale trade alerts, free Polymarket alerts, Polywhale alerts',
+    path: '/polymarket-whale-alerts',
+    robots: 'index,follow,max-image-preview:large',
+    image: `${siteOrigin}/assets/screen-alerts.png`,
+  },
+  '/alerts': {
+    title: 'Activate Polymarket Whale Alerts | Polywhale',
+    description:
+      'Activate and manage Polywhale browser push alerts for large Polymarket whale trades, followed wallets, and custom trade-size thresholds.',
+    keywords:
+      'activate Polymarket whale alerts, Polywhale alerts setup, browser whale alerts, Polymarket push notifications',
+    path: '/alerts',
+    robots: 'noindex,follow',
+  },
   '/qa': {
     title: 'Polymarket Questions & Answers | Polywhale Q&A Hub',
     description:

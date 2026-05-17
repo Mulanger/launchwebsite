@@ -1,6 +1,7 @@
 import JsonLd from '../_components/JsonLd.jsx';
 import HybridPublicRoute from '../_components/HybridPublicRoute.jsx';
 import PublicChrome from '../_components/PublicChrome.jsx';
+import Link from 'next/link';
 import { buildNextMetadata } from '../../src/lib/next-metadata.js';
 import { seoByPath } from '../../src/lib/seo.js';
 
@@ -23,6 +24,11 @@ export default function AboutPage() {
           <p>
             The site highlights whale-sized public trades, including market, side, size, price,
             trader wallet, related wallet activity, and ranked whale volume for the current session.
+          </p>
+          <p>
+            Users can also turn on{' '}
+            <Link href="/polymarket-whale-alerts">Polymarket whale alerts</Link>
+            {' '}for large trades, mega whales, and followed wallets.
           </p>
           <h2>How the leaderboard works</h2>
           <p>

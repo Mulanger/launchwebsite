@@ -185,6 +185,7 @@ export function inferAnalyticsPageType(pathname = '') {
   if (path === '/') return 'feed';
   if (path === '/leaderboard') return 'leaderboard';
   if (path === '/alerts') return 'alerts';
+  if (path === '/polymarket-whale-alerts') return 'alerts_seo';
   if (path === '/profile/following') return 'following';
   if (path === '/profile') return 'profile';
   if (path.startsWith('/trade/')) return 'trade';

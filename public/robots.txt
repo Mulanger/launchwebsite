@@ -3,28 +3,24 @@ Allow: /
 Disallow: /api/
 Disallow: /trade/
 Disallow: /profile
-Disallow: /alerts
 
 User-agent: Googlebot
 Allow: /
 Allow: /api/
 Disallow: /trade/
 Disallow: /profile
-Disallow: /alerts
 
 User-agent: Bingbot
 Allow: /
 Allow: /api/
 Disallow: /trade/
 Disallow: /profile
-Disallow: /alerts
 
 User-agent: DuckDuckBot
 Allow: /
 Allow: /api/
 Disallow: /trade/
 Disallow: /profile
-Disallow: /alerts
 
 Sitemap: https://www.polywhaletrades.com/sitemap.xml
 Sitemap: https://www.polywhaletrades.com/sitemap-static.xml
