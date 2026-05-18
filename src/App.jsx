@@ -260,7 +260,14 @@ function App({ initialPath = null, initialData = null }) {
   else if (path === '/profile') page = <ProfilePage />;
   else if (path === '/alerts') page = <AlertsPage />;
   else if (tradeMatch) page = <TradeDetailPage tradeId={safeDecodeURIComponent(tradeMatch[1])} />;
-  else if (traderMatch) page = <TraderProfilePage wallet={safeDecodeURIComponent(traderMatch[1])} />;
+  else if (traderMatch) {
+    page = (
+      <TraderProfilePage
+        wallet={safeDecodeURIComponent(traderMatch[1])}
+        initialData={initialData?.traderProfile}
+      />
+    );
+  }
   else page = <WhaleFeedPage initialData={initialData?.feed} />;
 
   return (
@@ -2223,19 +2230,30 @@ function OnChainDetailRow({ label, value, href }) {
   );
 }
 
-function TraderProfilePage({ wallet }) {
+function getInitialTraderProfileForWallet(initialData, wallet) {
+  const profile = initialData?.profile || initialData;
+  if (!profile || typeof profile !== 'object') return null;
+  const profileWallet = String(profile.proxyWallet || profile.wallet || '').toLowerCase();
+  return profileWallet === wallet ? profile : null;
+}
+
+function TraderProfilePage({ wallet, initialData = null }) {
   const normalizedWallet = wallet.toLowerCase();
+  const initialProfile = useMemo(
+    () => getInitialTraderProfileForWallet(initialData, normalizedWallet),
+    [initialData, normalizedWallet]
+  );
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     window.matchMedia('(max-width: 1020px)').matches
   );
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(() => initialProfile);
   const [historyTrades, setHistoryTrades] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [windowId, setWindowId] = useState(() => {
     const queryWindow = new URLSearchParams(window.location.search).get('window');
     return leaderboardWindows.some((option) => option.id === queryWindow) ? queryWindow : '7d';
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialProfile);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
 
@@ -2248,6 +2266,13 @@ function TraderProfilePage({ wallet }) {
   }, []);
 
   useEffect(() => {
+    if (refreshNonce === 0 && initialProfile) {
+      setProfile(initialProfile);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
     const controller = new AbortController();
 
     async function loadTrader() {
@@ -2271,7 +2296,7 @@ function TraderProfilePage({ wallet }) {
 
     loadTrader();
     return () => controller.abort();
-  }, [normalizedWallet, refreshNonce]);
+  }, [normalizedWallet, refreshNonce, initialProfile]);
 
   useEffect(() => {
     const controller = new AbortController();

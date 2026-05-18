@@ -305,7 +305,7 @@ export default function TraderProfileSnapshot({ profile }) {
               <span className="live-dot online" />
               Trader profile · public wallet
             </div>
-            <h1 className="wallet-title">{wallet}</h1>
+            <h1 className="wallet-title" title={wallet}>{shortWallet(wallet)}</h1>
             <p>{description}</p>
             <div className="trader-seo-wallet-line">
               <code>{wallet}</code>

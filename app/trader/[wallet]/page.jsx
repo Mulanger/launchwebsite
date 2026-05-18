@@ -117,7 +117,10 @@ export default async function TraderPage({ params }) {
   }
 
   return (
-    <HybridPublicRoute initialPath={traderPathForWallet(profile.proxyWallet)}>
+    <HybridPublicRoute
+      initialPath={traderPathForWallet(profile.proxyWallet)}
+      initialData={{ traderProfile: profile }}
+    >
       <JsonLd data={buildTraderProfileStructuredData(profile)} />
       <TraderProfileSnapshot profile={profile} />
     </HybridPublicRoute>
